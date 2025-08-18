@@ -22,11 +22,12 @@ namespace cloyster::services::ansible::roles::base {
 ScriptBuilder installScript(
     const Role& role, const cloyster::models::OS& osinfo)
 {
+    LOG_DEBUG("Running base role");
     using namespace cloyster;
     ScriptBuilder builder(osinfo);
 
-    LOG_ASSERT(role.m_roleName == "base",
-        fmt::format("Expected base role, found {}", role.m_roleName));
+    LOG_ASSERT(role.roleName() == "base",
+        fmt::format("Expected base role, found {}", role.roleName()));
 
     builder.addNewLine().addCommand("# Install EPEL repositories if needed");
 
@@ -34,6 +35,7 @@ ScriptBuilder installScript(
         case models::OS::Distro::RHEL:
         case models::OS::Distro::Rocky:
         case models::OS::Distro::AlmaLinux:
+            LOG_DEBUG("Running base role");
             builder.addPackage("epel-release");
             break;
 
@@ -60,6 +62,7 @@ ScriptBuilder installScript(
 
     // "python3-dnf-plugin-versionlock" is conflicting with dnf-plugins-core
     // during the first install
+    // TODO: CFL initscripts is only required by xCAT
     std::set<std::string> allPackages = {
         "wget",
         "curl",
@@ -70,8 +73,8 @@ ScriptBuilder installScript(
         "jq",
         "tar",
     };
-    if (const auto iter = role.m_vars.find("base_packages");
-        iter != role.m_vars.end()) {
+    if (const auto iter = role.vars().find("base_packages");
+        iter != role.vars().end()) {
         for (const auto& pkg :
             cloyster::utils::string::split(iter->second, " ")) {
             allPackages.emplace(pkg);
@@ -83,6 +86,7 @@ ScriptBuilder installScript(
     const auto& cluster = cloyster::Singleton<models::Cluster>::get();
     builder.addCommand(
         "timedatectl set-timezone {}", cluster->getTimezone().getTimezone());
+
 
     return builder;
 }

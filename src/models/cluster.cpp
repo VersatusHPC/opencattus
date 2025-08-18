@@ -19,6 +19,7 @@
 
 #include <cloysterhpc/cloyster.h>
 #include <cloysterhpc/functions.h>
+#include <cloysterhpc/utils/singleton.h>
 #include <cloysterhpc/models/answerfile.h>
 #include <cloysterhpc/models/cluster.h>
 #include <cloysterhpc/models/headnode.h>
@@ -201,7 +202,7 @@ void Cluster::setOFED(OFED::Kind kind, std::string version)
     m_ofed = OFED(kind, std::move(version));
 }
 
-std::optional<std::unique_ptr<QueueSystem>>& Cluster::getQueueSystem()
+const std::optional<std::unique_ptr<QueueSystem>>& Cluster::getQueueSystem() const
 {
     return m_queueSystem;
 }
@@ -306,7 +307,7 @@ void Cluster::printConnections()
 
 void Cluster::printData()
 {
-    LOG_DEBUG("Dump cluster data:");
+    LOG_DEBUG("--- Dump cluster data ---");
     LOG_DEBUG("Cluster attributes defined:");
     LOG_DEBUG("OS Data:");
     m_headnode.getOS().printData();
@@ -335,6 +336,7 @@ void Cluster::printData()
 
     LOG_DEBUG("Firewall: {}", (isFirewall() ? "true" : "false"))
     LOG_DEBUG("SELinux: {}", static_cast<int>(getSELinux()))
+    LOG_DEBUG("--- Dump cluster data ---");
 }
 
 void Cluster::fillTestData()
@@ -499,10 +501,9 @@ void Cluster::dumpData(const std::filesystem::path& answerfilePath)
     answerfil.dumpFile(answerfilePath);
 }
 
-void Cluster::fillData(const std::filesystem::path& answerfilePath)
+void Cluster::fillData(const AnswerFile& answerfil)
 {
-    const auto opts = cloyster::Singleton<cloyster::services::Options>::get();
-    AnswerFile answerfil(answerfilePath);
+    const auto opts = cloyster::utils::singleton::options();
 
     LOG_TRACE("Configure Management Network")
     // Management Network
@@ -563,7 +564,7 @@ void Cluster::fillData(const std::filesystem::path& answerfilePath)
 
     LOG_INFO("Distro: {}",
         cloyster::utils::enums::toString(answerfil.system.distro));
-    LOG_INFO("Kernel: {}", answerfil.system.kernel);
+    LOG_INFO("Kernel: {}", answerfil.system.kernel.value_or(""));
     LOG_INFO("Version: {}", answerfil.system.version);
 
     // FIXME: This information should be deduced from the ISO file
@@ -571,7 +572,9 @@ void Cluster::fillData(const std::filesystem::path& answerfilePath)
     nodeOS.setArch(OS::Arch::x86_64);
     nodeOS.setFamily(OS::Family::Linux);
     nodeOS.setDistro(answerfil.system.distro);
-    nodeOS.setKernel(answerfil.system.kernel);
+    if (answerfil.system.kernel) {
+        nodeOS.setKernel(answerfil.system.kernel.value());
+     }
     nodeOS.setVersion(answerfil.system.version);
 
     LOG_TRACE("Cluster name: {}", answerfil.information.cluster_name)
@@ -721,29 +724,18 @@ void Cluster::fillData(const std::filesystem::path& answerfilePath)
         auto applicationNetwork = std::make_unique<Network>(
             Network::Profile::Application, Network::Type::Ethernet);
 
-        auto& subnet_mask = answerfil.application.subnet_mask;
-        auto& gateway = answerfil.application.gateway;
-        auto& domain_name = answerfil.application.domain_name;
-        auto& nameservers = answerfil.application.nameservers;
+        const auto& subnet_mask = answerfil.application.subnet_mask;
+        const auto& gateway = answerfil.application.gateway;
+        const auto& domain_name = answerfil.application.domain_name;
+        const auto& nameservers = answerfil.application.nameservers;
 
-        auto throwIfEmpty = [](bool optional_cast_value,
-                                const char* fieldname) {
-            if (!optional_cast_value) {
-                throw AnswerfileValidationException(fmt::format(
-                    "Field {} of application network is empty", fieldname));
-            }
-        };
-#define THROW_IF_EMPTY(field) throwIfEmpty(field.has_value(), #field)
-        THROW_IF_EMPTY(subnet_mask);
-        THROW_IF_EMPTY(gateway);
-        THROW_IF_EMPTY(domain_name);
-        THROW_IF_EMPTY(nameservers);
-#undef THROW_IF_EMPTY
+        // @FIXME: Are these optional? 
+        LOG_TRACE("Application network configured, callign setters");
 
-        applicationNetwork->setSubnetMask(subnet_mask.value());
-        applicationNetwork->setGateway(gateway.value());
-        applicationNetwork->setDomainName(domain_name.value());
-        applicationNetwork->setNameservers(nameservers.value());
+        if (subnet_mask.has_value()) { applicationNetwork->setSubnetMask(subnet_mask.value()); }
+        if (gateway.has_value()) { applicationNetwork->setGateway(gateway.value()); }
+        if (domain_name.has_value()) { applicationNetwork->setDomainName(domain_name.value()); }
+        if (nameservers.has_value()) { applicationNetwork->setNameservers(nameservers.value()); }
 
         addNetwork(std::move(applicationNetwork));
 
@@ -771,7 +763,16 @@ void Cluster::fillData(const std::filesystem::path& answerfilePath)
 
     // System
     setUpdateSystem(true);
-    setProvisioner(Provisioner::xCAT);
+
+
+    const auto provisioner = utils::string::lower(answerfil.system.provisioner);
+    if (provisioner == "xcat") {
+        setProvisioner(Provisioner::xCAT);
+    } else if (provisioner == "confluent") {
+        setProvisioner(Provisioner::Confluent);
+    } else {
+        cloyster::functions::abort("Invalid provisioner {}", provisioner);
+    }
 
     // FIXME: This should come from /etc/os-release
     m_headnode.setOS(nodeOS);

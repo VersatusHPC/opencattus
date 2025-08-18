@@ -11,6 +11,7 @@
 #include <cloysterhpc/services/options.h>
 #include <cloysterhpc/services/osservice.h>
 #include <cloysterhpc/services/repos.h>
+#include <cloysterhpc/utils/singleton.h>
 #include <utility>
 
 using cloyster::functions::IRunner;
@@ -21,7 +22,7 @@ OFED::Kind OFED::getKind() const { return m_kind; }
 
 bool OFED::installed() const
 {
-    const auto opts = cloyster::Singleton<cloyster::services::Options>::get();
+    const auto opts = cloyster::utils::singleton::options();
     if (opts->shouldForce("infiniband-install")) {
         return false;
     }
@@ -48,9 +49,7 @@ bool OFED::installed() const
 
 void OFED::install() const
 {
-    const auto opts = cloyster::Singleton<cloyster::services::Options>::get();
-    const auto cluster = cloyster::Singleton<cloyster::models::Cluster>::get();
-    const auto osinfo = cluster->getNodes()[0].getOS();
+    const auto opts = cloyster::utils::singleton::options();
 
     if (opts->dryRun) {
         LOG_WARN("Dry-Run: Skiping OFED installation");
@@ -75,36 +74,34 @@ void OFED::install() const
                 = cloyster::Singleton<cloyster::services::IRunner>::get();
             auto repoManager = cloyster::Singleton<
                 cloyster::services::repos::RepoManager>::get();
-            auto osService
-                = cloyster::Singleton<cloyster::services::IOSService>::get();
-            const std::string kernelVersion = std::string(osinfo.getKernel());
+            const auto kernelVersion = cloyster::utils::singleton::answerfile()->system.kernel;
+
             repoManager->enable("doca");
             // Install the required packages
             runner->checkCommand("dnf makecache --repo=doca");
-            runner->checkCommand(
-                fmt::format("dnf -y install kernel-{kernelVersion} "
-                            "kernel-devel-{kernelVersion} doca-extra",
-                    fmt::arg("kernelVersion", kernelVersion)));
-
-            if (osService->getKernelRunning() != kernelVersion) {
-                LOG_WARN("New kernel installed! Rebooting after the "
-                         "installation finishes is advised!");
+            if (kernelVersion) {
+                LOG_WARN("Building OFED with kernel version from the answerfile {} @ [system].kernel: {}",
+                    cloyster::utils::singleton::answerfile()->path(),
+                    kernelVersion.value());
+                runner->checkCommand(
+                    fmt::format("dnf -y install --nogpg kernel-{kernelVersion} "
+                                "kernel-devel-{kernelVersion} doca-extra",
+                        fmt::arg("kernelVersion", kernelVersion.value())));
+            } else {
+                runner->checkCommand("dnf -y --nogpg install kernel kernel-devel doca-extra");
             }
 
             LOG_INFO("Compiling OFED DOCA drivers, this may take a while, use "
                      "`--skip compile-doca-driver` to skip");
-            // Run the Mellanox script, this generates an RPM at tmp.
-            //
-            // Use the kernel-devel version instead of the booted kernel
-            // version, this is to handle the case where a new kernel is
-            // installed but no reboot was done yet. After compiling the
-            // drivers the headnode should be rebooted to reload the new kernel.
-            // The driver may support weak updates modules and load without
-            // need for reboot.
-            if (!opts->shouldSkip("compile-doca-driver")) {
+            if (kernelVersion) {
+                if (!opts->shouldSkip("compile-doca-driver")) {
+                    runner->checkCommand(fmt::format(
+                        "/opt/mellanox/doca/tools/doca-kernel-support -k {}",
+                        kernelVersion.value()));
+                }
+            } else {
                 runner->checkCommand(fmt::format(
-                    "/opt/mellanox/doca/tools/doca-kernel-support -k {}",
-                    kernelVersion));
+                    "/opt/mellanox/doca/tools/doca-kernel-support"));
             }
 
             // Get the last rpm in /tmp/DOCA*/ folder
@@ -118,8 +115,8 @@ void OFED::install() const
             // Install the (last) generated rpm
             runner->executeCommand(fmt::format("dnf install -y {}", rpm[0]));
 
-            runner->checkCommand(R"(dnf makecache --repo=doca*)");
-            runner->checkCommand("dnf install -y doca-ofed mlnx-fw-updater");
+            runner->checkCommand("dnf makecache --repo=doca*");
+            runner->checkCommand("dnf install --nogpg -y doca-ofed mlnx-fw-updater");
             runner->executeCommand("systemctl restart openibd");
         } break;
 

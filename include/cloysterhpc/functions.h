@@ -33,6 +33,9 @@ constexpr std::unique_ptr<B> makeUniqueDerived(Args... args)
     return static_cast<std::unique_ptr<B>>(std::make_unique<T>(args...));
 }
 
+
+// @FIXME: File utilities functions should live in services::files namespace
+
 using models::OS;
 using services::IRunner;
 
@@ -282,7 +285,7 @@ void moveFilesWithExtension(
 std::string getHttpStatus(const auto& url, const std::size_t maxRetries = 3)
 {
     auto runner = cloyster::Singleton<IRunner>::get();
-    auto opts = cloyster::Singleton<services::Options>::get();
+    auto opts = cloyster::Singleton<const services::Options>::get();
     if (opts->shouldSkip("http-status")) {
         LOG_WARN("Skipping HTTP status check for {}, assuming 200 (reason: "
                  "--skip=http-status in the command line)",
@@ -304,18 +307,32 @@ std::string getHttpStatus(const auto& url, const std::size_t maxRetries = 3)
     for (std::size_t i = 0; i < maxRetries; ++i) {
         header = getHttpStatusInner(url, runner);
         LOG_DEBUG("HTTP status of {}: {}", url, header);
-        if (!header.starts_with("5")) {
-            LOG_DEBUG("HTTP {} error, retry {}", header, i);
+        if (header.starts_with("2")) {
+            return header;
+        } else if (header.starts_with("5")) {
+            LOG_DEBUG("HTTP INTERNAL SERVER ERROR {} error, retring ...{}", header, i);
+            return header;
+        } else  {
+            LOG_DEBUG("HTTP {} error, retrying ...{}", header, i);
             return header;
         }
     }
     return header;
 };
 
-[[noreturn]] void abort(const fmt::string_view& fmt, auto&&... args)
+[[noreturn]]
+void abort(const fmt::string_view& fmt, auto&&... args)
 {
     throw std::runtime_error(
         fmt::format(fmt::runtime(fmt), std::forward<decltype(args)>(args)...));
+}
+
+void abortif(const bool cond, const fmt::string_view& fmt, auto&&... args)
+{
+    if (cond) {
+    throw std::runtime_error(
+        fmt::format(fmt::runtime(fmt), std::forward<decltype(args)>(args)...));
+    }
 }
 
 TEST_SUITE_END();

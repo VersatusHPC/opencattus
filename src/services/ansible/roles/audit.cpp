@@ -16,6 +16,7 @@
 #include <fmt/core.h>
 #include <string_view>
 
+// @FIXME: Not creating the rules at /etc/audit/rules.d files
 namespace cloyster::services::ansible::roles::audit {
 
 ScriptBuilder installScript(
@@ -23,9 +24,6 @@ ScriptBuilder installScript(
 {
     using namespace cloyster;
     ScriptBuilder builder(osinfo);
-
-    LOG_ASSERT(role.m_roleName == "audit",
-        fmt::format("Expected audit role, found {}", role.m_roleName));
 
     builder.addNewLine()
         .addCommand("# Install audit packages")
