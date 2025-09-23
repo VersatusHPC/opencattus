@@ -7,11 +7,47 @@
 #define CLOYSTERHPC_RUNNER_H_
 
 #include <boost/process.hpp>
+#include <fmt/format.h>
 
 #include <string>
 #include <vector>
 
+#include <cloysterhpc/patterns/singleton.h>
+#include <cloysterhpc/services/log.h>
+#include <cloysterhpc/services/options.h>
 #include <cloysterhpc/services/scriptbuilder.h>
+
+namespace cloyster::services::runner {
+
+template <typename... Args>
+int shellfmt(fmt::format_string<Args...> fmt, Args&&... args)
+{
+    auto command = fmt::format(fmt, std::forward<Args>(args)...);
+
+    auto opts = cloyster::Singleton<cloyster::services::Options>::get();
+    if (!opts->dryRun) {
+        LOG_DEBUG("Running shell command: {}", command);
+        boost::process::ipstream pipe_stream;
+        boost::process::child child(
+            "/bin/bash", "-c", command, boost::process::std_out > pipe_stream);
+
+        std::string line;
+        while (pipe_stream && std::getline(pipe_stream, line)) {
+            LOG_TRACE("{}", line);
+        }
+
+        child.wait();
+        LOG_DEBUG("Exit code: {}", child.exit_code());
+        return child.exit_code();
+    } else {
+        LOG_INFO("Dry Run: {}", command);
+        return 0;
+    }
+}
+
+int shell(std::string_view cmd);
+
+}
 
 namespace cloyster::services {
 
@@ -53,7 +89,9 @@ public:
     virtual ~IRunner() = default;
 
     virtual int executeCommand(const std::string&) = 0;
-    virtual int executeCommand(const std::string&, std::list<std::string>& output) = 0;
+    virtual int executeCommand(
+        const std::string&, std::list<std::string>& output)
+        = 0;
     virtual CommandProxy executeCommandIter(
         const std::string&, Stream out = Stream::Stdout)
         = 0;
@@ -68,7 +106,8 @@ public:
 class Runner final : public IRunner {
 public:
     int executeCommand(const std::string& cmd) override;
-    int executeCommand(const std::string&, std::list<std::string>& output) override;
+    int executeCommand(
+        const std::string&, std::list<std::string>& output) override;
     CommandProxy executeCommandIter(
         const std::string& cmd, Stream out = Stream::Stdout) override;
     void checkCommand(const std::string& cmd) override;
@@ -82,7 +121,8 @@ public:
     CommandProxy executeCommandIter(
         const std::string& cmd, Stream out = Stream::Stdout) override;
     int executeCommand(const std::string& cmd) override;
-    int executeCommand(const std::string&, std::list<std::string>& output) override;
+    int executeCommand(
+        const std::string&, std::list<std::string>& output) override;
     void checkCommand(const std::string& cmd) override;
     std::vector<std::string> checkOutput(const std::string& cmd) override;
     int downloadFile(const std::string& url, const std::string& file) override;
@@ -94,7 +134,8 @@ public:
     CommandProxy executeCommandIter(
         const std::string& cmd, Stream out = Stream::Stdout) override;
     int executeCommand(const std::string& cmd) override;
-    int executeCommand(const std::string&, std::list<std::string>& output) override;
+    int executeCommand(
+        const std::string&, std::list<std::string>& output) override;
     void checkCommand(const std::string& cmd) override;
     std::vector<std::string> checkOutput(const std::string& cmd) override;
     int downloadFile(const std::string& url, const std::string& file) override;

@@ -28,10 +28,7 @@ ScriptBuilder::ScriptBuilder(const OS& osinfo)
     m_commands.emplace_back("#!/bin/bash -xeu");
 };
 
-ScriptBuilder& ScriptBuilder::addNewLine()
-{
-    return addCommand("");
-}
+ScriptBuilder& ScriptBuilder::addNewLine() { return addCommand(""); }
 
 ScriptBuilder& ScriptBuilder::enableService(const std::string_view service)
 {
@@ -58,18 +55,22 @@ ScriptBuilder& ScriptBuilder::addPackage(const std::string_view pkg)
     return addCommand("dnf install -y {}", pkg);
 };
 
+ScriptBuilder& ScriptBuilder::addPackages(const std::set<std::string>& pkgs)
+{
+    return addCommand("dnf install -y {}", fmt::join(pkgs, " "));
+}
+
 ScriptBuilder& ScriptBuilder::removePackage(const std::string_view pkg)
 {
     return addCommand("dnf remove -y {}", pkg);
 }
 
 ScriptBuilder& ScriptBuilder::removeLineWithKeyFromFile(
-    const std::filesystem::path& path,
-    const std::string& key)
+    const std::filesystem::path& path, const std::string& key)
 {
-    return addCommand(
-        "grep -q {} && sed -i /{}/d {}",
-        key, key, path);
+    return addCommand("# Removing line with {} from {}", key, path)
+        .addCommand(R"(grep -q "{}" "{}" && sed -i "/{}/d" "{}")", key, path,
+            key, path);
 }
 
 [[nodiscard]] std::string ScriptBuilder::toString() const
@@ -82,27 +83,21 @@ ScriptBuilder& ScriptBuilder::removeLineWithKeyFromFile(
     return m_commands;
 }
 
-TEST_CASE("Basic") { 
-    const OS osinfo = cloyster::models::OS(
-        OS::Distro::Rocky,
-        OS::Platform::el9,
-        5
-    );
-    ScriptBuilder builder(osinfo); 
+TEST_CASE("Basic")
+{
+    const OS osinfo
+        = cloyster::models::OS(OS::Distro::Rocky, OS::Platform::el9, 5);
+    ScriptBuilder builder(osinfo);
 
-    builder
-        .addNewLine()
+    builder.addNewLine()
         .addCommand("# Foo")
         .addCommand("foo")
         .addNewLine()
         .addLineToFile(
-            "/etc/hosts", 
-            "example.com",
-            "123.123.123.123 example.com", 10)
-        .enableService("foo-service")
-        ;
-    CHECK(builder.toString() == 
-R"del(#!/bin/bash -xeu
+            "/etc/hosts", "example.com", "123.123.123.123 example.com", 10)
+        .enableService("foo-service");
+    CHECK(builder.toString() ==
+        R"del(#!/bin/bash -xeu
 
 # Foo
 foo
@@ -111,9 +106,6 @@ grep -q "example.com" "/etc/hosts" || \
   echo "123.123.123.123 example.com" >> "/etc/hosts"
 systemctl enable --now foo-service)del");
 }
-// windsurf https://aider.chat/
-// codex (ai) codex-cli
-// e como adicionar um CI
 
 TEST_SUITE_END();
 

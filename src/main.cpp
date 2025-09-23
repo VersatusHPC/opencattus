@@ -12,6 +12,7 @@
 #include <cloysterhpc/functions.h>
 #include <cloysterhpc/models/cluster.h>
 #include <cloysterhpc/presenter/PresenterInstall.h>
+#include <cloysterhpc/services/ansible/roles.h>
 #include <cloysterhpc/services/files.h>
 #include <cloysterhpc/services/init.h>
 #include <cloysterhpc/services/log.h>
@@ -28,7 +29,6 @@
 #endif
 
 namespace {
-
 
 using namespace cloyster;
 using namespace cloyster::services;
@@ -49,7 +49,8 @@ int runTestCommand(const std::string& testCommand,
         runner->checkCommand(testCommandArgs[0]);
     } else if (testCommand == "initialize-repos") {
         repoManager->initializeDefaultRepositories();
-        runner->checkCommand(R"(bash -c "dnf config-manager --set-enabled '*' && dnf makecache -y" )");
+        runner->checkCommand(
+            R"(bash -c "dnf config-manager --set-enabled '*' && dnf makecache -y" )");
     } else if (testCommand == "create-http-repo") {
         assert(testCommandArgs.size() > 0);
         cloyster::functions::createHTTPRepo(testCommandArgs[0]);
@@ -57,7 +58,11 @@ int runTestCommand(const std::string& testCommand,
         assert(testCommandArgs.size() > 0);
         LOG_INFO("Loading file {}", testCommandArgs[0]);
         auto file = cloyster::services::files::KeyFile(testCommandArgs[0]);
-        LOG_INFO("Groups: {}", fmt::join(file.getGroups(), ",")); LOG_INFO("Contents: {}", file.toData()); } else if (testCommand == "install-mellanox-ofed") { OFED(OFED::Kind::Mellanox, "latest").install(); } else if (testCommand == "image-install-mellanox-ofed") {
+        LOG_INFO("Groups: {}", fmt::join(file.getGroups(), ","));
+        LOG_INFO("Contents: {}", file.toData());
+    } else if (testCommand == "install-mellanox-ofed") {
+        OFED(OFED::Kind::Mellanox, "latest").install();
+    } else if (testCommand == "image-install-mellanox-ofed") {
         auto provisioner = std::make_unique<cloyster::services::XCAT>();
         provisioner->configureInfiniband();
     } else if (testCommand == "dump-headnode-os") {
@@ -65,6 +70,15 @@ int runTestCommand(const std::string& testCommand,
     } else if (testCommand == "dump-xcat-osimage") {
         auto provisioner = std::make_unique<cloyster::services::XCAT>();
         LOG_INFO("xCAT osimage: {}", provisioner->getImage());
+    } else if (testCommand == "xcat-patch") {
+        auto provisioner = std::make_unique<cloyster::services::XCAT>();
+        provisioner->patchInstall();
+    } else if (testCommand == "ansible-role") {
+        assert(testCommandArgs.size() == 1);
+        // Execute a single role
+        cloyster::services::ansible::roles::run(
+            ansible::roles::parseRoleString(testCommandArgs[0]),
+            cluster->getHeadnode().getOS());
     } else {
         LOG_ERROR("Invalid test command {}", testCommand);
         return EXIT_FAILURE;
@@ -104,7 +118,7 @@ int main(int argc, const char** argv)
 #endif
     LOG_INFO("{} Started", productName)
 
-    if (opts->testCommand.empty()) { 
+    if (opts->testCommand.empty()) {
         // skip during tests, we do not want to run tests as root
         cloyster::checkEffectiveUserId();
     }
@@ -146,7 +160,7 @@ int main(int argc, const char** argv)
     if (!opts->answerfile.empty()) {
         LOG_INFO("Loading the answerfile: {}", opts->answerfile)
         model->fillData(opts->answerfile);
-    } 
+    }
 
     opts->enableTUI = opts->answerfile.empty() && opts->testCommand.empty();
 
@@ -162,7 +176,6 @@ int main(int argc, const char** argv)
             = std::make_unique<cloyster::presenter::PresenterInstall>(
                 model, view);
     }
-
 
     if (!opts->dumpAnswerfile.empty()) {
         model->dumpData(opts->dumpAnswerfile);

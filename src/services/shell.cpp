@@ -5,6 +5,11 @@
  */
 
 #include <cloysterhpc/functions.h>
+#include <cloysterhpc/services/ansible/roles.h>
+#include <cloysterhpc/services/ansible/roles/aide.h>
+#include <cloysterhpc/services/ansible/roles/audit.h>
+#include <cloysterhpc/services/ansible/roles/fail2ban.h>
+#include <cloysterhpc/services/ansible/roles/spack.h>
 #include <cloysterhpc/services/log.h>
 #include <cloysterhpc/services/options.h>
 #include <cloysterhpc/services/osservice.h>
@@ -41,15 +46,18 @@ auto getToEnableRepoNames(const OS& osinfo)
         case OS::Platform::el8:
         case OS::Platform::el9:
         case OS::Platform::el10:
-            return std::vector<std::string>(
-                       { "beegfs", "elrepo", "epel", "openhpc",
-                           "openhpcupdates", "rpmfusionfreeupdates" });
+            return std::vector<std::string>({ "beegfs", "elrepo", "epel",
+                "openhpc", "openhpcupdates", "rpmfusionfreeupdates" });
         default:
             throw std::logic_error("Not implemented");
     }
 }
 
 constexpr auto cluster() { return cloyster::Singleton<Cluster>::get(); }
+constexpr auto os()
+{
+    return cloyster::Singleton<Cluster>::get()->getHeadnode().getOS();
+}
 constexpr auto runner() { return cloyster::Singleton<IRunner>::get(); }
 constexpr auto osservice() { return cloyster::Singleton<IOSService>::get(); }
 
@@ -67,7 +75,7 @@ Shell::Shell()
 
 void Shell::disableSELinux()
 {
-    runner()->executeCommand("setenforce 0");
+    ::runner()->executeCommand("setenforce 0");
 
     const auto filename = CHROOT "/etc/sysconfig/selinux";
 
@@ -83,13 +91,13 @@ void Shell::configureSELinuxMode()
 
     switch (cluster()->getSELinux()) {
         case Cluster::SELinuxMode::Permissive:
-            runner()->executeCommand("setenforce 0");
+            ::runner()->executeCommand("setenforce 0");
             /* Permissive mode */
             break;
 
         case Cluster::SELinuxMode::Enforcing:
             /* Enforcing mode */
-            runner()->executeCommand("setenforce 1");
+            ::runner()->executeCommand("setenforce 1");
             break;
 
         case Cluster::SELinuxMode::Disabled:
@@ -110,7 +118,7 @@ void Shell::configureFirewall()
         osservice()->enableService("firewalld");
 
         // Add the management interface as trusted
-        runner()->executeCommand(fmt::format(
+        ::runner()->executeCommand(fmt::format(
             "firewall-cmd --permanent --zone=trusted --change-interface={}",
             cluster()
                 ->getHeadnode()
@@ -120,7 +128,7 @@ void Shell::configureFirewall()
 
         // If we have IB, also add its interface as trusted
         if (cluster()->getOFED())
-            runner()->executeCommand(fmt::format(
+            ::runner()->executeCommand(fmt::format(
                 "firewall-cmd --permanent --zone=trusted --change-interface={}",
                 cluster()
                     ->getHeadnode()
@@ -128,7 +136,7 @@ void Shell::configureFirewall()
                     .getInterface()
                     .value()));
 
-        runner()->executeCommand("firewall-cmd --reload");
+        ::runner()->executeCommand("firewall-cmd --reload");
     } else {
         osservice()->disableService("firewalld");
 
@@ -140,7 +148,7 @@ void Shell::configureFQDN()
 {
     LOG_INFO("Setting up hostname")
 
-    runner()->executeCommand(fmt::format(
+    ::runner()->executeCommand(fmt::format(
         "hostnamectl set-hostname {}", cluster()->getHeadnode().getFQDN()));
 }
 
@@ -164,19 +172,11 @@ void Shell::configureHostsFile()
         filename, fmt::format("{}\t{} {}\n", ip, fqdn, hostname));
 }
 
-void Shell::configureTimezone()
-{
-    LOG_INFO("Setting up timezone")
-
-    runner()->executeCommand(fmt::format(
-        "timedatectl set-timezone {}", cluster()->getTimezone().getTimezone()));
-}
-
 void Shell::configureLocale()
 {
     LOG_INFO("Setting up locale")
 
-    runner()->executeCommand(
+    ::runner()->executeCommand(
         fmt::format("localectl set-locale {}", cluster()->getLocale()));
 }
 
@@ -201,7 +201,7 @@ void Shell::disableNetworkManagerDNSOverride()
 // BUG: Why this method exists? The name does not do what it says.
 void Shell::deleteConnectionIfExists(std::string_view connectionName)
 {
-    runner()->executeCommand(
+    ::runner()->executeCommand(
         fmt::format("nmcli connection delete \"{}\"", connectionName));
 }
 
@@ -232,11 +232,11 @@ void Shell::configureNetworks(const std::list<Connection>& connections)
         }
 
         auto opts = Singleton<Options>::get();
-        auto connectionName = utils::enums::toString(
-            connection.getNetwork()->getProfile());
+        auto connectionName
+            = utils::enums::toString(connection.getNetwork()->getProfile());
         if (!opts->dryRun
 
-            && runner()->executeCommand(
+            && ::runner()->executeCommand(
                    fmt::format("nmcli connection show {}", connectionName))
                 == 0) {
             LOG_WARN("Connection exists {}, skipping", connectionName);
@@ -244,11 +244,11 @@ void Shell::configureNetworks(const std::list<Connection>& connections)
         }
 
         deleteConnectionIfExists(connectionName);
-        runner()->executeCommand(
+        ::runner()->executeCommand(
             fmt::format("nmcli device set {} managed yes", interface));
-        runner()->executeCommand(
+        ::runner()->executeCommand(
             fmt::format("nmcli device set {} autoconnect yes", interface));
-        runner()->executeCommand(
+        ::runner()->executeCommand(
             fmt::format("nmcli connection add con-name {} ifname {} type {} "
                         "mtu {} ipv4.method manual ipv4.address {}/{} "
                         "ipv4.dns \"{}\" "
@@ -273,37 +273,18 @@ void Shell::configureNetworks(const std::list<Connection>& connections)
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
         // Breaking my ssh connection during development
-        runner()->executeCommand(
+        ::runner()->executeCommand(
             fmt::format("nmcli device connect {}", interface));
     }
 
     disableNetworkManagerDNSOverride();
 }
 
-void Shell::runSystemUpdate()
-{
-    if (cluster()->isUpdateSystem()) {
-        LOG_INFO("Checking if system updates are available")
-        osservice()->update();
-
-        // Network manager issues warnings if it gets updated
-        // and not restarted
-        osservice()->restartService("NetworkManager");
-    }
-}
-
-void Shell::installRequiredPackages()
-{
-    LOG_INFO("Installing required system packages")
-
-    osservice()->install("wget curl dnf-plugins-core chkconfig jq tar python3-dnf-plugin-versionlock");
-}
-
 void Shell::disallowSSHRootPasswordLogin()
 {
     LOG_INFO("Allowing root login only through public key authentication (SSH)")
 
-    runner()->executeCommand(
+    ::runner()->executeCommand(
         "sed -i \"/^#\\?PermitRootLogin/c\\PermitRootLogin without-password\""
         " /etc/ssh/sshd_config");
 }
@@ -313,36 +294,6 @@ void Shell::installOpenHPCBase()
     LOG_INFO("Installing base OpenHPC packages")
 
     osservice()->install("ohpc-base");
-}
-
-void Shell::configureTimeService(const std::list<Connection>& connections)
-{
-    LOG_INFO("Setting up time services")
-
-    osservice()->install("chrony");
-
-    std::string_view filename = CHROOT "/etc/chrony.conf";
-
-    functions::backupFile(filename);
-
-    for (const auto& connection : std::as_const(connections)) {
-        if ((connection.getNetwork()->getProfile()
-                == Network::Profile::Management)
-            || (connection.getNetwork()->getProfile()
-                == Network::Profile::Service)) {
-
-            // Configure server as local stratum (serve time without sync)
-            functions::addStringToFile(filename, "local stratum 10\n");
-
-            functions::addStringToFile(filename,
-                fmt::format("allow {}/{}\n",
-                    connection.getAddress().to_string(),
-                    connection.getNetwork()->cidr.at(
-                        connection.getNetwork()->getSubnetMask().to_string())));
-        }
-    }
-
-    osservice()->enableService("chronyd");
 }
 
 using cloyster::models::PBS;
@@ -373,13 +324,13 @@ void Shell::configureQueueSystem()
 
                 osservice()->install("openpbs-server-ohpc");
                 osservice()->enableService("pbs");
-                runner()->executeCommand(
+                ::runner()->executeCommand(
                     "qmgr -c \"set server default_qsub_arguments= -V\"");
-                runner()->executeCommand(fmt::format(
+                ::runner()->executeCommand(fmt::format(
                     "qmgr -c \"set server resources_default.place={}\"",
                     cloyster::utils::enums::toString<PBS::ExecutionPlace>(
                         pbs->getExecutionPlace())));
-                runner()->executeCommand(
+                ::runner()->executeCommand(
                     "qmgr -c \"set server job_history_enable=True\"");
                 break;
             }
@@ -452,25 +403,28 @@ void Shell::pinOSVersion()
 void Shell::install()
 {
     const auto opts = cloyster::Singleton<Options>::get();
+    const auto osinfo = os();
     configureRepositories();
     pinOSVersion();
     opts->maybeStopAfterStep("configure-repositories");
-    installRequiredPackages();
-    opts->maybeStopAfterStep("install-required-packages");
 
-    runSystemUpdate();
-    opts->maybeStopAfterStep("run-system-update");
+    // System updates and packages handled by base role
+    ansible::roles::run("base", osinfo);
     configureSELinuxMode();
     configureFirewall();
     configureFQDN();
     disallowSSHRootPasswordLogin();
 
     configureHostsFile();
-    configureTimezone();
     configureLocale();
 
+    ansible::roles::run("timesync", osinfo);
+    ansible::roles::run("fail2ban", osinfo);
+    ansible::roles::run("audit", osinfo);
+    ansible::roles::run("aide", osinfo);
+    ansible::roles::run("spack", osinfo);
+
     configureNetworks(cluster()->getHeadnode().getConnections());
-    configureTimeService(cluster()->getHeadnode().getConnections());
     opts->maybeStopAfterStep("configure-time-service");
     installOpenHPCBase();
     configureInfiniband();
@@ -482,9 +436,9 @@ void Shell::install()
             .getConnection(Network::Profile::Management)
             .getAddress(),
         "ro,no_subtree_check");
-    const auto nfsInstallScript =
-        networkFileSystem.installScript(cluster()->getHeadnode().getOS());
-    runner()->run(nfsInstallScript);
+    const auto nfsInstallScript
+        = networkFileSystem.installScript(cluster()->getHeadnode().getOS());
+    ::runner()->run(nfsInstallScript);
     opts->maybeStopAfterStep("nfs-setup");
     configureQueueSystem();
     if (cluster()->getMailSystem().has_value()) {
@@ -501,7 +455,6 @@ void Shell::install()
     LOG_DEBUG("Setting up the provisioner: {}", provisionerName)
     const auto repoManager = cloyster::Singleton<repos::RepoManager>::get();
 
-    // std::unique_ptr<Provisioner> provisioner;
     std::unique_ptr<XCAT> provisioner;
     switch (cluster()->getProvisioner()) {
         case Cluster::Provisioner::xCAT:
@@ -525,21 +478,17 @@ void Shell::install()
     const auto nodeType = XCAT::NodeType::Compute;
 
     opts->maybeStopAfterStep("provisioner-setup");
-    const auto imageInstallArgs = provisioner->getImageInstallArgs(imageType, nodeType);
-    const auto osinfo = cluster()->getHeadnode().getOS();
+    const auto imageInstallArgs
+        = provisioner->getImageInstallArgs(imageType, nodeType);
 
     // Customizations to the image
-    const auto nfsImageInstallScript =
-        networkFileSystem.imageInstallScript(
-            osinfo,
-            imageInstallArgs);
+    const auto nfsImageInstallScript
+        = networkFileSystem.imageInstallScript(osinfo, imageInstallArgs);
 
     LOG_INFO("[{}] Creating node images", provisionerName);
-    provisioner->createImage(
-        imageType, nodeType, {
-        // Customizations to the image
-        nfsImageInstallScript
-    });
+    provisioner->createImage(imageType, nodeType,
+        { // Customizations to the image
+            nfsImageInstallScript });
     opts->maybeStopAfterStep("provisioner-create-image");
 
     LOG_INFO("[{}] Adding compute nodes", provisionerName)
