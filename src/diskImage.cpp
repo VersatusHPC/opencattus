@@ -13,6 +13,7 @@
 #include <cloysterhpc/services/options.h>
 #include <cloysterhpc/services/cache.h>
 #include <cloysterhpc/utils/singleton.h>
+#include <cloysterhpc/utils/optional.h>
 #include <unordered_map>
 
 // @FIXME: This file need some work
@@ -39,7 +40,7 @@ void DiskImage::setPath(const std::filesystem::path& path)
 
 bool DiskImage::isKnownImage(const std::filesystem::path& path)
 {
-    constexpr auto chooseDistro = [](std::string_view imageView)
+    constexpr auto toDistroImage = [](std::string_view imageView)
         -> std::optional<cloyster::models::OS::Distro> {
         if (imageView.starts_with("Rocky")) {
             return cloyster::models::OS::Distro::Rocky;
@@ -49,9 +50,8 @@ bool DiskImage::isKnownImage(const std::filesystem::path& path)
             return cloyster::models::OS::Distro::OL;
         } else if (imageView.starts_with("AlmaLinux")) {
             return cloyster::models::OS::Distro::AlmaLinux;
-        } else {
-            return std::nullopt;
         }
+        return std::nullopt;
     };
 
     for (const auto& image : m_knownImageFilename) {
@@ -59,23 +59,15 @@ bool DiskImage::isKnownImage(const std::filesystem::path& path)
             LOG_TRACE("Disk image is recognized")
 
             auto imageView = std::string_view(image);
-            const auto distro = chooseDistro(imageView);
-            if (distro) {
-                m_distro = distro;
+            m_distro = toDistroImage(imageView);
+            if (m_distro.has_value()) {
                 return true;
             }
         }
     }
-
-    const auto distro
-        = chooseDistro(std::string_view(path.filename().string()));
-    if (distro) {
-        m_distro = distro;
-        return true;
-    }
-    cloyster::functions::abort(
-        "Disk image is unknown. Maybe you're using a custom image or "
-        "changed the default name?");
+    m_distro = toDistroImage(path.filename().string());
+    LOG_TRACE("Disk image is unknown. Maybe you're using a custom image or "
+              "changed the default name?");
     return false;
 }
 
