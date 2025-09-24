@@ -11,6 +11,7 @@
 #include <variant>
 
 #include <cloysterhpc/services/log.h>
+#include <cloysterhpc/utils/singleton.h>
 
 #include <fstream>
 #include <memory>
@@ -26,13 +27,14 @@ namespace cloyster::models {
 
 OS::OS()
 {
+    LOG_INFO("Initializing OS (ctr 1)");
     struct utsname system {};
     // @FIXME: Unfortunately this runs during the initialization of the
     //  cluster instance. Which prevents us of running this during testing
     //  in a machine that does not have /etc/os-release file.
     //  The isTest flag below is used to fill up default values during tests
     //  to make it possible to run outside of target machines
-    auto opts = cloyster::Singleton<cloyster::services::Options>::get();
+    auto opts = cloyster::utils::singleton::options();
     const bool isTest = !opts->testCommand.empty();
     uname(&system);
 
@@ -102,6 +104,9 @@ OS::OS(const Distro& distro, const Platform& platform,
     , m_distro(distro)
     , m_minorVersion(minorVersion)
 {
+    LOG_INFO("Initializing OS (ctr 2), platform={}, minorVersion={}, arch={}, "
+             "family={}",
+        distro, platform, minorVersion, arch, family);
     switch (platform) {
         case OS::Platform::el10:
             m_majorVersion = 10;
@@ -186,7 +191,7 @@ std::string OS::getDistroString() const
             distro = "almalinux";
             break;
         case OS::Distro::Rocky:
-            distro = "rockylinux";
+            distro = "rocky";
             break;
         case OS::Distro::OL:
             distro = "ol";
@@ -195,7 +200,7 @@ std::string OS::getDistroString() const
             std::unreachable();
     }
 
-    return fmt::format("{}{}.{}", distro, m_minorVersion, m_majorVersion);
+    return fmt::format("{}-{}.{}", distro, m_majorVersion, m_minorVersion);
 }
 
 OS::PackageType OS::getPackageType() const
@@ -226,7 +231,7 @@ void OS::setDistro(std::string_view distro)
     }
 }
 
-std::string_view OS::getKernel() const { return m_kernel; }
+std::optional<std::string_view> OS::getKernel() const { return m_kernel; }
 
 void OS::setKernel(std::string_view kernel) { m_kernel = kernel; }
 
@@ -301,7 +306,7 @@ void OS::printData() const
         cloyster::utils::enums::toString(std::get<Arch>(m_arch)))
     LOG_DEBUG("Family: {}",
         cloyster::utils::enums::toString(std::get<Family>(m_family)))
-    LOG_DEBUG("Kernel Release: {}", m_kernel)
+    LOG_DEBUG("Kernel Release: {}", m_kernel.value_or(""))
     // LOG_DEBUG("Platform: {}",
     //     cloyster::utils::enums::toString(std::get<Platform>(m_platform)))
     LOG_DEBUG("Distribution: {}",

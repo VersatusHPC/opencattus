@@ -18,10 +18,14 @@
 #define CLOYSTER_UTILS_ENUM_H
 
 #include <cstdint>
+#include <fmt/ranges.h>
 #include <magic_enum/magic_enum.hpp>
 #include <string>
 #include <type_traits>
 #include <vector>
+
+#include <cloysterhpc/utils/optional.h>
+#include <cloysterhpc/utils/string.h>
 
 namespace cloyster::utils::enums {
 
@@ -48,6 +52,20 @@ template <typename T>
 std::string toString(T enumValue)
 {
     return static_cast<std::string>(magic_enum::enum_name<T>(enumValue));
+}
+
+template <typename T>
+    requires std::is_enum_v<T>
+std::string toStringLower(T enumValue)
+{
+    return utils::string::lower(toString(enumValue));
+}
+
+template <typename T>
+    requires std::is_enum_v<T>
+std::string toStringUpper(T enumValue)
+{
+    return utils::string::upper(toString(enumValue));
 }
 
 /**
@@ -82,13 +100,26 @@ template <typename T> constexpr std::size_t count()
  */
 template <typename T>
     requires std::is_enum_v<T>
-std::optional<T> ofStringOpt(std::string_view str, Case case_ = Case::Sensitive)
+std::optional<T> ofStringOpt(
+    std::string_view str, Case case_ = Case::Sensitive) noexcept
 {
     if (case_ == Case::Insensitive) {
         return magic_enum::enum_cast<T>(str, magic_enum::case_insensitive);
     }
 
     return magic_enum::enum_cast<T>(str);
+}
+
+/**
+ * @brief Parses a string to an enum value with configurable case sensitivity.
+ */
+template <typename T>
+    requires std::is_enum_v<T>
+T ofStringExc(std::string_view str, Case case_ = Case::Sensitive)
+{
+    return optional::unwrap(ofStringOpt<T>(str, case_),
+        "Invalid enum conversion, expecting one of {}, found {}",
+        fmt::join(toStrings<T>(), ","), str);
 }
 
 /**

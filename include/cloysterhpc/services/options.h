@@ -8,8 +8,8 @@
 
 namespace cloyster::services {
 
-// @TODO Make this an aggregate type to avoid the warnings
-// about partial initialization
+// @TODO: Make this an aggregate type to avoid the warnings
+//   about partial initialization
 struct Options final {
     bool parsingError;
     bool helpAndExit;
@@ -22,6 +22,7 @@ struct Options final {
     bool airGap;
     bool unattended;
     bool enableMirrors;
+    bool listRoles;
     std::size_t logLevelInput;
     std::string error;
     std::string config;
@@ -37,6 +38,7 @@ struct Options final {
     std::set<std::string> skipSteps;
     std::set<std::string> forceSteps;
     std::set<std::string> ohpcPackages;
+    std::vector<std::string> roles;
 
     std::string testCommand;
     std::vector<std::string> testCommandArgs;

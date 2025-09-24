@@ -9,11 +9,12 @@
 #include <cloysterhpc/network.h>
 #include <stdexcept>
 
-TEST_SUITE("Network setters and getters")
+// @FIXME: Network class should be move to the proper namespace
+TEST_SUITE("cloyster::services::network")
 {
     TEST_CASE("fetchSubnetMask throws for unknown interface")
     {
-        CHECK_THROWS_AS(Network::fetchSubnetMask("nonexistent0"),
+        CHECK_THROWS_AS(static_cast<void>(Network::fetchSubnetMask("nonexistent0")),
             std::runtime_error);
     }
 }

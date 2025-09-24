@@ -25,8 +25,8 @@ ScriptBuilder installScript(
     using namespace cloyster;
     ScriptBuilder builder(osinfo);
 
-    LOG_ASSERT(role.m_roleName == "base",
-        fmt::format("Expected base role, found {}", role.m_roleName));
+    LOG_ASSERT(role.roleName() == "base",
+        fmt::format("Expected base role, found {}", role.roleName()));
 
     builder.addNewLine().addCommand("# Install EPEL repositories if needed");
 
@@ -34,10 +34,16 @@ ScriptBuilder installScript(
         case models::OS::Distro::RHEL:
         case models::OS::Distro::Rocky:
         case models::OS::Distro::AlmaLinux:
-            builder.addPackage("epel-release");
+            LOG_DEBUG("Running base role");
             break;
 
         case models::OS::Distro::OL:
+            // @FIXME: This breaks the RepoManager logic. Package installing
+            //   repository files at /etc/yum.repos.d/, may install repositories
+            //   using metalink or mirrorlist, which triggers a bug in
+            //   RepoManager when the xCAT image is being generated. The
+            //   RepoManager only supports baseurl for now, metalink and mirror
+            //   lists trigger a bad optional access during runtime.
             switch (osinfo.getPlatform()) {
                 case models::OS::Platform::el8:
                     builder.addPackage("oracle-epel-release-el8");
@@ -60,6 +66,7 @@ ScriptBuilder installScript(
 
     // "python3-dnf-plugin-versionlock" is conflicting with dnf-plugins-core
     // during the first install
+    // TODO: CFL initscripts is only required by xCAT
     std::set<std::string> allPackages = {
         "wget",
         "curl",
@@ -70,8 +77,8 @@ ScriptBuilder installScript(
         "jq",
         "tar",
     };
-    if (const auto iter = role.m_vars.find("base_packages");
-        iter != role.m_vars.end()) {
+    if (const auto iter = role.vars().find("base_packages");
+        iter != role.vars().end()) {
         for (const auto& pkg :
             cloyster::utils::string::split(iter->second, " ")) {
             allPackages.emplace(pkg);

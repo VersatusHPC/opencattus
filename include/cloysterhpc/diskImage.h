@@ -11,6 +11,7 @@
 
 #include <cloysterhpc/models/os.h>
 
+// @FIXME: Add proper namespace
 /**
  * @class DiskImage
  * @brief Manages disk image paths and validation for known images.

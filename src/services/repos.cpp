@@ -34,6 +34,7 @@
 #include <cloysterhpc/services/osservice.h>
 #include <cloysterhpc/services/repos.h>
 #include <cloysterhpc/services/runner.h>
+#include <cloysterhpc/utils/singleton.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -354,7 +355,7 @@ struct MirrorRepo final {
 
     [[nodiscard]] std::string baseurl() const
     {
-        const auto opts = cloyster::Singleton<Options>::get();
+        const auto opts = cloyster::utils::singleton::options();
 
         return cloyster::utils::string::rstrip(
             fmt::format("{mirrorUrl}/{path}",
@@ -369,7 +370,7 @@ struct MirrorRepo final {
             return std::nullopt;
         }
 
-        const auto opts = cloyster::Singleton<Options>::get();
+        const auto opts = cloyster::utils::singleton::options();
         return fmt::format("{mirrorUrl}/{path}",
             fmt::arg("mirrorUrl", opts->mirrorBaseUrl),
             fmt::arg("path", paths.gpgkey.value()));
@@ -391,7 +392,7 @@ struct MirrorRepo final {
         if (paths.repo.empty()) {
             return false;
         }
-        const auto opts = cloyster::Singleton<Options>::get();
+        const auto opts = cloyster::utils::singleton::options();
         if (isLocalUrl(opts->mirrorBaseUrl)) {
             return MirrorExistenceChecker::pathExists(localPath(baseurl()));
         } else {
@@ -405,7 +406,8 @@ TEST_CASE("MirrorRepo")
 {
     // NOLINTNEXTLINE
     auto opts = Options { .mirrorBaseUrl = "https://mirror.example.com" };
-    cloyster::Singleton<Options>::init(std::make_unique<Options>(opts));
+    cloyster::Singleton<const Options>::init(
+        std::make_unique<const Options>(opts));
     // Log::init(5);
 
     auto mirrorConfigOnline = MirrorRepo<TrueMirrorExistenceChecker> { .paths
@@ -418,8 +420,8 @@ TEST_CASE("MirrorRepo")
         == "https://mirror.example.com/myrepo/key.gpg");
 
     // Test local paths
-    cloyster::Singleton<Options>::get()->mirrorBaseUrl
-        = "file:///var/run/repos";
+    cloyster::Singleton<const Options>::init(std::make_unique<const Options>(
+        Options { .mirrorBaseUrl = "file:///var/run/repos" }));
     CHECK(mirrorConfigOnline.baseurl() == "file:///var/run/repos/myrepo/repo");
     CHECK(mirrorConfigOnline.gpgkey().value()
         == "file:///var/run/repos/myrepo/key.gpg");
@@ -488,7 +490,7 @@ struct RepoChooser final {
             return Choice::UPSTREAM;
         }
 
-        const auto opts = cloyster::Singleton<Options>::get();
+        const auto opts = cloyster::utils::singleton::options();
         if (!opts->enableMirrors) {
             return Choice::UPSTREAM;
         }
@@ -512,7 +514,8 @@ TEST_CASE("RepoChooser")
 {
     // NOLINTNEXTLINE
     auto opts = Options { .mirrorBaseUrl = "https://mirror.example.com" };
-    cloyster::Singleton<Options>::init(std::make_unique<Options>(opts));
+    cloyster::Singleton<const Options>::init(
+        std::make_unique<const Options>(opts));
     // Log::init(5);
 
     auto mirrorConfigOnline = MirrorRepo<TrueMirrorExistenceChecker> { .paths
@@ -523,7 +526,11 @@ TEST_CASE("RepoChooser")
         = { .repo = "https://upstream.example.com/upstream/repo",
             .gpgkey = "https://upstream.example.com/upstream/key.gpg" } };
 
-    cloyster::Singleton<Options>::get()->enableMirrors = true;
+    cloyster::Singleton<const Options>::init(
+        std::make_unique<const Options>(Options {
+            .enableMirrors = true,
+            .mirrorBaseUrl = opts.mirrorBaseUrl,
+        }));
     auto choice1 = RepoChooser::choose(mirrorConfigOnline, upstreamConfig);
     CHECK(choice1 == RepoChooser::Choice::MIRROR);
     auto choice2 = RepoChooser::choose(mirrorConfigOffline, upstreamConfig);
@@ -569,7 +576,8 @@ TEST_CASE("RepoAssembler")
 {
     // NOLINTNEXTLINE
     auto opts = Options { .mirrorBaseUrl = "https://mirror.example.com" };
-    cloyster::Singleton<Options>::init(std::make_unique<Options>(opts));
+    cloyster::Singleton<const Options>::init(
+        std::make_unique<const Options>(opts));
     // Log::init(5);
 
     auto mirrorConfigOffline = MirrorRepo<FalseMirrorExistenceChecker> { .paths
@@ -583,12 +591,15 @@ TEST_CASE("RepoAssembler")
     // If mirror is offline it should fallback to upstream
     CHECK(RepoChooser::choose(mirrorConfigOffline, upstreamConfig)
         == RepoChooser::Choice::UPSTREAM);
-    // If mirror is online it should chose the mirror
+    // If mirror is online it should chose the default
+    constexpr auto defaultRepoChoice = RepoChooser::Choice::UPSTREAM;
     CHECK(RepoChooser::choose(mirrorConfigOnline, upstreamConfig)
-        == RepoChooser::Choice::MIRROR);
+        == defaultRepoChoice);
 
     // Disable mirrors
-    cloyster::Singleton<Options>::get()->enableMirrors = false;
+    opts.enableMirrors = false;
+    cloyster::Singleton<const Options>::init(
+        std::make_unique<const Options>(opts));
 
     // If mirrors are disabled it should choose the upstream even if the
     // mirror is online
@@ -606,7 +617,9 @@ TEST_CASE("RepoAssembler")
     CHECK(repoUpstream.baseurl().value() == upstreamConfig.baseurl());
 
     // Enable mirrors again
-    cloyster::Singleton<Options>::get()->enableMirrors = true;
+    opts.enableMirrors = true;
+    cloyster::Singleton<const Options>::init(
+        std::make_unique<const Options>(opts));
     auto repoMirror
         = RepoAssembler::assemble(repoId, mirrorConfigOnline, upstreamConfig);
     // CHECK(repoMirror.baseurl().value() == mirrorConfigOnline.baseurl());
@@ -662,17 +675,6 @@ struct RepoConfFiles {
     RepoConfFile nonDistroRepos;
 };
 
-// WIPWIPWIP
-// @FIXME: Now we have multiple .conf files and need to decide dynamically
-//  which of them to parse. In the end we'll have the same RepoConfig file
-//  but we need to check the distribution and chose what repository to load.
-//  This change may make RepoFilter obsolete because the repositories will
-//  be loaded correctly from the .conf files. But now the RepoConfig file does
-//  not represent the state of the disk anymore. The configuration lives
-//  inside repos/ folder in the source tree. For RHEL, OL and Alma we have
-//  rhel.conf, oracle.conf and alma.conf respectively for Rocky we have
-//  rocky-upstream.conf or rocky-vault.conf depending if using vault repos
-//  are required or not.
 //
 // Parser for repos.conf
 //
@@ -798,6 +800,7 @@ public:
         }
     };
 
+#ifdef BUILD_TESTING
     // Parse a repo.conf file and return a RepoConfFile with default vars,
     // for testing only
     static RepoConfFile parseTest(const std::filesystem::path& path,
@@ -809,13 +812,14 @@ public:
             .releasever = "9",
             .xcatVersion = "latest",
             .zabbixVersion = "6.4",
-            .ofedVersion = "latest-2.9",
+            .ofedVersion = "latest-2.9-LTS",
         })
     {
         RepoConfFile conffile;
         parse(path, conffile, vars);
         return conffile;
     };
+#endif
 
     // Parse a repo.conf file and return a RepoConfFile using default path
     static RepoConfFile parse(const RepoConfigVars& vars)
@@ -858,6 +862,7 @@ public:
 
 TEST_CASE("RepoConfigParser")
 {
+#ifdef BUILD_TESTING
     REQUIRE(cloyster::functions::exists("repos/repos.conf"));
     auto conffile = RepoConfigParser::parseTest("repos/repos.conf");
     CHECK(conffile.files().size() > 0);
@@ -870,6 +875,7 @@ TEST_CASE("RepoConfigParser")
     CHECK(epel.upstream.repo
         == "https://download.fedoraproject.org/pub/epel/9/Everything/"
            "x86_64/");
+#endif
 }
 
 // Installs and enable/disable RPM repositories
@@ -885,8 +891,7 @@ public:
     void install(const std::filesystem::path& source)
     {
         const auto& dest = basedir / source.filename();
-        const auto opts
-            = cloyster::Singleton<cloyster::services::Options>::get();
+        const auto opts = cloyster::utils::singleton::options();
 
         // Do not copy the file to the basedir if it
         // is already there
@@ -923,8 +928,7 @@ public:
     // Install all .repos files inside a folder
     void loadDir(const std::filesystem::path& path)
     {
-        const auto opts
-            = cloyster::Singleton<cloyster::services::Options>::get();
+        const auto opts = cloyster::utils::singleton::options();
         if (opts->dryRun) {
             LOG_INFO("Dry Run: Would open the directory {}", path.string());
             return;
@@ -1097,9 +1101,10 @@ struct RepoConfAdapter final {
 
 TEST_CASE("RepoAdapter")
 {
+#ifdef BUILD_TESTING
     Options opts {};
     cloyster::services::initializeSingletonsOptions(
-        std::make_unique<Options>(opts));
+        std::make_unique<const Options>(opts));
     // Log::init(5);
 
     const auto conffile = RepoConfigParser::parseTest("repos/repos.conf");
@@ -1107,6 +1112,7 @@ TEST_CASE("RepoAdapter")
         TrueMirrorExistenceChecker>::fromConfFile(conffile,
         conffile.filesnames());
     CHECK(repofiles.size() == conffile.files().size());
+#endif
 };
 
 // Return the repository names to enable based on the osinfo
@@ -1356,7 +1362,8 @@ TEST_CASE("RepoGenerator")
         .xcatVersion = "latest",
         .zabbixVersion = "6.4",
     };
-    cloyster::Singleton<Options>::init(std::make_unique<Options>(opts));
+    cloyster::Singleton<const Options>::init(
+        std::make_unique<const Options>(opts));
     const std::string_view upstreamPath = "test/output/repos/upstream";
     const std::string_view mirrorPath = "test/output/repos/mirror";
     const std::string_view airgapPath = "test/output/repos/airgap";
@@ -1386,12 +1393,13 @@ TEST_CASE("RepoGenerator")
             TrueMirrorExistenceChecker // upstream
             >();
     generatorMirror.generate(conffiles, osinfo, mirrorPath);
-    cloyster::Singleton<Options>::get()->mirrorBaseUrl
-        = "file:///var/run/repos";
+    opts.mirrorBaseUrl = "file:///var/run/repos";
+    cloyster::Singleton<const Options>::init(
+        std::make_unique<const Options>(opts));
     generatorMirror.generate(conffiles, osinfo, airgapPath);
 };
 
-TEST_SUITE("repos urls")
+TEST_SUITE("cloyster::services::repos [slow]")
 {
     // RH CDN requires a certificate that only exists in RHEL machines
     // because of this the repostiories gives 403 and SSL errors. I'm skipping
@@ -1414,9 +1422,18 @@ TEST_SUITE("repos urls")
 
     TEST_CASE("[slow] repo.conf urls")
     {
+        // This test case issues HTTP requests for each repository
+        // URL in repos.conf (and siblings) and fail if the
+        // HTTP Status in the response is not 200. So this test
+        // will start fail if any repostiory URL changes
+        // (which would break the instalation). It is very slow to
+        // run so it is not inteded to run frequently, but otherwise
+        // as a semi-automated way to validate the repositories URLs
+        // in the repos.conf. use -tce="*slow*" to skip it.
+#ifdef BUILD_TESTING
         using namespace cloyster::services;
         cloyster::services::initializeSingletonsOptions(
-            std::make_unique<Options>(Options {}));
+            std::make_unique<const Options>(Options {}));
         const auto repos = std::filesystem::path("./repos");
         REQUIRE(cloyster::functions::exists(repos / "repos.conf"));
         const auto confs
@@ -1472,6 +1489,7 @@ TEST_SUITE("repos urls")
                 }
             }
         }
+#endif
     }
 }
 }; // namespace cloyster::services::repos {
@@ -1505,7 +1523,6 @@ struct RPMRepositoryGenerator {
         = "/opt/cloysterhpc/backup/etc/yum.repos.d/",
         const std::filesystem::path& sourcePath = "/etc/yum.repos.d")
     {
-        namespace fs = std::filesystem;
         cloyster::functions::backupFilesByExtension(
             wrappers::DestinationPath(backupPath),
             wrappers::SourcePath(sourcePath), wrappers::Extension(".repo"));
@@ -1518,7 +1535,7 @@ struct RPMRepositoryGenerator {
 
 void RepoManager::initializeDefaultRepositories()
 {
-    auto opts = cloyster::Singleton<Options>::get();
+    auto opts = cloyster::utils::singleton::options();
     if (opts->dryRun) {
         LOG_WARN("Dry Run: Skipping RepoManager initialization");
         return;
@@ -1563,7 +1580,7 @@ void RepoManager::initializeDefaultRepositories()
 
 void RepoManager::enable(const std::string& repoid)
 {
-    const auto opts = cloyster::Singleton<cloyster::services::Options>::get();
+    const auto opts = cloyster::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would enable repository {}", repoid);
         return;
@@ -1582,7 +1599,7 @@ void RepoManager::enable(const std::string& repoid)
 
 void RepoManager::enable(const std::vector<std::string>& repos)
 {
-    const auto opts = cloyster::Singleton<cloyster::services::Options>::get();
+    const auto opts = cloyster::utils::singleton::options();
     if (opts->dryRun) {
         LOG_WARN(
             "Dry Run: Would enable these repos: {}", fmt::join(repos, ","));
@@ -1602,7 +1619,7 @@ void RepoManager::enable(const std::vector<std::string>& repos)
 
 void RepoManager::disable(const std::string& repoid)
 {
-    const auto opts = cloyster::Singleton<cloyster::services::Options>::get();
+    const auto opts = cloyster::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would enable repository {}", repoid);
         return;
@@ -1627,7 +1644,7 @@ void RepoManager::disable(const std::string& repoid)
 
 void RepoManager::disable(const std::vector<std::string>& repos)
 {
-    const auto opts = cloyster::Singleton<cloyster::services::Options>::get();
+    const auto opts = cloyster::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would enable repository {}", fmt::join(repos, ","));
         return;

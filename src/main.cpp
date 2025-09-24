@@ -13,12 +13,15 @@
 #include <cloysterhpc/models/cluster.h>
 #include <cloysterhpc/presenter/PresenterInstall.h>
 #include <cloysterhpc/services/ansible/roles.h>
+#include <cloysterhpc/services/confluent.h>
 #include <cloysterhpc/services/files.h>
 #include <cloysterhpc/services/init.h>
 #include <cloysterhpc/services/log.h>
 #include <cloysterhpc/services/options.h>
 #include <cloysterhpc/services/shell.h>
 #include <cloysterhpc/services/xcat.h>
+#include <cloysterhpc/utils/formatters.h>
+#include <cloysterhpc/utils/singleton.h>
 #include <cloysterhpc/verification.h>
 #include <cloysterhpc/view/newt.h>
 
@@ -60,6 +63,9 @@ int runTestCommand(const std::string& testCommand,
         auto file = cloyster::services::files::KeyFile(testCommandArgs[0]);
         LOG_INFO("Groups: {}", fmt::join(file.getGroups(), ","));
         LOG_INFO("Contents: {}", file.toData());
+    } else if (testCommand == "confluent-install") {
+        Confluent cfl;
+        cfl.install();
     } else if (testCommand == "install-mellanox-ofed") {
         OFED(OFED::Kind::Mellanox, "latest").install();
     } else if (testCommand == "image-install-mellanox-ofed") {
@@ -94,44 +100,57 @@ int runTestCommand(const std::string& testCommand,
  */
 int main(int argc, const char** argv)
 {
-    initializeSingletonsOptions(options::factory(argc, argv));
+    // Options are not const yet because some parameters are mutated during the
+    // initialization in main, maybe this should be moved to options.cpp and
+    // factory should return constant options, we also mutate the options during
+    // the tests
+    auto optsMut = options::factory(argc, argv);
 
-    auto opts = Singleton<Options>::get();
-    if (opts->parsingError) {
-        fmt::print("Parsing error: {}", opts->error);
+    if (optsMut->parsingError) {
+        fmt::print("Parsing error: {}", optsMut->error);
         return EXIT_FAILURE;
     }
 
-    if (opts->showVersion) {
+    if (optsMut->showVersion) {
         fmt::print("{}: Version {}\n", productName, productVersion);
         return EXIT_SUCCESS;
     }
 
-    if (opts->helpAndExit) {
-        fmt::print("Help:\n{}", opts->helpText);
+    if (optsMut->helpAndExit) {
+        fmt::print("Help:\n{}", optsMut->helpText);
         return EXIT_SUCCESS;
     }
-    Log::init(opts->logLevelInput);
+
+    if (optsMut->listRoles) {
+        const auto roles = utils::string::lower(fmt::format("{}",
+            fmt::join(
+                utils::enums::toStrings<services::ansible::roles::Roles>(),
+                ",")));
+
+        fmt::print("Roles: {}", roles);
+        return EXIT_SUCCESS;
+    }
+    Log::init(optsMut->logLevelInput);
 
 #ifndef NDEBUG
-    LOG_DEBUG("Log level set to: {}\n", opts->logLevelInput)
+    LOG_DEBUG("Log level set to: {}\n", optsMut->logLevelInput)
 #endif
     LOG_INFO("{} Started", productName)
 
-    if (opts->testCommand.empty()) {
+    if (optsMut->testCommand.empty()) {
         // skip during tests, we do not want to run tests as root
         cloyster::checkEffectiveUserId();
     }
 
     // --test implies --unattended
-    if (!opts->testCommand.empty()) {
-        opts->unattended = true;
+    if (!optsMut->testCommand.empty()) {
+        optsMut->unattended = true;
     }
 
-    if (opts->dryRun) {
+    if (optsMut->dryRun) {
         LOG_INFO("Dry run enabled.");
     } else {
-        while (!opts->unattended) {
+        while (!optsMut->unattended) {
             char response = 'N';
             fmt::print("{} will now modify your system, do you want to "
                        "continue? [Y/N]\n",
@@ -149,20 +168,30 @@ int main(int argc, const char** argv)
     }
 
     //@TODO implement CLI feature
-    if (opts->enableCLI) {
+    if (optsMut->enableCLI) {
         LOG_ERROR("CLI feature not implemented.\n");
         return EXIT_FAILURE;
     }
+    optsMut->enableTUI
+        = optsMut->answerfile.empty() && optsMut->testCommand.empty();
+
+    // Initialize options singleton making it const
+    LOG_DEBUG("Initializing command line options");
+    initializeSingletonsOptions(std::move(optsMut));
+    auto opts = utils::singleton::options();
+    // Assert that opts is const from now on
+    static_assert(std::is_const_v<std::remove_reference_t<decltype(*opts)>>);
 
     LOG_INFO("Initializing the model");
     auto model = std::make_unique<cloyster::models::Cluster>();
     LOG_INFO("Model initialized");
+    std::unique_ptr<models::AnswerFile> answerfile;
     if (!opts->answerfile.empty()) {
         LOG_INFO("Loading the answerfile: {}", opts->answerfile)
-        model->fillData(opts->answerfile);
+        answerfile = std::make_unique<models::AnswerFile>(opts->answerfile);
+        model->fillData(*answerfile);
     }
-
-    opts->enableTUI = opts->answerfile.empty() && opts->testCommand.empty();
+    LOG_INFO("Answerfile loaded: {}", opts->answerfile)
 
 #ifndef NDEBUG
     // model->fillTestData();
@@ -181,7 +210,7 @@ int main(int argc, const char** argv)
         model->dumpData(opts->dumpAnswerfile);
     }
 
-    initializeSingletonsModel(std::move(model));
+    initializeSingletonsModel(std::move(model), std::move(answerfile));
 
 #ifndef NDEBUG
     if (!opts->testCommand.empty()) {
@@ -189,8 +218,14 @@ int main(int argc, const char** argv)
     }
 #endif
     LOG_TRACE("Starting execution engine");
-    std::unique_ptr<Execution> executionEngine
-        = std::make_unique<cloyster::services::Shell>();
+    auto executionEngine = [&]() -> std::unique_ptr<Execution> {
+        if (opts->roles.empty()) {
+            return std::make_unique<cloyster::services::Shell>();
+        } else {
+            return std::make_unique<
+                cloyster::services::ansible::roles::Executor>();
+        };
+    }();
 
     executionEngine->install();
 

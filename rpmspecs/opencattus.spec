@@ -1,6 +1,6 @@
-Name: opencattus-installer 
+Name: opencattus-installer-debug
 Version: 1.0
-Release: 4
+Release: 6
 Summary: OpenCATTUS Installer
 License: Apache 2.0
 URL: https://versatushpc.com.br/opencattus/
@@ -20,7 +20,7 @@ echo "PREP: $PWD"
 %autosetup -n opencattus-%{VERSION}
 bash -c '
 	source rhel-gcc-toolset-14.sh;
-	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
+	cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -G Ninja
 '
 
 %build
@@ -49,6 +49,11 @@ install -m 644 repos/rocky-vault.conf %{buildroot}/opt/cloysterhpc/conf/repos/ro
 /opt/cloysterhpc/conf/repos/rocky-vault.conf
 
 %changelog
+* Thu Sep 16 2025  Daniel Hilst <daniel@versatushpc.com.br> - 1.0-6 - xCAT bugfixes
+- Fix xCAT installation after adding Confluent
+* Thu Sep 16 2025  Daniel Hilst <daniel@versatushpc.com.br> - 1.0-5 - Support Confluent
+- Add support to the Lenovo HPC Confluent provisioner
+- Add --roles command line
 * Thu Aug 14 2025  Daniel Hilst <daniel@versatushpc.com.br> - 1.0-4 - Bugfix 
 - Update OFED
 - Dump configuration

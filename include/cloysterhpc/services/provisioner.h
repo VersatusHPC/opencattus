@@ -6,13 +6,11 @@
 #ifndef CLOYSTERHPC_PROVISIONER_H_
 #define CLOYSTERHPC_PROVISIONER_H_
 
-#include <string>
+template <typename Derived> class Provisioner {
+    constexpr auto derived() -> Derived& { return static_cast<Derived&>(this); }
 
-class Provisioner {
 public:
-    virtual ~Provisioner() = default;
-
-    // virtual void method () = 0;
+    void install() { derived().install(); }
 };
 
 #endif // CLOYSTERHPC_PROVISIONER_H_

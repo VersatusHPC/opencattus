@@ -1,6 +1,8 @@
 #ifndef CLOYSTERHPC_PATTERNS_WRAPPER_H_
 #define CLOYSTERHPC_PATTERNS_WRAPPER_H_
 
+#include <filesystem>
+
 namespace cloyster {
 /**
  * @class Wrapper

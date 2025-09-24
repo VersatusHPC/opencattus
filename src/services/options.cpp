@@ -47,7 +47,7 @@ std::unique_ptr<Options> options::factory(int argc, const char** argv)
     app.add_flag("-t,--tui", opt.enableTUI, "Enable TUI");
     app.add_flag("-c,--cli", opt.enableCLI, "Enable CLI");
     app.add_flag("-D,--daemon", opt.runAsDaemon, "Run as daemon");
-    app.add_flag("--enable-mirrors", opt.enableMirrors, "Disable mirror URLs");
+    app.add_flag("--disable-mirrors", opt.enableMirrors, "Disable mirror URLs");
     app.add_option("--mirror-url", opt.mirrorBaseUrl, "Base URL for mirror")
         ->default_str("https://mirror.versatushpc.com.br");
     app.add_option(
@@ -74,6 +74,9 @@ std::unique_ptr<Options> options::factory(int argc, const char** argv)
         "Stop after specific steps during installation");
     app.add_option("--ohpc-packages", opt.ohpcPackages, "Select OHPC packages")
         ->multi_option_policy(CLI::MultiOptionPolicy::TakeAll);
+    app.add_option("--roles", opt.roles, "Run only the provided roles")
+        ->delimiter(',');
+    app.add_option("--list-roles", opt.listRoles, "Show the supported roles");
     app.add_flag("-u,--unattended", opt.unattended,
         "Perform an unattended installation");
     app.add_option("--dump-answerfile", opt.dumpAnswerfile,

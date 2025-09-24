@@ -8,10 +8,13 @@
 #include <cloysterhpc/NFS.h>
 #include <cloysterhpc/const.h>
 #include <cloysterhpc/functions.h>
+#include <cloysterhpc/services/init.h>
 #include <cloysterhpc/services/log.h>
 #include <cloysterhpc/services/osservice.h>
 #include <cloysterhpc/services/scriptbuilder.h>
 #include <cloysterhpc/utils/formatters.h>
+#include <cloysterhpc/utils/singleton.h>
+#include <string_view>
 
 using cloyster::models::OS;
 
@@ -54,13 +57,17 @@ cloyster::services::ScriptBuilder NFS::installScript(const OS& osinfo)
             "/home *(rw,no_subtree_check,fsid={},no_root_squash)", 10)
         .addLineToFile("/etc/exports", "/opt/ohpc/pub",
             "/opt/ohpc/pub *(ro,no_subtree_check,fsid={})", 11)
-        .addLineToFile("/etc/exports", "/tftpboot",
-            "/tftpboot *(rw,no_root_squash,sync,no_subtree_check)")
-        .addLineToFile("/etc/exports", "/install",
-            "/install *(rw,no_root_squash,sync,no_subtree_check)")
-        .addNewLine()
-        .enableService("rpcbind nfs-server")
-        .addCommand("exportfs -a")
+        .addLineToFile("/etc/exports", "/opt/spack", "/opt/spack *(ro)");
+    if (utils::singleton::answerfile()->system.provisioner == "xcat") {
+        builder
+            .addLineToFile("/etc/exports", "/tftpboot",
+                "/tftpboot *(rw,no_root_squash,sync,no_subtree_check)")
+            .addLineToFile("/etc/exports", "/install",
+                "/install *(rw,no_root_squash,sync,no_subtree_check)")
+            .addNewLine();
+    }
+    builder.enableService("rpcbind nfs-server")
+        .addCommand("exportfs -a > /dev/null 2>&1 || :")
         .addNewLine()
         .addCommand(R"(# Update firewall rules
 if systemctl is-enabled --quiet firewalld.service; then
@@ -75,7 +82,6 @@ cloyster::services::ScriptBuilder NFS::imageInstallScript(
 {
     using namespace cloyster;
     services::ScriptBuilder builder(osinfo);
-
     builder.addNewLine()
         .addCommand("# Define variables (for shell script execution)")
         .addCommand("IMAGE=\"{}\"", args.imageName)
@@ -121,94 +127,63 @@ TEST_CASE("installScript")
 {
     const OS osinfo
         = cloyster::models::OS(OS::Distro::Rocky, OS::Platform::el9, 5);
+    cloyster::services::initializeSingletonsOptions(
+        std::make_unique<const Options>());
+    cloyster::Singleton<const models::AnswerFile>::init(
+        []() -> std::unique_ptr<const models::AnswerFile> {
+            auto answerfile = std::make_unique<models::AnswerFile>(
+                "test/sample/answerfile/rocky9-xcat.ini");
+            return answerfile;
+        });
     const auto builder = NFS::installScript(osinfo);
-
-    // @TODO, this test check for string equality, while simple
-    // it is very sensitive to changes, make this test more propositional
-    // like:
-    //
-    // - Check if the packages are being installed
-    // - Check if the files are being updated
-    // - Check if packages are being installed
-    // - etc...
-    CHECK(builder.toString() ==
-        R"del(#!/bin/bash -xeu
-
-# Variables
-HEADNODE=$(hostname -s)
-
-# install packages
-dnf install -y nfs-utils
-
-# Add exports to /etc/exports
-grep -q "/home" "/etc/exports" || \
-  echo "/home *(rw,no_subtree_check,fsid=10,no_root_squash)" >> "/etc/exports"
-grep -q "/opt/ohpc/pub" "/etc/exports" || \
-  echo "/opt/ohpc/pub *(ro,no_subtree_check,fsid=11)" >> "/etc/exports"
-grep -q "/tftpboot" "/etc/exports" || \
-  echo "/tftpboot *(rw,no_root_squash,sync,no_subtree_check)" >> "/etc/exports"
-grep -q "/install" "/etc/exports" || \
-  echo "/install *(rw,no_root_squash,sync,no_subtree_check)" >> "/etc/exports"
-
-systemctl enable --now rpcbind nfs-server
-exportfs -a
-
-# Update firewall rules
-if systemctl is-enabled --quiet firewalld.service; then
-    firewall-cmd --permanent --add-service={nfs,mountd,rpc-bind}
-    firewall-cmd --reload
-fi)del");
+    const auto scriptStr = builder.toString();
+    const auto script = std::string_view(scriptStr);
+    CHECK(script.contains("dnf install -y nfs-utils\n"));
+    CHECK(script.contains("systemctl enable --now rpcbind nfs-server"));
+    CHECK(script.contains("exportfs -a"));
+    CHECK(
+        script.contains("/home *(rw,no_subtree_check,fsid=10,no_root_squash)"));
+    CHECK(script.contains("/opt/ohpc/pub *(ro,no_subtree_check,fsid=11)"));
+    CHECK(script.contains(
+        "/tftpboot *(rw,no_root_squash,sync,no_subtree_check)"));
+    CHECK(
+        script.contains("/install *(rw,no_root_squash,sync,no_subtree_check)"));
 }
 
 TEST_CASE("installImageScript")
 {
     const OS osinfo
         = cloyster::models::OS(OS::Distro::Rocky, OS::Platform::el9, 5);
+    cloyster::Singleton<const models::AnswerFile>::init(
+        []() -> std::unique_ptr<const models::AnswerFile> {
+            auto answerfile = std::make_unique<models::AnswerFile>(
+                "test/sample/answerfile/rocky9-xcat.ini");
+            return answerfile;
+        });
     const auto builder = NFS::imageInstallScript(osinfo,
         { .imageName = "rocky9.5-x86_64-netboot-compute",
             .rootfs = "/install/netboot/rocky9.5/x86_64/compute/rootimg",
             .postinstall = "/install/custom/netboot/compute.postinstall",
             .pkglist = "/install/custom/netboot/compute.otherpkglist" });
-
-    CHECK(builder.toString() ==
-        R"del(#!/bin/bash -xeu
-
-# Define variables (for shell script execution)
-IMAGE="rocky9.5-x86_64-netboot-compute"
-ROOTFS="/install/netboot/rocky9.5/x86_64/compute/rootimg"
-POSTINSTALL="/install/custom/netboot/compute.postinstall"
-PKGLIST="/install/custom/netboot/compute.otherpkglist"
-HEADNODE=$(hostname -s)
-
-# Add autofs commands to postinstall
-grep -q "autofs" "${POSTINSTALL}" || \
-  echo "chroot \${IMG_ROOTIMGDIR} systemctl enable autofs" >> "${POSTINSTALL}"
-chmod +x "${POSTINSTALL}"
-
-# Add required packages to the image
-grep -q "nfs-utils" "${PKGLIST}" || \
-  echo "nfs-utils" >> "${PKGLIST}"
-grep -q "autofs" "${PKGLIST}" || \
-  echo "autofs" >> "${PKGLIST}"
-
-# Configure autofs
-grep -q "/home" "${ROOTFS}/etc/auto.master" || \
-  echo "/home   /etc/auto.home" >> "${ROOTFS}/etc/auto.master"
-grep -q "/opt/ohpc/pub" "${ROOTFS}/etc/auto.master" || \
-  echo "/opt/ohpc/pub   /etc/auto.ohpc" >> "${ROOTFS}/etc/auto.master"
-
-grep -q "home-map" "${ROOTFS}/etc/auto.home" || \
-  echo "* -fstype=nfs,rw,no_subtree_check,no_root_squash ${HEADNODE}:/home/&" >> "${ROOTFS}/etc/auto.home"
-
-grep -q "ohpc-map" "${ROOTFS}/etc/auto.ohpc" || \
-  echo "* -fstype=nfs,ro,no_subtree_check ${HEADNODE}:/opt/ohpc/pub/&" >> "${ROOTFS}/etc/auto.ohpc"
-
-# Create mount points
-mkdir -p ${ROOTFS}/home ${ROOTFS}/opt/ohpc/pub || :
-
-# Update xCAT configuration
-chdef -t osimage ${IMAGE} postinstall="${POSTINSTALL}")del");
-}
+    const std::string script = builder.toString();
+    CHECK(script.contains("HEADNODE="));
+    CHECK(script.contains("ROOTFS="));
+    CHECK(script.contains("PKGLIST="));
+    CHECK(script.contains("systemctl enable autofs"));
+    CHECK(script.contains(R"(echo "nfs-utils" >> "${PKGLIST}")"));
+    CHECK(script.contains(R"(echo "autofs" >> "${PKGLIST}")"));
+    CHECK(script.contains(
+        R"(echo "/home   /etc/auto.home" >> "${ROOTFS}/etc/auto.master")"));
+    CHECK(script.contains(
+        R"(echo "/opt/ohpc/pub   /etc/auto.ohpc" >> "${ROOTFS}/etc/auto.master")"));
+    CHECK(script.contains(
+        R"(echo "* -fstype=nfs,rw,no_subtree_check,no_root_squash ${HEADNODE}:/home/&" >> "${ROOTFS}/etc/auto.home")"));
+    CHECK(script.contains(
+        R"(echo "* -fstype=nfs,ro,no_subtree_check ${HEADNODE}:/opt/ohpc/pub/&" >> "${ROOTFS}/etc/auto.ohpc")"));
+    CHECK(script.contains(
+        R"(chdef -t osimage ${IMAGE} postinstall="${POSTINSTALL}")"));
 };
+
+}
 
 TEST_SUITE_END();

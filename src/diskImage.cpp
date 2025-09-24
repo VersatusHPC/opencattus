@@ -8,9 +8,12 @@
 #include <cloysterhpc/diskImage.h>
 #include <cloysterhpc/functions.h>
 #include <cloysterhpc/models/os.h>
+#include <cloysterhpc/services/cache.h>
 #include <cloysterhpc/services/files.h>
 #include <cloysterhpc/services/log.h>
 #include <cloysterhpc/services/options.h>
+#include <cloysterhpc/utils/optional.h>
+#include <cloysterhpc/utils/singleton.h>
 #include <unordered_map>
 
 // @FIXME: This file need some work
@@ -27,10 +30,9 @@ void DiskImage::setPath(const std::filesystem::path& path)
 
     // Verify checksum only if the image is known.
     if (isKnownImage(path)) {
-#ifdef NDEBUG
-        if (!hasVerifiedChecksum(path))
-            throw std::runtime_error("Disk Image checksum isn't valid");
-#endif
+        if (!hasVerifiedChecksum(path)) {
+            LOG_WARN("Disk Image checksum isn't valid");
+        }
     }
 
     m_path = path;
@@ -38,7 +40,7 @@ void DiskImage::setPath(const std::filesystem::path& path)
 
 bool DiskImage::isKnownImage(const std::filesystem::path& path)
 {
-    constexpr auto chooseDistro = [](std::string_view imageView)
+    constexpr auto toDistroImage = [](std::string_view imageView)
         -> std::optional<cloyster::models::OS::Distro> {
         if (imageView.starts_with("Rocky")) {
             return cloyster::models::OS::Distro::Rocky;
@@ -48,9 +50,8 @@ bool DiskImage::isKnownImage(const std::filesystem::path& path)
             return cloyster::models::OS::Distro::OL;
         } else if (imageView.starts_with("AlmaLinux")) {
             return cloyster::models::OS::Distro::AlmaLinux;
-        } else {
-            return std::nullopt;
         }
+        return std::nullopt;
     };
 
     for (const auto& image : m_knownImageFilename) {
@@ -58,23 +59,15 @@ bool DiskImage::isKnownImage(const std::filesystem::path& path)
             LOG_TRACE("Disk image is recognized")
 
             auto imageView = std::string_view(image);
-            const auto distro = chooseDistro(imageView);
-            if (distro) {
-                m_distro = distro;
+            m_distro = toDistroImage(imageView);
+            if (m_distro.has_value()) {
                 return true;
             }
         }
     }
-
-    const auto distro
-        = chooseDistro(std::string_view(path.filename().string()));
-    if (distro) {
-        m_distro = distro;
-        return true;
-    }
-    cloyster::functions::abort(
-        "Disk image is unknown. Maybe you're using a custom image or "
-        "changed the default name?");
+    m_distro = toDistroImage(path.filename().string());
+    LOG_TRACE("Disk image is unknown. Maybe you're using a custom image or "
+              "changed the default name?");
     return false;
 }
 
@@ -88,7 +81,7 @@ cloyster::models::OS::Distro DiskImage::getDistro() const
 bool DiskImage::hasVerifiedChecksum(const std::filesystem::path& path)
 {
 
-    const auto opts = cloyster::Singleton<cloyster::services::Options>::get();
+    const auto opts = cloyster::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would verify disk image checksum.")
         return true;
@@ -121,12 +114,16 @@ bool DiskImage::hasVerifiedChecksum(const std::filesystem::path& path)
             "e" }
     };
 
-    auto checksum = cloyster::services::files::checksum(path);
+    std::string checksum
+        = cloyster::services::cache::fs::checksum("iso-checksum", path);
     LOG_INFO("SHA256 checksum of file {} is: {}", path.string(), checksum);
 
-    if (checksum == hash_map.find(path.filename().string())->second) {
-        LOG_TRACE("Checksum - The disk image is valid")
-        return true;
+    if (auto pair = hash_map.find(path.filename().string());
+        pair != hash_map.end()) {
+        if (checksum == pair->second) {
+            LOG_TRACE("Checksum - The disk image is valid")
+            return true;
+        }
     }
 
     LOG_TRACE("Checksum - The disk image is invalid. Maybe you're using a "
@@ -141,7 +138,7 @@ bool DiskImage::hasVerifiedChecksum(const std::filesystem::path& path)
 #include <doctest/doctest.h>
 #endif
 
-TEST_SUITE("Disk image test suite")
+TEST_SUITE("cloyster::services::diskimage")
 {
     /*
     DiskImage diskImage;
