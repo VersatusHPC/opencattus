@@ -126,7 +126,7 @@ case "$os_version" in
     ;;
   10)
     dnf -y install python pip libubsan libasan liblsan libtsan libhwasan \
-      glibmm2.68 glibmm2.68-devel systemd-devel \
+      glibmm2.4 glibmm2.4-devel systemd-devel \
       perl-File-Copy perl-File-Compare perl-Thread-Queue
     ;;
 esac

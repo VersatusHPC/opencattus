@@ -114,11 +114,8 @@ function(opencattus_setup_dependencies)
 
   if(NOT TARGET glibmm)
     # Using pkg_check_modules to link against the host glibmm
-    # instead of using conan. Try glibmm-2.68 first (EL10+), fall back to glibmm-2.4 (EL9).
-    pkg_check_modules(GLIBMM QUIET glibmm-2.68)
-    if(NOT GLIBMM_FOUND)
-      pkg_check_modules(GLIBMM REQUIRED glibmm-2.4)
-    endif()
+    # instead of using conan. Use glibmm-2.4 which is available on both EL9 and EL10.
+    pkg_check_modules(GLIBMM REQUIRED glibmm-2.4)
 
     message(STATUS "GLIBMM_LIBRARIES=${GLIBMM_LIBRARIES}")
     message(STATUS "GLIBMM_INCLUDE_DIRS=${GLIBMM_INCLUDE_DIRS}")
