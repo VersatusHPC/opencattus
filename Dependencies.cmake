@@ -112,6 +112,11 @@ function(opencattus_setup_dependencies)
     CPMFindPackage(NAME newt)
   endif()
 
+  include(cmake/Findlibxcrypt.cmake)
+  if(NOT TARGET libxcrypt)
+    CPMFindPackage(NAME libxcrypt)
+  endif()
+
   if(NOT TARGET glibmm)
     # Using pkg_check_modules to link against the host glibmm
     # instead of using conan. Use glibmm-2.4 which is available on both EL9 and EL10.

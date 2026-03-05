@@ -135,7 +135,7 @@ esac
 pip3 install --user conan
 
 # Required libraries
-dnf -y install newt-devel
+dnf -y install newt-devel libxcrypt-devel
 
 echo
 echo Development tools, packages and libraries were installed on your system.
