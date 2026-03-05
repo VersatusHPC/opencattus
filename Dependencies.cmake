@@ -10,24 +10,25 @@ function(opencattus_setup_dependencies)
   # For each dependency, see if it's
   # already been provided to us by a parent project
 
+  # Versions kept in sync with conanfile.py
   if(NOT (TARGET Boost::headers OR TARGET Boost::system OR TARGET Boost::thread))
     if (opencattus_ENABLE_CONAN)
       CPMFindPackage(NAME Boost)
     else()
       CPMAddPackage(
         NAME Boost
-        VERSION 1.82.0
+        VERSION 1.83.0
         GITHUB_REPOSITORY "boostorg/boost"
-        GIT_TAG "boost-1.82.0"
+        GIT_TAG "boost-1.83.0"
       )
     endif()
   endif()
-  
+
   if(NOT TARGET fmtlib::fmtlib)
     if (opencattus_ENABLE_CONAN)
       CPMFindPackage(NAME fmt)
     else()
-      CPMAddPackage("gh:fmtlib/fmt#9.1.0")
+      CPMAddPackage("gh:fmtlib/fmt#10.2.1")
     endif()
   endif()
 
@@ -41,7 +42,7 @@ function(opencattus_setup_dependencies)
         NAME
         spdlog
         VERSION
-        1.11.0
+        1.14.1
         GITHUB_REPOSITORY
         "gabime/spdlog"
         OPTIONS
@@ -57,7 +58,6 @@ function(opencattus_setup_dependencies)
         NAME magic_enum
         VERSION 0.9.3
         GITHUB_REPOSITORY Neargye/magic_enum
-        #OPTIONS "MAGIC_ENUM_OPT_INSTALL YES"
       )
     endif()
   endif()
@@ -74,7 +74,7 @@ function(opencattus_setup_dependencies)
     if (opencattus_ENABLE_CONAN)
       CPMFindPackage(NAME CLI11)
     else()
-      CPMAddPackage("gh:CLIUtils/CLI11@2.3.2")
+      CPMAddPackage("gh:CLIUtils/CLI11@2.4.2")
     endif()
   endif()
 
@@ -97,6 +97,11 @@ function(opencattus_setup_dependencies)
     endif()
   endif()
 
+  # sdbus-cpp 2.x doesn't create the namespaced alias when built as a subdirectory
+  if(TARGET sdbus-c++ AND NOT TARGET SDBusCpp::sdbus-c++)
+    add_library(SDBusCpp::sdbus-c++ ALIAS sdbus-c++)
+  endif()
+
   # Standalone packages
   include(FindPackageHandleStandardArgs)
 
@@ -109,8 +114,11 @@ function(opencattus_setup_dependencies)
 
   if(NOT TARGET glibmm)
     # Using pkg_check_modules to link against the host glibmm
-    # instead of using conan
-    pkg_check_modules(GLIBMM REQUIRED glibmm-2.4)
+    # instead of using conan. Try glibmm-2.68 first (EL10+), fall back to glibmm-2.4 (EL9).
+    pkg_check_modules(GLIBMM QUIET glibmm-2.68)
+    if(NOT GLIBMM_FOUND)
+      pkg_check_modules(GLIBMM REQUIRED glibmm-2.4)
+    endif()
 
     message(STATUS "GLIBMM_LIBRARIES=${GLIBMM_LIBRARIES}")
     message(STATUS "GLIBMM_INCLUDE_DIRS=${GLIBMM_INCLUDE_DIRS}")

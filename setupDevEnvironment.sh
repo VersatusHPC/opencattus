@@ -43,13 +43,8 @@ redhat() {
     sudo subscription-manager refresh
   fi
 
-  if [ "$os_version" -eq 10 ]; then
-    dnf config-manager --set-enabled \
-      "codeready-builder-beta-for-rhel-${os_version}-x86_64-rpms"
-  else
-    dnf config-manager --set-enabled \
-      "codeready-builder-for-rhel-${os_version}-x86_64-rpms"
-  fi
+  dnf config-manager --set-enabled \
+    "codeready-builder-for-rhel-${os_version}-x86_64-rpms"
 
   add_epel;
 }
@@ -131,7 +126,7 @@ case "$os_version" in
     ;;
   10)
     dnf -y install python pip libubsan libasan liblsan libtsan libhwasan \
-      glibmm-2.68 glibmm-2.68-devel \
+      glibmm2.68 glibmm2.68-devel systemd-devel \
       perl-File-Copy perl-File-Compare perl-Thread-Queue
     ;;
 esac
