@@ -25,7 +25,7 @@ void run(const Role& role)
         roles::run(Roles::XCAT, osinfo);
     } else {
         opencattus::functions::abort("Expecing xcat or confluent at "
-                                   "[system].provisioner, found: {}, at {}",
+                                     "[system].provisioner, found: {}, at {}",
             provisioner, utils::singleton::answerfile()->path());
     }
 }

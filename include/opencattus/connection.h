@@ -48,7 +48,7 @@ private:
     std::optional<std::string> m_mac;
     // TODO: Use std::vector to support more than one IP address per interface
     // std::vector<struct in_addr> m_address;
-    address m_address {};
+    address m_address { };
     // TODO: MTU is a network parameter
     std::uint16_t m_mtu { 1500 };
 

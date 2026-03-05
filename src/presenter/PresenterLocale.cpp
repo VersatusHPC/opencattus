@@ -12,7 +12,8 @@ PresenterLocale::PresenterLocale(
     std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)
     : Presenter(model, view)
 {
-    auto osservice = opencattus::Singleton<opencattus::services::IOSService>::get();
+    auto osservice
+        = opencattus::Singleton<opencattus::services::IOSService>::get();
     auto availableLocales = osservice->getAvailableLocales();
 
     const auto& selectedLocale = m_view->listMenu(

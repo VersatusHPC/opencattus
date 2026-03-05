@@ -273,11 +273,9 @@ public:
 
     virtual int executeCommand(const std::string&) = 0;
     virtual int executeCommand(
-        const std::string&, std::list<std::string>& output)
-        = 0;
+        const std::string&, std::list<std::string>& output) = 0;
     virtual CommandProxy executeCommandIter(
-        const std::string&, Stream out = Stream::Stdout)
-        = 0;
+        const std::string&, Stream out = Stream::Stdout) = 0;
     virtual void checkCommand(const std::string&) = 0;
     virtual std::vector<std::string> checkOutput(const std::string&) = 0;
     virtual int downloadFile(const std::string& url, const std::string& file)

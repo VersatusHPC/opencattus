@@ -2,6 +2,7 @@
 #define OPENCATTUS_FUNCTIONS_H_
 
 #include <algorithm>
+#include <filesystem>
 #include <opencattus/models/cluster.h>
 #include <opencattus/patterns/singleton.h>
 #include <opencattus/patterns/wrapper.h>
@@ -9,7 +10,6 @@
 #include <opencattus/services/options.h>
 #include <opencattus/utils/enums.h>
 #include <opencattus/utils/string.h>
-#include <filesystem>
 #include <string>
 
 #ifdef BUILD_TESTING

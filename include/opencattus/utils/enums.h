@@ -14,8 +14,8 @@
  *
  */
 
-#ifndef OPENCATTUS_UTILS_ENUM_H
-#define OPENCATTUS_UTILS_ENUM_H
+#ifndef OPENCATTUS_UTILS_ENUMS_H_
+#define OPENCATTUS_UTILS_ENUMS_H_
 
 #include <cstdint>
 #include <fmt/ranges.h>
@@ -126,15 +126,16 @@ T ofStringExc(std::string_view str, Case case_ = Case::Sensitive)
  * @brief Example usage of the enum utility functions.
  * @code
  * enum class Color { RED, GREEN, BLUE };
- * std::string name = opencattus::utils::enums::toString(Color::GREEN); // "GREEN"
- * auto colors = opencattus::utils::enums::toStrings<Color>(); // {"RED", "GREEN",
- * "BLUE"} std::size_t count = opencattus::utils::enums::count<Color>(); // 3 auto
- * parsed = opencattus::utils::enums::ofStringOpt<Color>("blue",
- * Case::Insensitive); if (parsed) { std::cout <<
- * opencattus::utils::enums::toString(*parsed) << "\n"; } // "BLUE"
+ * std::string name = opencattus::utils::enums::toString(Color::GREEN); //
+ * "GREEN" auto colors = opencattus::utils::enums::toStrings<Color>(); //
+ * {"RED", "GREEN", "BLUE"} std::size_t count =
+ * opencattus::utils::enums::count<Color>(); // 3 auto parsed =
+ * opencattus::utils::enums::ofStringOpt<Color>("blue", Case::Insensitive); if
+ * (parsed) { std::cout << opencattus::utils::enums::toString(*parsed) << "\n";
+ * } // "BLUE"
  * @endcode
  */
 
 } // namespace opencattus::utils::enums
 
-#endif // OPENCATTUS_UTILS_ENUM_H
+#endif // OPENCATTUS_UTILS_ENUMS_H_

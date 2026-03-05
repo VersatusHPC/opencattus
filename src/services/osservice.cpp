@@ -82,8 +82,8 @@ public:
 
     [[nodiscard]] bool update() const override
     {
-        return (
-            opencattus::Singleton<IRunner>::get()->executeCommand("dnf -y update")
+        return (opencattus::Singleton<IRunner>::get()->executeCommand(
+                    "dnf -y update")
             != 0);
     }
 

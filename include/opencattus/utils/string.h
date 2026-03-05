@@ -1,5 +1,5 @@
-#ifndef OPENCATTUS_UTILS_STRING_H
-#define OPENCATTUS_UTILS_STRING_H
+#ifndef OPENCATTUS_UTILS_STRING_H_
+#define OPENCATTUS_UTILS_STRING_H_
 
 #include <algorithm>
 #include <string>

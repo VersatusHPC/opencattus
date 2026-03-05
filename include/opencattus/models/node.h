@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef OPENCATTUS_NODE_H
-#define OPENCATTUS_NODE_H
+#ifndef OPENCATTUS_NODE_H_
+#define OPENCATTUS_NODE_H_
 
 #include <list>
 #include <string>

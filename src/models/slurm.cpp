@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <filesystem>
 #include <opencattus/functions.h>
 #include <opencattus/models/cluster.h>
 #include <opencattus/models/slurm.h>
 #include <opencattus/services/log.h>
 #include <opencattus/services/osservice.h>
-#include <filesystem>
 
 namespace opencattus::models {
 SLURM::SLURM(const Cluster& cluster)
@@ -19,8 +19,8 @@ SLURM::SLURM(const Cluster& cluster)
 
 void SLURM::installServer()
 {
-    opencattus::Singleton<const opencattus::services::IOSService>::get()->install(
-        "ohpc-slurm-server");
+    opencattus::Singleton<const opencattus::services::IOSService>::get()
+        ->install("ohpc-slurm-server");
 }
 
 void SLURM::configureServer()

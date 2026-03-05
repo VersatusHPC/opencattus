@@ -6,7 +6,7 @@
 #ifndef OPENCATTUS_OPENCATTUS_H_
 #define OPENCATTUS_OPENCATTUS_H_
 
-#include <opencattus/services/log.h>
 #include <fmt/format.h>
+#include <opencattus/services/log.h>
 
 #endif // OPENCATTUS_OPENCATTUS_H_

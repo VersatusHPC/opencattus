@@ -1,5 +1,5 @@
-#ifndef OPENCATTUS_TEMPDIR_H
-#define OPENCATTUS_TEMPDIR_H
+#ifndef OPENCATTUS_TEMPDIR_H_
+#define OPENCATTUS_TEMPDIR_H_
 
 #include <filesystem>
 

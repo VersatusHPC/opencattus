@@ -16,10 +16,10 @@ using namespace opencattus::services;
 // WARNING: If you change the type T in Singleton<T>::init(...) (to const T for
 // instance) all the Singleton<T>::get need to be changed, otherwise you get
 // "Singleton read before initialization error" at runtime. While there are
-// getters to handle this in opencattus/utils/singletons in a uniform way and for
-// most cases, these getters depends on headers (that introduce the type
-// T in question), so files including the same header cannot use these getters
-// (or we have recursive header inclusion error).
+// getters to handle this in opencattus/utils/singletons in a uniform way and
+// for most cases, these getters depends on headers (that introduce the type T
+// in question), so files including the same header cannot use these getters (or
+// we have recursive header inclusion error).
 
 // Singletons that depends only in the options, the cluster model
 // depends on these
@@ -37,7 +37,8 @@ void initializeSingletonsOptions(std::unique_ptr<const Options>&& opts)
         auto opts = Singleton<const Options>::get();
 
         if (opts->dryRun) {
-            return opencattus::functions::makeUniqueDerived<IRunner, DryRunner>();
+            return opencattus::functions::makeUniqueDerived<IRunner,
+                DryRunner>();
         }
 
         return opencattus::functions::makeUniqueDerived<IRunner, Runner>();
@@ -50,7 +51,8 @@ void initializeSingletonsModel(
     std::unique_ptr<const opencattus::models::AnswerFile>&& answerfile)
 {
     using opencattus::models::Cluster;
-    opencattus::Singleton<const models::AnswerFile>::init(std::move(answerfile));
+    opencattus::Singleton<const models::AnswerFile>::init(
+        std::move(answerfile));
     opencattus::Singleton<Cluster>::init(std::move(cluster));
 
     using opencattus::services::repos::RepoManager;

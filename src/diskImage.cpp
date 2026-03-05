@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <opencattus/opencattus.h>
 #include <opencattus/diskImage.h>
 #include <opencattus/functions.h>
 #include <opencattus/models/os.h>
+#include <opencattus/opencattus.h>
 #include <opencattus/services/cache.h>
 #include <opencattus/services/files.h>
 #include <opencattus/services/log.h>

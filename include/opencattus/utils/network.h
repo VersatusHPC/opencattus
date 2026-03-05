@@ -1,5 +1,5 @@
-#ifndef OPENCATTUSHC_UTILS_NETWORK
-#define OPENCATTUSHC_UTILS_NETWORK
+#ifndef OPENCATTUS_UTILS_NETWORK_H_
+#define OPENCATTUS_UTILS_NETWORK_H_
 
 #include <boost/asio/ip/address.hpp>
 

@@ -6,9 +6,9 @@
 #ifndef OPENCATTUS_OS_H_
 #define OPENCATTUS_OS_H_
 
-#include <opencattus/const.h>
 #include <fmt/format.h>
 #include <gsl/gsl-lite.hpp>
+#include <opencattus/const.h>
 #include <optional>
 #include <string>
 #include <variant>
@@ -68,8 +68,8 @@ private:
     std::variant<std::monostate, Platform> m_platform;
     std::variant<std::monostate, Distro> m_distro;
     std::optional<std::string> m_kernel; // kernel version may be uninitialized
-    unsigned m_majorVersion {};
-    unsigned m_minorVersion {};
+    unsigned m_majorVersion { };
+    unsigned m_minorVersion { };
 
     void setMajorVersion(unsigned int majorVersion);
 

@@ -1,7 +1,7 @@
 #include <array>
-#include <opencattus/tempdir.h>
 #include <cstdint>
 #include <fmt/format.h>
+#include <opencattus/tempdir.h>
 #include <random>
 
 static char value_to_char(std::uint64_t value)

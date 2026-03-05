@@ -7,13 +7,13 @@
 #define OPENCATTUS_NEWT_H_
 
 #include <boost/lexical_cast.hpp>
+#include <fmt/format.h>
+#include <iostream>
+#include <newt.h>
 #include <opencattus/functions.h>
 #include <opencattus/services/log.h>
 #include <opencattus/services/runner.h>
 #include <opencattus/view/view.h>
-#include <fmt/format.h>
-#include <iostream>
-#include <newt.h>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -279,7 +279,8 @@ public:
      */
     bool progressMenu(const char* title, const char* message,
         opencattus::services::CommandProxy&&,
-        std::function<std::optional<double>(opencattus::services::CommandProxy&)>
+        std::function<std::optional<double>(
+            opencattus::services::CommandProxy&)>
             fPercent);
 
     // TODO:

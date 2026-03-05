@@ -14,7 +14,8 @@ TEST_SUITE("opencattus::services::network")
 {
     TEST_CASE("fetchSubnetMask throws for unknown interface")
     {
-        CHECK_THROWS_AS(static_cast<void>(Network::fetchSubnetMask("nonexistent0")),
+        CHECK_THROWS_AS(
+            static_cast<void>(Network::fetchSubnetMask("nonexistent0")),
             std::runtime_error);
     }
 }

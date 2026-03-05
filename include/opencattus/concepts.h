@@ -1,5 +1,5 @@
-#ifndef OPENCATTUS_CONCEPTS_H
-#define OPENCATTUS_CONCEPTS_H
+#ifndef OPENCATTUS_CONCEPTS_H_
+#define OPENCATTUS_CONCEPTS_H_
 
 #include <concepts>
 #include <expected>
@@ -56,4 +56,4 @@ concept IsSaveable = requires(File_ file) {
 
 }
 
-#endif // OPENCATTUS_CONCEPTS_H
+#endif // OPENCATTUS_CONCEPTS_H_

@@ -6,11 +6,11 @@
 #include <cctype>
 #include <cstdlib>
 
-#include <opencattus/opencattus.h>
 #include <opencattus/const.h>
 #include <opencattus/dbus_client.h>
 #include <opencattus/functions.h>
 #include <opencattus/models/cluster.h>
+#include <opencattus/opencattus.h>
 #include <opencattus/presenter/PresenterInstall.h>
 #include <opencattus/services/ansible/roles.h>
 #include <opencattus/services/confluent.h>

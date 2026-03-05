@@ -1,5 +1,5 @@
-#ifndef OPENCATTUS_SERVICES_ANSIBLE_ROLES_NETWORK_H
-#define OPENCATTUS_SERVICES_ANSIBLE_ROLES_NETWORK_H
+#ifndef OPENCATTUS_SERVICES_ANSIBLE_ROLES_NETWORK_H_
+#define OPENCATTUS_SERVICES_ANSIBLE_ROLES_NETWORK_H_
 
 #include <opencattus/services/ansible/role.h>
 #include <opencattus/services/scriptbuilder.h>

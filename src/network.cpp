@@ -131,9 +131,9 @@ void Network::setAddress(const std::string& ip)
 
 address Network::fetchAddress(const std::string& interface)
 {
-    struct in_addr addr {};
-    struct in_addr netmask {};
-    struct in_addr network {};
+    struct in_addr addr { };
+    struct in_addr netmask { };
+    struct in_addr network { };
 
     if (inet_aton(
             Connection::fetchAddress(interface).to_string().c_str(), &addr)
@@ -228,8 +228,8 @@ address Network::calculateAddress(const address& connectionAddress)
                         "calculate the address"));
     }
 
-    struct in_addr ip_addr {};
-    struct in_addr subnet_addr {};
+    struct in_addr ip_addr { };
+    struct in_addr subnet_addr { };
 
     inet_aton(connectionAddress.to_string().c_str(), &ip_addr);
     inet_aton(m_subnetMask.to_string().c_str(), &subnet_addr);
@@ -301,7 +301,7 @@ address Network::fetchGateway(const std::string& interface)
     }
 
     freeifaddrs(ifaddr);
-    return {};
+    return { };
     throw std::runtime_error(fmt::format(
         "Interface {} does not have a gateway IP address defined", interface));
 }

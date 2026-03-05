@@ -255,11 +255,12 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
                 // it.
 
                 /**
-                   [root@opencattus home]# mount -o loop /opt/iso/opencattus-iso.iso
-                 /mnt mount: /mnt: WARNING: device write-protected, mounted
-                 read-only. [root@opencattus home]# ls /mnt AppStream  BaseOS  EFI
-                 images  isolinux  LICENSE  media.repo  TRANS.TBL [root@opencattus
-                 home]# less /mnt/media.repo [InstallMedia] name=Rocky Linux 8.8
+                   [root@opencattus home]# mount -o loop
+                 /opt/iso/opencattus-iso.iso /mnt mount: /mnt: WARNING: device
+                 write-protected, mounted read-only. [root@opencattus home]# ls
+                 /mnt AppStream  BaseOS  EFI images  isolinux  LICENSE
+                 media.repo  TRANS.TBL [root@opencattus home]# less
+                 /mnt/media.repo [InstallMedia] name=Rocky Linux 8.8
                    mediaid=None
                    metadata_expire=-1
                    gpgcheck=0

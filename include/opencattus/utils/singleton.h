@@ -1,5 +1,5 @@
-#ifndef OPENCATTUS_SERVICES_SINGLETON_H
-#define OPENCATTUS_SERVICES_SINGLETON_H
+#ifndef OPENCATTUS_SINGLETON_H_
+#define OPENCATTUS_SINGLETON_H_
 
 #include <opencattus/patterns/singleton.h>
 // WARNING: The getters depend on types defined in these
@@ -33,7 +33,10 @@ constexpr auto answerfile()
 }
 
 // Mutable singletons
-constexpr auto cluster() { return opencattus::Singleton<models::Cluster>::get(); }
+constexpr auto cluster()
+{
+    return opencattus::Singleton<models::Cluster>::get();
+}
 constexpr auto runner()
 {
     return opencattus::Singleton<services::IRunner>::get();

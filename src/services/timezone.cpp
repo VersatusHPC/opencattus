@@ -3,13 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <fmt/format.h>
+#include <map>
 #include <opencattus/functions.h>
 #include <opencattus/services/log.h>
 #include <opencattus/services/options.h>
 #include <opencattus/services/timezone.h>
 #include <opencattus/utils/singleton.h>
-#include <fmt/format.h>
-#include <map>
 #include <string>
 
 using namespace opencattus;
@@ -44,7 +44,7 @@ std::multimap<std::string, std::string> Timezone::getAvailableTimezones() const
 std::multimap<std::string, std::string> Timezone::fetchAvailableTimezones()
 {
     auto opts = opencattus::utils::singleton::options();
-    std::multimap<std::string, std::string> timezones {};
+    std::multimap<std::string, std::string> timezones { };
     if (opts->dryRun) {
         LOG_DEBUG("Dry-Run skipping fetching available system timezones")
         return timezones;

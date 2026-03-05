@@ -5,8 +5,8 @@
 
 // This file is empty since the method is now a template
 
-#include <opencattus/view/newt.h>
 #include <newt.h>
+#include <opencattus/view/newt.h>
 #include <ranges>
 
 static std::vector<std::string> retrieveListSelectedItems(newtComponent list)
@@ -56,7 +56,7 @@ std::pair<int, std::vector<std::string>> Newt::multipleSelectionMenu(
 
     newtRefresh();
 
-    newtExitStruct es = {};
+    newtExitStruct es = { };
     newtFormRun(form, &es);
 
     int retval = 0;

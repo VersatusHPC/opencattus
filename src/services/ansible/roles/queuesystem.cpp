@@ -34,8 +34,8 @@ void configureQueueSystem()
             }
 
             case opencattus::models::QueueSystem::Kind::PBS: {
-                const auto& pbs
-                    = dynamic_cast<opencattus::models::PBS*>(queue.value().get());
+                const auto& pbs = dynamic_cast<opencattus::models::PBS*>(
+                    queue.value().get());
 
                 osservice()->install("openpbs-server-ohpc");
                 osservice()->enableService("pbs");

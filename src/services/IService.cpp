@@ -1,5 +1,5 @@
-#include <opencattus/opencattus.h>
 #include <opencattus/functions.h>
+#include <opencattus/opencattus.h>
 #include <opencattus/services/IService.h>
 #include <opencattus/services/log.h>
 #include <opencattus/services/options.h>

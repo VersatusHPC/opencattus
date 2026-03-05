@@ -1,11 +1,11 @@
 
+#include <fmt/core.h>
 #include <opencattus/models/cluster.h>
 #include <opencattus/patterns/singleton.h>
 #include <opencattus/services/ansible/role.h>
 #include <opencattus/services/ansible/roles/timesync.h>
 #include <opencattus/services/log.h>
 #include <opencattus/services/scriptbuilder.h>
-#include <fmt/core.h>
 #include <string_view>
 
 #ifdef BUILD_TESTING

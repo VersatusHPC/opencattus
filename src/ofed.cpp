@@ -5,9 +5,9 @@
 
 #include <fmt/core.h>
 
-#include <opencattus/opencattus.h>
 #include <opencattus/functions.h>
 #include <opencattus/ofed.h>
+#include <opencattus/opencattus.h>
 #include <opencattus/services/options.h>
 #include <opencattus/services/osservice.h>
 #include <opencattus/services/repos.h>

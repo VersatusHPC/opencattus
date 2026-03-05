@@ -177,7 +177,8 @@ private:
     };
 
     struct AFOFED {
-        std::string kind = opencattus::utils::enums::toString(OFED::Kind::Inbox);
+        std::string kind
+            = opencattus::utils::enums::toString(OFED::Kind::Inbox);
         std::optional<std::string> version = "latest";
         bool enabled = false;
     };
@@ -396,8 +397,7 @@ public:
         = default;
     AnswerfileValidationException(AnswerfileValidationException&&) = delete;
     AnswerfileValidationException& operator=(
-        const AnswerfileValidationException&)
-        = default;
+        const AnswerfileValidationException&) = default;
     AnswerfileValidationException& operator=(AnswerfileValidationException&&)
         = delete;
 

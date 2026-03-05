@@ -36,7 +36,8 @@ private:
     std::optional<sdbus::ObjectPath> callObjectFunction(
         const std::string& function, Ts... params)
     {
-        auto bus = opencattus::Singleton<opencattus::services::MessageBus>::get();
+        auto bus
+            = opencattus::Singleton<opencattus::services::MessageBus>::get();
         try {
             MessageReply reply
                 = bus->method("org.freedesktop.systemd1.Manager", function)
@@ -46,7 +47,7 @@ private:
             if (!handleException(e, function)) {
                 throw;
             }
-            return {};
+            return { };
         }
     }
 
@@ -54,7 +55,8 @@ private:
     std::optional<MessageReply> callObjectFunctionArray(
         const std::string& function, Ts... params)
     {
-        auto bus = opencattus::Singleton<opencattus::services::MessageBus>::get();
+        auto bus
+            = opencattus::Singleton<opencattus::services::MessageBus>::get();
         try {
             std::vector<std::string> names = { m_name };
             MessageReply reply
@@ -65,7 +67,7 @@ private:
             if (!handleException(e, function)) {
                 throw;
             }
-            return {};
+            return { };
         }
     }
 

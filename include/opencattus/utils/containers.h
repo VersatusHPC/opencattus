@@ -1,5 +1,5 @@
-#ifndef OPENCATTUS_UTILS_CONTAINER
-#define OPENCATTUS_UTILS_CONTAINER
+#ifndef OPENCATTUS_UTILS_CONTAINERS_H_
+#define OPENCATTUS_UTILS_CONTAINERS_H_
 
 #include <boost/asio/ip/address.hpp>
 #include <opencattus/functions.h>

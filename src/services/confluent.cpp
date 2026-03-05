@@ -1,10 +1,10 @@
+#include <fmt/core.h>
 #include <opencattus/functions.h>
 #include <opencattus/services/confluent.h>
 #include <opencattus/services/runner.h>
 #include <opencattus/utils/network.h>
 #include <opencattus/utils/optional.h>
 #include <opencattus/utils/singleton.h>
-#include <fmt/core.h>
 
 namespace {
 using namespace opencattus;

@@ -1,3 +1,6 @@
+#ifndef OPENCATTUS_SERVICES_INIT_H_
+#define OPENCATTUS_SERVICES_INIT_H_
+
 #include <opencattus/models/cluster.h>
 #include <opencattus/services/options.h>
 
@@ -13,3 +16,5 @@ void initializeSingletonsModel(
     std::unique_ptr<const opencattus::models::AnswerFile>&& answerfile);
 
 }
+
+#endif // OPENCATTUS_SERVICES_INIT_H_
