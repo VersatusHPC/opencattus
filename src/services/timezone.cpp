@@ -3,16 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/options.h>
-#include <cloysterhpc/services/timezone.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/functions.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/options.h>
+#include <opencattus/services/timezone.h>
+#include <opencattus/utils/singleton.h>
 #include <fmt/format.h>
 #include <map>
 #include <string>
 
-using namespace cloyster;
+using namespace opencattus;
 
 Timezone::Timezone()
     : m_availableTimezones { fetchAvailableTimezones() }
@@ -31,7 +31,7 @@ std::string_view Timezone::getTimezoneArea() const { return m_timezoneArea; }
 void Timezone::setSystemTimezone()
 {
     LOG_DEBUG("Setting system timezone to {}\n", m_timezone)
-    auto runner = cloyster::Singleton<functions::IRunner>::get();
+    auto runner = opencattus::Singleton<functions::IRunner>::get();
     runner->executeCommand(
         fmt::format("timedatectl set timezone {}", m_timezone));
 }
@@ -43,7 +43,7 @@ std::multimap<std::string, std::string> Timezone::getAvailableTimezones() const
 
 std::multimap<std::string, std::string> Timezone::fetchAvailableTimezones()
 {
-    auto opts = cloyster::utils::singleton::options();
+    auto opts = opencattus::utils::singleton::options();
     std::multimap<std::string, std::string> timezones {};
     if (opts->dryRun) {
         LOG_DEBUG("Dry-Run skipping fetching available system timezones")
@@ -51,7 +51,7 @@ std::multimap<std::string, std::string> Timezone::fetchAvailableTimezones()
     }
 
     LOG_DEBUG("Fetching available system timezones")
-    auto runner = cloyster::Singleton<functions::IRunner>::get();
+    auto runner = opencattus::Singleton<functions::IRunner>::get();
     auto output = runner->checkOutput(
         fmt::format("timedatectl list-timezones --no-pager"));
 

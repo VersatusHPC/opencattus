@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/connection.h>
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/network.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/utils/enums.h>
-#include <cloysterhpc/utils/formatters.h>
+#include <opencattus/connection.h>
+#include <opencattus/functions.h>
+#include <opencattus/network.h>
+#include <opencattus/services/log.h>
+#include <opencattus/utils/enums.h>
+#include <opencattus/utils/formatters.h>
 
 #include <arpa/inet.h> /* inet_*() functions */
 #include <boost/asio.hpp>
@@ -32,7 +32,7 @@ Network::Network(Profile profile)
     : Network(profile, Type::Ethernet)
 {
     LOG_INFO("Initializing network (ctr 2) profile={}, type=ethernet",
-        cloyster::utils::enums::toString(profile));
+        opencattus::utils::enums::toString(profile));
 }
 
 Network::Network(Profile profile, Type type)
@@ -40,8 +40,8 @@ Network::Network(Profile profile, Type type)
     , m_type(type)
 {
     LOG_INFO("Initializing network (ctr 3), profile={}, type={}",
-        cloyster::utils::enums::toString(profile),
-        cloyster::utils::enums::toString(type));
+        opencattus::utils::enums::toString(profile),
+        opencattus::utils::enums::toString(type));
 }
 
 Network::Network(Profile profile, Type type, const std::string& ip,
@@ -53,8 +53,8 @@ Network::Network(Profile profile, Type type, const std::string& ip,
     LOG_INFO(
         "Initializing network (ctr 4), profile={}, type={}, ip={}, "
         "subnetMask={}, gateway={}, vlan={}, domainName={}, nameservers={}",
-        cloyster::utils::enums::toString(profile),
-        cloyster::utils::enums::toString(type), ip, subnetMask, gateway, vlan,
+        opencattus::utils::enums::toString(profile),
+        opencattus::utils::enums::toString(type), ip, subnetMask, gateway, vlan,
         domainName, fmt::join(nameserver, ","));
     setAddress(ip);
     setSubnetMask(subnetMask);
@@ -73,8 +73,8 @@ Network::Network(Profile profile, Type type, const std::string& ip,
     LOG_INFO(
         "Initializing network (ctr 5), profile={}, type={}, ip={}, "
         "subnetMask={}, gateway={}, vlan={}, domainName={}, nameservers={}",
-        cloyster::utils::enums::toString(profile),
-        cloyster::utils::enums::toString(type), ip, subnetMask, gateway, vlan,
+        opencattus::utils::enums::toString(profile),
+        opencattus::utils::enums::toString(type), ip, subnetMask, gateway, vlan,
         domainName, fmt::join(nameserver, ","));
     setAddress(ip);
     setSubnetMask(subnetMask);
@@ -117,7 +117,7 @@ void Network::setAddress(const address& ip)
 
     m_address = ip;
     LOG_TRACE("{} network address set to {}",
-        cloyster::utils::enums::toString(m_profile), m_address.to_string());
+        opencattus::utils::enums::toString(m_profile), m_address.to_string());
 }
 
 void Network::setAddress(const std::string& ip)
@@ -419,7 +419,7 @@ std::vector<address> Network::fetchNameservers()
 #ifndef NDEBUG
 void Network::dumpNetwork() const
 {
-    LOG_DEBUG("Profile: {}", cloyster::utils::enums::toString(m_profile))
-    LOG_DEBUG("Type: {}", cloyster::utils::enums::toString(m_type))
+    LOG_DEBUG("Profile: {}", opencattus::utils::enums::toString(m_profile))
+    LOG_DEBUG("Type: {}", opencattus::utils::enums::toString(m_type))
 }
 #endif

@@ -24,17 +24,17 @@
 #include <boost/property_tree/ptree.hpp>
 #include <gsl/gsl-lite.hpp>
 
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/models/cluster.h>
-#include <cloysterhpc/patterns/wrapper.h>
-#include <cloysterhpc/services/files.h>
-#include <cloysterhpc/services/init.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/options.h>
-#include <cloysterhpc/services/osservice.h>
-#include <cloysterhpc/services/repos.h>
-#include <cloysterhpc/services/runner.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/functions.h>
+#include <opencattus/models/cluster.h>
+#include <opencattus/patterns/wrapper.h>
+#include <opencattus/services/files.h>
+#include <opencattus/services/init.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/options.h>
+#include <opencattus/services/osservice.h>
+#include <opencattus/services/repos.h>
+#include <opencattus/services/runner.h>
+#include <opencattus/utils/singleton.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -43,13 +43,13 @@
 #include <doctest/doctest.h>
 #endif
 
-using cloyster::concepts::IsParser;
-using cloyster::services::files::IsKeyFileReadable;
-using cloyster::services::files::KeyFile;
-using cloyster::services::repos::IRepository;
+using opencattus::concepts::IsParser;
+using opencattus::services::files::IsKeyFileReadable;
+using opencattus::services::files::KeyFile;
+using opencattus::services::repos::IRepository;
 using std::filesystem::path;
 
-namespace cloyster::services::repos {
+namespace opencattus::services::repos {
 
 // Represents a debian repository file
 class DebianRepository : public IRepository {
@@ -187,7 +187,7 @@ public:
             auto name = file.getString(repogroup, "name");
 
             if (name.empty()) {
-                cloyster::functions::abort(
+                opencattus::functions::abort(
                     "Could not load repo name from repo '{}'", repogroup);
             }
 
@@ -217,7 +217,7 @@ public:
         const std::map<std::string, std::shared_ptr<RPMRepository>>& repos,
         const std::filesystem::path& path)
     {
-        auto file = cloyster::services::files::KeyFile(path);
+        auto file = opencattus::services::files::KeyFile(path);
         for (const auto& [repoId, repo] : repos) {
             file.setString(repo->group(), "name", repo->name());
             file.setBoolean(repo->group(), "enabled", repo->enabled());
@@ -267,7 +267,7 @@ public:
     }
 };
 
-TEST_SUITE_BEGIN("cloyster::services::repos");
+TEST_SUITE_BEGIN("opencattus::services::repos");
 
 /**
  * @brief Decouples filesystem and network I/O from the MirrorRepoConfig
@@ -276,12 +276,12 @@ TEST_SUITE_BEGIN("cloyster::services::repos");
 struct DefaultMirrorExistenceChecker final {
     [[nodiscard]] static bool pathExists(const std::filesystem::path& path)
     {
-        return cloyster::functions::exists(path);
+        return opencattus::functions::exists(path);
     }
 
     [[nodiscard]] static bool urlExists(const std::string& url)
     {
-        return cloyster::functions::getHttpStatus(url) == "200";
+        return opencattus::functions::getHttpStatus(url) == "200";
     }
 };
 
@@ -355,9 +355,9 @@ struct MirrorRepo final {
 
     [[nodiscard]] std::string baseurl() const
     {
-        const auto opts = cloyster::utils::singleton::options();
+        const auto opts = opencattus::utils::singleton::options();
 
-        return cloyster::utils::string::rstrip(
+        return opencattus::utils::string::rstrip(
             fmt::format("{mirrorUrl}/{path}",
                 fmt::arg("mirrorUrl", opts->mirrorBaseUrl),
                 fmt::arg("path", paths.repo)),
@@ -370,7 +370,7 @@ struct MirrorRepo final {
             return std::nullopt;
         }
 
-        const auto opts = cloyster::utils::singleton::options();
+        const auto opts = opencattus::utils::singleton::options();
         return fmt::format("{mirrorUrl}/{path}",
             fmt::arg("mirrorUrl", opts->mirrorBaseUrl),
             fmt::arg("path", paths.gpgkey.value()));
@@ -392,7 +392,7 @@ struct MirrorRepo final {
         if (paths.repo.empty()) {
             return false;
         }
-        const auto opts = cloyster::utils::singleton::options();
+        const auto opts = opencattus::utils::singleton::options();
         if (isLocalUrl(opts->mirrorBaseUrl)) {
             return MirrorExistenceChecker::pathExists(localPath(baseurl()));
         } else {
@@ -406,7 +406,7 @@ TEST_CASE("MirrorRepo")
 {
     // NOLINTNEXTLINE
     auto opts = Options { .mirrorBaseUrl = "https://mirror.example.com" };
-    cloyster::Singleton<const Options>::init(
+    opencattus::Singleton<const Options>::init(
         std::make_unique<const Options>(opts));
     // Log::init(5);
 
@@ -420,7 +420,7 @@ TEST_CASE("MirrorRepo")
         == "https://mirror.example.com/myrepo/key.gpg");
 
     // Test local paths
-    cloyster::Singleton<const Options>::init(std::make_unique<const Options>(
+    opencattus::Singleton<const Options>::init(std::make_unique<const Options>(
         Options { .mirrorBaseUrl = "file:///var/run/repos" }));
     CHECK(mirrorConfigOnline.baseurl() == "file:///var/run/repos/myrepo/repo");
     CHECK(mirrorConfigOnline.gpgkey().value()
@@ -438,7 +438,7 @@ struct UpstreamRepo final {
 
     [[nodiscard]] std::string baseurl() const
     {
-        return cloyster::utils::string::rstrip(paths.repo, "/");
+        return opencattus::utils::string::rstrip(paths.repo, "/");
     };
 
     [[nodiscard]] std::optional<std::string> gpgurl() const
@@ -490,7 +490,7 @@ struct RepoChooser final {
             return Choice::UPSTREAM;
         }
 
-        const auto opts = cloyster::utils::singleton::options();
+        const auto opts = opencattus::utils::singleton::options();
         if (!opts->enableMirrors) {
             return Choice::UPSTREAM;
         }
@@ -514,7 +514,7 @@ TEST_CASE("RepoChooser")
 {
     // NOLINTNEXTLINE
     auto opts = Options { .mirrorBaseUrl = "https://mirror.example.com" };
-    cloyster::Singleton<const Options>::init(
+    opencattus::Singleton<const Options>::init(
         std::make_unique<const Options>(opts));
     // Log::init(5);
 
@@ -526,7 +526,7 @@ TEST_CASE("RepoChooser")
         = { .repo = "https://upstream.example.com/upstream/repo",
             .gpgkey = "https://upstream.example.com/upstream/key.gpg" } };
 
-    cloyster::Singleton<const Options>::init(
+    opencattus::Singleton<const Options>::init(
         std::make_unique<const Options>(Options {
             .enableMirrors = true,
             .mirrorBaseUrl = opts.mirrorBaseUrl,
@@ -576,7 +576,7 @@ TEST_CASE("RepoAssembler")
 {
     // NOLINTNEXTLINE
     auto opts = Options { .mirrorBaseUrl = "https://mirror.example.com" };
-    cloyster::Singleton<const Options>::init(
+    opencattus::Singleton<const Options>::init(
         std::make_unique<const Options>(opts));
     // Log::init(5);
 
@@ -598,7 +598,7 @@ TEST_CASE("RepoAssembler")
 
     // Disable mirrors
     opts.enableMirrors = false;
-    cloyster::Singleton<const Options>::init(
+    opencattus::Singleton<const Options>::init(
         std::make_unique<const Options>(opts));
 
     // If mirrors are disabled it should choose the upstream even if the
@@ -618,7 +618,7 @@ TEST_CASE("RepoAssembler")
 
     // Enable mirrors again
     opts.enableMirrors = true;
-    cloyster::Singleton<const Options>::init(
+    opencattus::Singleton<const Options>::init(
         std::make_unique<const Options>(opts));
     auto repoMirror
         = RepoAssembler::assemble(repoId, mirrorConfigOnline, upstreamConfig);
@@ -694,13 +694,13 @@ class RepoConfigParser final {
 public:
     // Base path used during production, tests use another path
     static constexpr std::string_view defaultPath
-        = "/opt/cloysterhpc/conf/repos/";
+        = "/opt/opencattus/conf/repos/";
     static void parse(const std::filesystem::path& path, RepoConfFile& output,
         const RepoConfigVars& vars)
     {
         LOG_DEBUG("Loading repo config: {}", path);
-        if (!cloyster::functions::exists(path)) {
-            cloyster::functions::abort(
+        if (!opencattus::functions::exists(path)) {
+            opencattus::functions::abort(
                 "Trying to parse {} but it does not exists at {}", path);
         }
         auto file = KeyFile(path);
@@ -715,13 +715,13 @@ public:
             // name
             auto name = file.getString(repoGroup, "name");
             if (name.empty()) {
-                cloyster::functions::abort(
+                opencattus::functions::abort(
                     "Could not load name from repo '{}'", repoGroup);
             }
             try {
                 repo.repoId.name = interpolateVars(name, vars);
             } catch (const fmt::format_error& e) {
-                cloyster::functions::abort(
+                opencattus::functions::abort(
                     "Failed to format name for repo '{}': {}", repoGroup,
                     e.what());
             }
@@ -729,7 +729,7 @@ public:
             // filename (no placeholders)
             repo.repoId.filename = file.getString(repoGroup, "filename");
             if (repo.repoId.filename.empty()) {
-                cloyster::functions::abort(
+                opencattus::functions::abort(
                     "Could not load filename from repo '{}'", repoGroup);
             }
 
@@ -741,7 +741,7 @@ public:
                 try {
                     repo.mirror.repo = interpolateVars(mirrorRepo, vars);
                 } catch (const fmt::format_error& e) {
-                    cloyster::functions::abort(
+                    opencattus::functions::abort(
                         "Could not interpolate mirror.repo from repo '{}'",
                         repoGroup);
                 }
@@ -756,7 +756,7 @@ public:
                     repo.mirror.gpgkey
                         = interpolateVars(mirrorGpgkey.value(), vars);
                 } catch (const fmt::format_error& e) {
-                    cloyster::functions::abort(
+                    opencattus::functions::abort(
                         "Failed to format mirror.gpgkey for repo '{}': {}",
                         repoGroup, e.what());
                 }
@@ -767,13 +767,13 @@ public:
             // upstream.repo
             auto upstreamRepo = file.getString(repoGroup, "upstream.repo");
             if (upstreamRepo.empty()) {
-                cloyster::functions::abort(
+                opencattus::functions::abort(
                     "Could not load upstream.repo from repo '{}'", repoGroup);
             }
             try {
                 repo.upstream.repo = interpolateVars(upstreamRepo, vars);
             } catch (const fmt::format_error& e) {
-                cloyster::functions::abort(
+                opencattus::functions::abort(
                     "Failed to format upstream.repo for repo '{}': {}",
                     repoGroup, e.what());
             }
@@ -786,7 +786,7 @@ public:
                     repo.upstream.gpgkey
                         = interpolateVars(upstreamGpgkey.value(), vars);
                 } catch (const fmt::format_error& e) {
-                    cloyster::functions::abort(
+                    opencattus::functions::abort(
                         "Failed to format upstream.gpgkey for repo '{}': {}",
                         repoGroup, e.what());
                 }
@@ -863,7 +863,7 @@ public:
 TEST_CASE("RepoConfigParser")
 {
 #ifdef BUILD_TESTING
-    REQUIRE(cloyster::functions::exists("repos/repos.conf"));
+    REQUIRE(opencattus::functions::exists("repos/repos.conf"));
     auto conffile = RepoConfigParser::parseTest("repos/repos.conf");
     CHECK(conffile.files().size() > 0);
     CHECK(conffile.files().contains("epel.repo"));
@@ -891,12 +891,12 @@ public:
     void install(const std::filesystem::path& source)
     {
         const auto& dest = basedir / source.filename();
-        const auto opts = cloyster::utils::singleton::options();
+        const auto opts = opencattus::utils::singleton::options();
 
         // Do not copy the file to the basedir if it
         // is already there
         if (source != dest) {
-            cloyster::functions::copyFile(source, dest);
+            opencattus::functions::copyFile(source, dest);
         }
 
         if (opts->dryRun) {
@@ -928,7 +928,7 @@ public:
     // Install all .repos files inside a folder
     void loadDir(const std::filesystem::path& path)
     {
-        const auto opts = cloyster::utils::singleton::options();
+        const auto opts = opencattus::utils::singleton::options();
         if (opts->dryRun) {
             LOG_INFO("Dry Run: Would open the directory {}", path.string());
             return;
@@ -1014,7 +1014,7 @@ public:
                 toSave.emplace(rfile);
                 enable(repo, rfile, value);
             } catch (const std::out_of_range&) {
-                cloyster::functions::abort(
+                opencattus::functions::abort(
                     "Trying to enable unknown repository {}, "
                     "failed because the repository was not found.",
                     repo);
@@ -1086,7 +1086,7 @@ struct RepoConfAdapter final {
     {
         std::vector<RPMRepositoryFile> output;
         for (const auto& [filename, configs] : conffile.files()) {
-            if (!cloyster::functions::isIn(repoList, filename)) {
+            if (!opencattus::functions::isIn(repoList, filename)) {
                 continue;
             }
 
@@ -1103,7 +1103,7 @@ TEST_CASE("RepoAdapter")
 {
 #ifdef BUILD_TESTING
     Options opts {};
-    cloyster::services::initializeSingletonsOptions(
+    opencattus::services::initializeSingletonsOptions(
         std::make_unique<const Options>(opts));
     // Log::init(5);
 
@@ -1121,7 +1121,7 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
     {
         auto distro = osinfo.getDistro();
         auto majorVersion = osinfo.getMajorVersion();
-        std::string arch = cloyster::utils::enums::toString(osinfo.getArch());
+        std::string arch = opencattus::utils::enums::toString(osinfo.getArch());
 
         switch (distro) {
             case OS::Distro::AlmaLinux:
@@ -1301,17 +1301,17 @@ struct RepoGenerator final {
         const OS& osinfo, const std::filesystem::path& path)
     {
         const auto existingRepoFiles
-            = cloyster::functions::getFilesByExtension(path, ".repo");
+            = opencattus::functions::getFilesByExtension(path, ".repo");
         const auto& distroRepos = conffiles.distroRepos.filesnames();
         const auto& nonDistroRepos = conffiles.nonDistroRepos.filesnames();
         std::vector<std::string> reposToGenerate;
         for (const auto& repo : distroRepos) {
-            if (!cloyster::functions::isIn(existingRepoFiles, repo)) {
+            if (!opencattus::functions::isIn(existingRepoFiles, repo)) {
                 reposToGenerate.push_back(repo);
             }
         }
         for (const auto& repo : nonDistroRepos) {
-            if (!cloyster::functions::isIn(existingRepoFiles, repo)) {
+            if (!opencattus::functions::isIn(existingRepoFiles, repo)) {
                 reposToGenerate.push_back(repo);
             }
         }
@@ -1362,7 +1362,7 @@ TEST_CASE("RepoGenerator")
         .xcatVersion = "latest",
         .zabbixVersion = "6.4",
     };
-    cloyster::Singleton<const Options>::init(
+    opencattus::Singleton<const Options>::init(
         std::make_unique<const Options>(opts));
     const std::string_view upstreamPath = "test/output/repos/upstream";
     const std::string_view mirrorPath = "test/output/repos/mirror";
@@ -1372,7 +1372,7 @@ TEST_CASE("RepoGenerator")
 
     // Clean up before start
     for (const auto& path : { upstreamPath, mirrorPath, airgapPath }) {
-        cloyster::functions::removeFilesWithExtension(path, ".repo");
+        opencattus::functions::removeFilesWithExtension(path, ".repo");
     }
 
     const auto generator = RepoGenerator<FalseMirrorExistenceChecker, // mirror
@@ -1394,12 +1394,12 @@ TEST_CASE("RepoGenerator")
             >();
     generatorMirror.generate(conffiles, osinfo, mirrorPath);
     opts.mirrorBaseUrl = "file:///var/run/repos";
-    cloyster::Singleton<const Options>::init(
+    opencattus::Singleton<const Options>::init(
         std::make_unique<const Options>(opts));
     generatorMirror.generate(conffiles, osinfo, airgapPath);
 };
 
-TEST_SUITE("cloyster::services::repos [slow]")
+TEST_SUITE("opencattus::services::repos [slow]")
 {
     // RH CDN requires a certificate that only exists in RHEL machines
     // because of this the repostiories gives 403 and SSL errors. I'm skipping
@@ -1431,13 +1431,13 @@ TEST_SUITE("cloyster::services::repos [slow]")
         // as a semi-automated way to validate the repositories URLs
         // in the repos.conf. use -tce="*slow*" to skip it.
 #ifdef BUILD_TESTING
-        using namespace cloyster::services;
-        cloyster::services::initializeSingletonsOptions(
+        using namespace opencattus::services;
+        opencattus::services::initializeSingletonsOptions(
             std::make_unique<const Options>(Options {}));
         const auto repos = std::filesystem::path("./repos");
-        REQUIRE(cloyster::functions::exists(repos / "repos.conf"));
+        REQUIRE(opencattus::functions::exists(repos / "repos.conf"));
         const auto confs
-            = cloyster::functions::getFilesByExtension(repos, ".conf");
+            = opencattus::functions::getFilesByExtension(repos, ".conf");
         REQUIRE(confs.size() > 0);
         using fmt::print;
         for (const auto& configStr : confs) {
@@ -1445,7 +1445,7 @@ TEST_SUITE("cloyster::services::repos [slow]")
                 = RepoConfigParser::parseTest(repos / configStr);
             for (const auto& [repofile, configs] : output.files()) {
                 for (const auto& config : configs) {
-                    if (cloyster::functions::isIn(
+                    if (opencattus::functions::isIn(
                             blacklistedFiles, config.repoId.filename)) {
 
                         continue;
@@ -1454,17 +1454,17 @@ TEST_SUITE("cloyster::services::repos [slow]")
                     print("Checking {} {} {}\n", config.repoId.filename,
                         config.repoId.id, config.upstream.repo);
 
-                    REQUIRE(cloyster::functions::getHttpStatus(
+                    REQUIRE(opencattus::functions::getHttpStatus(
                                 config.upstream.repo + "repodata/repomd.xml")
                         == "200");
 
                     if (config.upstream.gpgkey) {
-                        REQUIRE(cloyster::functions::getHttpStatus(
+                        REQUIRE(opencattus::functions::getHttpStatus(
                                     config.upstream.gpgkey.value())
                             == "200");
                     }
 
-                    if (cloyster::functions::isIn(
+                    if (opencattus::functions::isIn(
                             blacklistedMirrorFiles, config.repoId.filename)
                         || config.mirror.repo.empty()) {
                         continue;
@@ -1475,13 +1475,13 @@ TEST_SUITE("cloyster::services::repos [slow]")
                         "https://mirror.versatushpc.com.br/"
                             + config.mirror.repo + "repodata/repomd.xml");
 
-                    REQUIRE(cloyster::functions::getHttpStatus(
+                    REQUIRE(opencattus::functions::getHttpStatus(
                                 "https://mirror.versatushpc.com.br/"
                                 + config.mirror.repo + "repodata/repomd.xml")
                         == "200");
 
                     if (config.mirror.gpgkey) {
-                        REQUIRE(cloyster::functions::getHttpStatus(
+                        REQUIRE(opencattus::functions::getHttpStatus(
                                     "https://mirror.versatushpc.com.br/"
                                     + config.mirror.gpgkey.value())
                             == "200");
@@ -1492,9 +1492,9 @@ TEST_SUITE("cloyster::services::repos [slow]")
 #endif
     }
 }
-}; // namespace cloyster::services::repos {
+}; // namespace opencattus::services::repos {
 
-namespace cloyster::services::repos {
+namespace opencattus::services::repos {
 
 // Hidden implementation
 struct RepoManager::Impl {
@@ -1520,14 +1520,14 @@ inline void RPMRepository::valid() const
 struct RPMRepositoryGenerator {
     static void generate(const RepoConfigVars& vars,
         const std::filesystem::path& backupPath
-        = "/opt/cloysterhpc/backup/etc/yum.repos.d/",
+        = "/opt/opencattus/backup/etc/yum.repos.d/",
         const std::filesystem::path& sourcePath = "/etc/yum.repos.d")
     {
-        cloyster::functions::backupFilesByExtension(
+        opencattus::functions::backupFilesByExtension(
             wrappers::DestinationPath(backupPath),
             wrappers::SourcePath(sourcePath), wrappers::Extension(".repo"));
         LOG_DEBUG("Generating the repository files");
-        const auto cluster = cloyster::Singleton<models::Cluster>::get();
+        const auto cluster = opencattus::Singleton<models::Cluster>::get();
         const auto osinfo = cluster->getHeadnode().getOS();
         RepoGenerator<>::generate(osinfo, vars);
     }
@@ -1535,18 +1535,18 @@ struct RPMRepositoryGenerator {
 
 void RepoManager::initializeDefaultRepositories()
 {
-    auto opts = cloyster::utils::singleton::options();
+    auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_WARN("Dry Run: Skipping RepoManager initialization");
         return;
     }
     LOG_INFO("RepoManager initialization");
-    auto cluster = cloyster::Singleton<models::Cluster>::get();
+    auto cluster = opencattus::Singleton<models::Cluster>::get();
     auto osinfo = cluster->getHeadnode().getOS();
     auto ofedVersion = cluster->getOFED()->getVersion();
 
     const auto vars = RepoConfigVars {
-        .arch = cloyster::utils::enums::toString(osinfo.getArch()),
+        .arch = opencattus::utils::enums::toString(osinfo.getArch()),
         .beegfsVersion = opts->beegfsVersion,
         .ohpcVersion = osinfo.getMajorVersion() == 8 ? "2" : "3",
         .osversion = osinfo.getVersion(),
@@ -1580,13 +1580,13 @@ void RepoManager::initializeDefaultRepositories()
 
 void RepoManager::enable(const std::string& repoid)
 {
-    const auto opts = cloyster::utils::singleton::options();
+    const auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would enable repository {}", repoid);
         return;
     }
     auto osinfo
-        = cloyster::Singleton<models::Cluster>::get()->getHeadnode().getOS();
+        = opencattus::Singleton<models::Cluster>::get()->getHeadnode().getOS();
 
     switch (osinfo.getPackageType()) {
         case OS::PackageType::RPM:
@@ -1599,14 +1599,14 @@ void RepoManager::enable(const std::string& repoid)
 
 void RepoManager::enable(const std::vector<std::string>& repos)
 {
-    const auto opts = cloyster::utils::singleton::options();
+    const auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_WARN(
             "Dry Run: Would enable these repos: {}", fmt::join(repos, ","));
         return;
     }
     auto osinfo
-        = cloyster::Singleton<models::Cluster>::get()->getHeadnode().getOS();
+        = opencattus::Singleton<models::Cluster>::get()->getHeadnode().getOS();
     switch (osinfo.getPackageType()) {
         case OS::PackageType::RPM:
             m_impl->rpm.enable(repos, true);
@@ -1619,14 +1619,14 @@ void RepoManager::enable(const std::vector<std::string>& repos)
 
 void RepoManager::disable(const std::string& repoid)
 {
-    const auto opts = cloyster::utils::singleton::options();
+    const auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would enable repository {}", repoid);
         return;
     }
 
     auto osinfo
-        = cloyster::Singleton<models::Cluster>::get()->getHeadnode().getOS();
+        = opencattus::Singleton<models::Cluster>::get()->getHeadnode().getOS();
     try {
         switch (osinfo.getPackageType()) {
             case OS::PackageType::RPM:
@@ -1644,14 +1644,14 @@ void RepoManager::disable(const std::string& repoid)
 
 void RepoManager::disable(const std::vector<std::string>& repos)
 {
-    const auto opts = cloyster::utils::singleton::options();
+    const auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would enable repository {}", fmt::join(repos, ","));
         return;
     }
 
     auto osinfo
-        = cloyster::Singleton<models::Cluster>::get()->getHeadnode().getOS();
+        = opencattus::Singleton<models::Cluster>::get()->getHeadnode().getOS();
     try {
         switch (osinfo.getPackageType()) {
             case OS::PackageType::RPM:
@@ -1676,7 +1676,7 @@ void RepoManager::install(const std::filesystem::path& path)
     LOG_INFO("Installing repository {}", path.string());
 
     auto osinfo
-        = cloyster::Singleton<models::Cluster>::get()->getHeadnode().getOS();
+        = opencattus::Singleton<models::Cluster>::get()->getHeadnode().getOS();
     switch (osinfo.getPackageType()) {
         case OS::PackageType::RPM:
             m_impl->rpm.install(path);
@@ -1702,7 +1702,7 @@ void RepoManager::install(const std::vector<std::filesystem::path>& paths)
 std::vector<std::unique_ptr<const IRepository>> RepoManager::listRepos() const
 {
     auto osinfo
-        = cloyster::Singleton<models::Cluster>::get()->getHeadnode().getOS();
+        = opencattus::Singleton<models::Cluster>::get()->getHeadnode().getOS();
     switch (osinfo.getPackageType()) {
         case OS::PackageType::RPM:
             return m_impl->rpm.repos();
@@ -1716,7 +1716,7 @@ std::unique_ptr<const IRepository> RepoManager::repo(
     const std::string& repo) const
 {
     auto osinfo
-        = cloyster::Singleton<models::Cluster>::get()->getHeadnode().getOS();
+        = opencattus::Singleton<models::Cluster>::get()->getHeadnode().getOS();
     switch (osinfo.getPackageType()) {
         case OS::PackageType::RPM:
             return static_cast<std::unique_ptr<const IRepository>>(
@@ -1731,7 +1731,7 @@ std::vector<std::unique_ptr<const IRepository>> RepoManager::repoFile(
     const std::string& repo) const
 {
     auto osinfo
-        = cloyster::Singleton<models::Cluster>::get()->getHeadnode().getOS();
+        = opencattus::Singleton<models::Cluster>::get()->getHeadnode().getOS();
     switch (osinfo.getPackageType()) {
         case OS::PackageType::RPM:
             return m_impl->rpm.repoFile(repo);
@@ -1743,4 +1743,4 @@ std::vector<std::unique_ptr<const IRepository>> RepoManager::repoFile(
 
 TEST_SUITE_END();
 
-}; // namespace cloyster::services::repos
+}; // namespace opencattus::services::repos

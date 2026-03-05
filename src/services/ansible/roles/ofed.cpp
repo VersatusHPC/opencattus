@@ -1,6 +1,6 @@
-#include <cloysterhpc/ofed.h>
-#include <cloysterhpc/services/ansible/roles/ofed.h>
-#include <cloysterhpc/services/log.h>
+#include <opencattus/ofed.h>
+#include <opencattus/services/ansible/roles/ofed.h>
+#include <opencattus/services/log.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -12,7 +12,7 @@
 #include <fmt/core.h>
 
 namespace {
-using namespace cloyster::utils::singleton;
+using namespace opencattus::utils::singleton;
 
 void configureInfiniband()
 {
@@ -24,12 +24,12 @@ void configureInfiniband()
 
 }
 
-namespace cloyster::services::ansible::roles::ofed {
+namespace opencattus::services::ansible::roles::ofed {
 
 void run(const Role& role)
 {
     LOG_INFO("Setting up Infiniband, use `--skip infiniband` to skip");
-    if (cloyster::utils::singleton::options()->shouldSkip("infiniband")) {
+    if (opencattus::utils::singleton::options()->shouldSkip("infiniband")) {
         return;
     }
     configureInfiniband();

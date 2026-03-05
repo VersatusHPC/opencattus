@@ -4,11 +4,11 @@
 Installation Guide for Terminal Text-based User Interface
 =========================================================
 
-To set up Cloyster in your environment, you must first download the project in the head node.
+To set up OpenCATTUS in your environment, you must first download the project in the head node.
 
 For the current list of operating systems supported and minimum requirements, read section ":doc:`System Requirements <../../overview/sys_os_requirements>`"
 
-Cloyster' TUI runs in a terminal, without an answerfile, with guided installation divided into different categories that will be explained in the subsection below.
+OpenCATTUS' TUI runs in a terminal, without an answerfile, with guided installation divided into different categories that will be explained in the subsection below.
 
 Guided Installation
 ---------------------------

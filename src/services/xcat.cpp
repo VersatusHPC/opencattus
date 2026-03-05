@@ -10,26 +10,26 @@
 #include <filesystem>
 #include <fmt/format.h>
 
-#include <cloysterhpc/NFS.h>
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/models/cluster.h>
-#include <cloysterhpc/models/os.h>
-#include <cloysterhpc/services/options.h>
-#include <cloysterhpc/services/osservice.h>
-#include <cloysterhpc/services/repos.h>
-#include <cloysterhpc/services/runner.h>
-#include <cloysterhpc/services/xcat.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/NFS.h>
+#include <opencattus/functions.h>
+#include <opencattus/models/cluster.h>
+#include <opencattus/models/os.h>
+#include <opencattus/services/options.h>
+#include <opencattus/services/osservice.h>
+#include <opencattus/services/repos.h>
+#include <opencattus/services/runner.h>
+#include <opencattus/services/xcat.h>
+#include <opencattus/utils/singleton.h>
 
 namespace {
-using cloyster::models::Cluster;
+using opencattus::models::Cluster;
 
-using namespace cloyster::utils::singleton;
+using namespace opencattus::utils::singleton;
 
 // Returns the distribution name with the version, e.g., rocky9.5
 std::string getOSImageDistroVersion()
 {
-    using cloyster::models::OS;
+    using opencattus::models::OS;
     std::string osimage;
 
     switch (cluster()->getDiskImage().getDistro()) {
@@ -55,10 +55,10 @@ std::string getOSImageDistroVersion()
 }
 }; // namespace{}
 
-namespace cloyster::services {
+namespace opencattus::services {
 
-using cloyster::models::Node;
-using cloyster::services::repos::RepoManager;
+using opencattus::models::Node;
+using opencattus::services::repos::RepoManager;
 
 XCAT::XCAT()
 {
@@ -84,7 +84,7 @@ XCAT::Image XCAT::getImage() const { return m_stateless; }
 
 void XCAT::installPackages()
 {
-    auto osservice = cloyster::utils::singleton::osservice();
+    auto osservice = opencattus::utils::singleton::osservice();
     osservice->install("xCAT");
 }
 
@@ -94,8 +94,8 @@ void XCAT::patchInstall()
      * Upstream PR: https://github.com/xcat2/xcat-core/pull/7489
      */
 
-    const auto opts = cloyster::utils::singleton::options();
-    auto runner = cloyster::utils::singleton::runner();
+    const auto opts = opencattus::utils::singleton::options();
+    auto runner = opencattus::utils::singleton::runner();
     if (opts->shouldForce("xcat-patch")
         || runner->executeCommand(
                "grep -q \"extensions usr_cert\" "
@@ -108,7 +108,7 @@ void XCAT::patchInstall()
             "sed -i \"s/-extensions server //g\" "
             "/opt/xcat/share/xcat/scripts/setup-server-cert.sh");
 
-        cloyster::services::runner::shell::cmd(
+        opencattus::services::runner::shell::cmd(
             R"del((cd / && patch --forward --batch -p0 <<'EOF'
 --- opt/xcat/lib/perl/xCAT_plugin/ddns.pm.orig	2025-07-16 09:53:20.546246189 -0300
 +++ opt/xcat/lib/perl/xCAT_plugin/ddns.pm	2025-07-16 09:53:36.614512354 -0300
@@ -145,14 +145,14 @@ void XCAT::setup() const
 /* TODO: Maybe create a chdef method to do it cleaner? */
 void XCAT::setDHCPInterfaces(std::string_view interface)
 {
-    auto runner = cloyster::utils::singleton::runner();
+    auto runner = opencattus::utils::singleton::runner();
     runner->checkCommand(
         fmt::format("chdef -t site dhcpinterfaces=\"xcatmn|{}\"", interface));
 }
 
 void XCAT::setDomain(std::string_view domain)
 {
-    auto runner = cloyster::utils::singleton::runner();
+    auto runner = opencattus::utils::singleton::runner();
     runner->checkCommand(fmt::format("chdef -t site domain={}", domain));
 }
 
@@ -162,14 +162,14 @@ namespace {
         LOG_ASSERT(
             image.size() > 0, "Trying to generate an image with empty name");
 
-        auto opts = cloyster::utils::singleton::options();
+        auto opts = opencattus::utils::singleton::options();
         if (opts->dryRun) {
             LOG_WARN(
                 "Dry-Run: skipping image check, assuming it doesn't exists");
             return false;
         }
 
-        auto runner = cloyster::utils::singleton::runner();
+        auto runner = opencattus::utils::singleton::runner();
         if (opts->shouldForce("genimage")) {
             runner->executeCommand(
                 fmt::format("rmdef -t osimage -o {}", image));
@@ -193,7 +193,7 @@ namespace {
 
 void XCAT::copycds(const std::filesystem::path& diskImage)
 {
-    cloyster::utils::singleton::runner()->checkCommand(
+    opencattus::utils::singleton::runner()->checkCommand(
         fmt::format("copycds {}", diskImage.string()));
 }
 
@@ -231,13 +231,13 @@ void XCAT::genimage() const
 
 void XCAT::packimage() const
 {
-    cloyster::utils::singleton::runner()->checkCommand(
+    opencattus::utils::singleton::runner()->checkCommand(
         fmt::format("packimage {}", m_stateless.osimage));
 }
 
 void XCAT::nodeset(std::string_view nodes) const
 {
-    cloyster::utils::singleton::runner()->checkCommand(
+    opencattus::utils::singleton::runner()->checkCommand(
         fmt::format("nodeset {} osimage={}", nodes, m_stateless.osimage));
 }
 
@@ -285,7 +285,7 @@ void XCAT::configureTimeService()
 void XCAT::configureInfiniband()
 {
     const auto osinfo
-        = cloyster::utils::singleton::cluster()->getNodes()[0].getOS();
+        = opencattus::utils::singleton::cluster()->getNodes()[0].getOS();
     LOG_INFO("[xCAT] Configuring infiniband");
     if (const auto& ofed = cluster()->getOFED()) {
         switch (ofed->getKind()) {
@@ -295,10 +295,10 @@ void XCAT::configureInfiniband()
                 break;
 
             case OFED::Kind::Mellanox: {
-                auto repoManager = cloyster::utils::singleton::repos();
-                auto runner = cloyster::utils::singleton::runner();
-                auto opts = cloyster::utils::singleton::options();
-                auto osservice = cloyster::utils::singleton::osservice();
+                auto repoManager = opencattus::utils::singleton::repos();
+                auto runner = opencattus::utils::singleton::runner();
+                auto opts = opencattus::utils::singleton::options();
+                auto osservice = opencattus::utils::singleton::osservice();
 
                 // Add the rpm to the image
                 m_stateless.otherpkgs.emplace_back("mlnx-ofa_kernel");
@@ -427,7 +427,7 @@ void XCAT::generatePostinstallFile()
         functions::addStringToFile(filename, entries);
     }
 
-    auto opts = cloyster::utils::singleton::options();
+    auto opts = opencattus::utils::singleton::options();
 
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would change file {} permissions", filename)
@@ -455,8 +455,8 @@ void XCAT::generateSynclistsFile()
 
 void XCAT::configureOSImageDefinition() const
 {
-    auto opts = cloyster::utils::singleton::options();
-    auto runner = cloyster::utils::singleton::runner();
+    auto opts = opencattus::utils::singleton::options();
+    auto runner = opencattus::utils::singleton::runner();
     runner->executeCommand(
         fmt::format("chdef -t osimage {} --plus otherpkglist="
                     "/install/custom/netboot/compute.otherpkglist",
@@ -484,12 +484,12 @@ void XCAT::configureOSImageDefinition() const
 void XCAT::customizeImage(
     const std::vector<ScriptBuilder>& customizations) const
 {
-    auto runner = cloyster::utils::singleton::runner();
+    auto runner = opencattus::utils::singleton::runner();
     // @TODO: Extract the munge fixes to its own customization script
     // Permission fixes for munge
     if (cluster()->getQueueSystem().value()->getKind()
         == models::QueueSystem::Kind::SLURM) {
-        cloyster::functions::createDirectory(m_stateless.chroot / "etc");
+        opencattus::functions::createDirectory(m_stateless.chroot / "etc");
         runner->executeCommand(
             fmt::format("cp -f /etc/passwd /etc/group /etc/shadow {}/etc",
                 m_stateless.chroot.string()));
@@ -571,13 +571,13 @@ void XCAT::configureEL9()
         commands.insert(commands.end(), temp.begin(), temp.end());
     }
 
-    auto runner = cloyster::utils::singleton::runner();
+    auto runner = opencattus::utils::singleton::runner();
     for (const auto& command : commands) {
         runner->executeCommand(command);
     }
 }
 
-cloyster::services::XCAT::ImageInstallArgs XCAT::getImageInstallArgs(
+opencattus::services::XCAT::ImageInstallArgs XCAT::getImageInstallArgs(
     ImageType imageType, NodeType nodeType)
 {
     generateOSImageName(imageType, nodeType);
@@ -599,9 +599,9 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
 
     generateOSImageName(imageType, nodeType);
 
-    const auto opts = cloyster::utils::singleton::options();
+    const auto opts = opencattus::utils::singleton::options();
     const auto imageExists_ = imageExists(m_stateless.osimage);
-    const auto runner = cloyster::utils::singleton::runner();
+    const auto runner = opencattus::utils::singleton::runner();
     if (!imageExists_ || opts->shouldSkip("copycds")) {
         if (opts->shouldSkip("copycds")) {
             // Remove rootfs and cleanup otherpkgs and postinstall scripts
@@ -642,7 +642,7 @@ void XCAT::addNode(const Node& node)
         "mkdef -f -t node {} arch={} ip={} mac={} groups=compute,all "
         "netboot=xnba ",
         node.getHostname(),
-        cloyster::utils::enums::toString(node.getOS().getArch()),
+        opencattus::utils::enums::toString(node.getOS().getArch()),
         node.getConnection(Network::Profile::Management)
             .getAddress()
             .to_string(),
@@ -667,7 +667,7 @@ void XCAT::addNode(const Node& node)
     } catch (...) {
     }
 
-    cloyster::utils::singleton::runner()->executeCommand(command);
+    opencattus::utils::singleton::runner()->executeCommand(command);
 }
 
 void XCAT::addNodes() const
@@ -676,7 +676,7 @@ void XCAT::addNodes() const
         addNode(node);
     }
 
-    auto runner = cloyster::utils::singleton::runner();
+    auto runner = opencattus::utils::singleton::runner();
 
     // TODO: Create separate functions
     runner->executeCommand("makehosts");
@@ -696,13 +696,13 @@ void XCAT::setNodesBoot()
 {
     // TODO: Do proper checking if a given node have BMC support, and then issue
     //  rsetboot only on the compatible machines instead of running in compute.
-    auto runner = cloyster::utils::singleton::runner();
+    auto runner = opencattus::utils::singleton::runner();
     runner->executeCommand("rsetboot compute net");
 }
 
 void XCAT::resetNodes()
 {
-    auto runner = cloyster::utils::singleton::runner();
+    auto runner = opencattus::utils::singleton::runner();
     runner->executeCommand("rpower compute reset");
 }
 
@@ -771,7 +771,7 @@ void XCAT::generateOSImagePath(ImageType imageType, NodeType nodeType)
 std::vector<std::string> XCAT::getxCATOSImageRepos()
 {
     const auto osinfo = cluster()->getHeadnode().getOS();
-    const auto repoManager = cloyster::utils::singleton::repos();
+    const auto repoManager = opencattus::utils::singleton::repos();
     std::vector<std::string> repos;
     const auto addReposFromFile = [&](const std::string& filename) {
         for (auto& repo : repoManager->repoFile(filename)) {
@@ -809,7 +809,7 @@ std::vector<std::string> XCAT::getxCATOSImageRepos()
 
 void XCAT::install()
 {
-    using namespace cloyster::utils;
+    using namespace opencattus::utils;
     LOG_INFO("Setting up compute node images... This may take a while");
     constexpr auto provisionerName = "xCAT";
     const auto opts = singleton::options();

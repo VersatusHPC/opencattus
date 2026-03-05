@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/verification.h>
+#include <opencattus/verification.h>
 
 #include <stdexcept>
 #include <unistd.h>
 
-void cloyster::checkEffectiveUserId()
+void opencattus::checkEffectiveUserId()
 {
     if (geteuid() != 0) {
         throw std::runtime_error(

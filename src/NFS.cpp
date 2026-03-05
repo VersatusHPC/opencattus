@@ -5,18 +5,18 @@
 
 #include <fmt/format.h>
 
-#include <cloysterhpc/NFS.h>
-#include <cloysterhpc/const.h>
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/services/init.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/osservice.h>
-#include <cloysterhpc/services/scriptbuilder.h>
-#include <cloysterhpc/utils/formatters.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/NFS.h>
+#include <opencattus/const.h>
+#include <opencattus/functions.h>
+#include <opencattus/services/init.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/osservice.h>
+#include <opencattus/services/scriptbuilder.h>
+#include <opencattus/utils/formatters.h>
+#include <opencattus/utils/singleton.h>
 #include <string_view>
 
-using cloyster::models::OS;
+using opencattus::models::OS;
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -25,7 +25,7 @@ using cloyster::models::OS;
 #include <doctest/doctest.h>
 #endif
 
-namespace cloyster::services {
+namespace opencattus::services {
 NFS::NFS(const std::string& directoryName, const std::string& directoryPath,
     const boost::asio::ip::address& address, const std::string& permissions)
     : m_directoryName(directoryName)
@@ -41,9 +41,9 @@ void NFS::setFullPath()
     m_fullPath = fmt::format("{}/{}", m_directoryPath, m_directoryName);
 }
 
-cloyster::services::ScriptBuilder NFS::installScript(const OS& osinfo)
+opencattus::services::ScriptBuilder NFS::installScript(const OS& osinfo)
 {
-    using namespace cloyster;
+    using namespace opencattus;
     services::ScriptBuilder builder(osinfo);
     builder.addNewLine()
         .addCommand("# Variables")
@@ -77,10 +77,10 @@ fi)");
     return builder;
 }
 
-cloyster::services::ScriptBuilder NFS::imageInstallScript(
-    const OS& osinfo, const cloyster::services::XCAT::ImageInstallArgs& args)
+opencattus::services::ScriptBuilder NFS::imageInstallScript(
+    const OS& osinfo, const opencattus::services::XCAT::ImageInstallArgs& args)
 {
-    using namespace cloyster;
+    using namespace opencattus;
     services::ScriptBuilder builder(osinfo);
     builder.addNewLine()
         .addCommand("# Define variables (for shell script execution)")
@@ -121,15 +121,15 @@ cloyster::services::ScriptBuilder NFS::imageInstallScript(
     return builder;
 }
 
-TEST_SUITE_BEGIN("cloyster::services::NFS");
+TEST_SUITE_BEGIN("opencattus::services::NFS");
 
 TEST_CASE("installScript")
 {
     const OS osinfo
-        = cloyster::models::OS(OS::Distro::Rocky, OS::Platform::el9, 5);
-    cloyster::services::initializeSingletonsOptions(
+        = opencattus::models::OS(OS::Distro::Rocky, OS::Platform::el9, 5);
+    opencattus::services::initializeSingletonsOptions(
         std::make_unique<const Options>());
-    cloyster::Singleton<const models::AnswerFile>::init(
+    opencattus::Singleton<const models::AnswerFile>::init(
         []() -> std::unique_ptr<const models::AnswerFile> {
             auto answerfile = std::make_unique<models::AnswerFile>(
                 "test/sample/answerfile/rocky9-xcat.ini");
@@ -153,8 +153,8 @@ TEST_CASE("installScript")
 TEST_CASE("installImageScript")
 {
     const OS osinfo
-        = cloyster::models::OS(OS::Distro::Rocky, OS::Platform::el9, 5);
-    cloyster::Singleton<const models::AnswerFile>::init(
+        = opencattus::models::OS(OS::Distro::Rocky, OS::Platform::el9, 5);
+    opencattus::Singleton<const models::AnswerFile>::init(
         []() -> std::unique_ptr<const models::AnswerFile> {
             auto answerfile = std::make_unique<models::AnswerFile>(
                 "test/sample/answerfile/rocky9-xcat.ini");

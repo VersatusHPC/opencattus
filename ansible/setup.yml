@@ -1,7 +1,7 @@
 ---
-- name: Cloyster Vagrant Setup
+- name: OpenCATTUS Vagrant Setup
   hosts: localhost
   become: yes
   gather_facts: false
   roles:
-    - cloyster_setup
+    - opencattus_setup

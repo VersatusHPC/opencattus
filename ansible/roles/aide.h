@@ -1,16 +1,16 @@
-#ifndef CLOYSTERHPC_SERVICES_ANSIBLE_ROLES_AIDE_H_
-#define CLOYSTERHPC_SERVICES_ANSIBLE_ROLES_AIDE_H_
+#ifndef OPENCATTUS_SERVICES_ANSIBLE_ROLES_AIDE_H_
+#define OPENCATTUS_SERVICES_ANSIBLE_ROLES_AIDE_H_
 
-#include <cloysterhpc/services/scriptbuilder.h>
-#include <cloysterhpc/services/ansible/role.h>
+#include <opencattus/services/scriptbuilder.h>
+#include <opencattus/services/ansible/role.h>
 
-namespace cloyster::services::ansible::roles::aide {
+namespace opencattus::services::ansible::roles::aide {
 
 ScriptBuilder installScript(
     const Role& role,
-    const cloyster::models::OS& osinfo
+    const opencattus::models::OS& osinfo
 );
 
-} // namespace cloyster::services::ansible::roles::aide
+} // namespace opencattus::services::ansible::roles::aide
 
-#endif // CLOYSTERHPC_SERVICES_ANSIBLE_ROLES_AIDE_H_
+#endif // OPENCATTUS_SERVICES_ANSIBLE_ROLES_AIDE_H_

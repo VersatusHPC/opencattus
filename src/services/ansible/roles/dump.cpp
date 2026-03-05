@@ -1,6 +1,6 @@
-#include <cloysterhpc/services/ansible/roles/dump.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/services/ansible/roles/dump.h>
+#include <opencattus/services/log.h>
+#include <opencattus/utils/singleton.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -12,11 +12,11 @@
 #include <fmt/core.h>
 
 namespace {
-using namespace cloyster::utils::singleton;
+using namespace opencattus::utils::singleton;
 void dumpPreInstallState()
 {
-    using namespace cloyster::services::runner;
-    const auto opts = cloyster::utils::singleton::options();
+    using namespace opencattus::services::runner;
+    const auto opts = opencattus::utils::singleton::options();
 
     LOG_INFO("Dumping cluster state before the installation begins")
 
@@ -52,7 +52,7 @@ void dumpPreInstallState()
 }
 }
 
-namespace cloyster::services::ansible::roles::dump {
+namespace opencattus::services::ansible::roles::dump {
 
 void run(const Role& role) { dumpPreInstallState(); }
 

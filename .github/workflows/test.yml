@@ -63,7 +63,7 @@ jobs:
 
     - name: CTest
       working-directory: ${{ github.workspace }}/build/Debug
-      run: test/CloysterHPC-tests
+      run: test/OpenCATTUS-tests
 
 
     - name: RPM Build

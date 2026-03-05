@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/presenter/PresenterMailSystem.h>
+#include <opencattus/functions.h>
+#include <opencattus/presenter/PresenterMailSystem.h>
 
-using cloyster::services::Postfix;
+using opencattus::services::Postfix;
 
-namespace cloyster::presenter {
+namespace opencattus::presenter {
 PresenterMailSystem::PresenterMailSystem(
     std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)
     : Presenter(model, view)
@@ -18,16 +18,16 @@ PresenterMailSystem::PresenterMailSystem(
             Messages::title, Messages::question, Messages::help)) {
 
         Postfix::Profile mailSystemProfile
-            = cloyster::utils::enums::ofStringOpt<Postfix::Profile>(
+            = opencattus::utils::enums::ofStringOpt<Postfix::Profile>(
                 m_view->listMenu(Messages::title, Messages::Profile::question,
-                    cloyster::utils::enums::toStrings<Postfix::Profile>(),
+                    opencattus::utils::enums::toStrings<Postfix::Profile>(),
                     Messages::Profile::help))
                   .value();
         m_model->setMailSystem(mailSystemProfile);
         auto mailSystem = m_model->getMailSystem().value(); // copy here
 
         LOG_DEBUG("Enabled Postfix with profile: {}",
-            cloyster::utils::enums::toString<Postfix::Profile>(
+            opencattus::utils::enums::toString<Postfix::Profile>(
                 mailSystemProfile));
 
         switch (mailSystemProfile) {

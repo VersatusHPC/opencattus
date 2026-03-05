@@ -1,5 +1,5 @@
-#include <cloysterhpc/services/ansible/roles/ohpc.h>
-#include <cloysterhpc/services/log.h>
+#include <opencattus/services/ansible/roles/ohpc.h>
+#include <opencattus/services/log.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -10,7 +10,7 @@
 
 #include <fmt/core.h>
 
-namespace cloyster::services::ansible::roles::ohpc {
+namespace opencattus::services::ansible::roles::ohpc {
 
 void run(const Role& role)
 {

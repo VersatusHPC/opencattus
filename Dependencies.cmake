@@ -5,13 +5,13 @@ set(CPM_SOURCE_CACHE=$HOME/.cache/CPM)
 # Done as a function so that updates to variables like
 # CMAKE_CXX_FLAGS don't propagate out to other
 # targets
-function(cloysterhpc_setup_dependencies)
+function(opencattus_setup_dependencies)
 
   # For each dependency, see if it's
   # already been provided to us by a parent project
 
   if(NOT (TARGET Boost::headers OR TARGET Boost::system OR TARGET Boost::thread))
-    if (cloysterhpc_ENABLE_CONAN)
+    if (opencattus_ENABLE_CONAN)
       CPMFindPackage(NAME Boost)
     else()
       CPMAddPackage(
@@ -24,7 +24,7 @@ function(cloysterhpc_setup_dependencies)
   endif()
   
   if(NOT TARGET fmtlib::fmtlib)
-    if (cloysterhpc_ENABLE_CONAN)
+    if (opencattus_ENABLE_CONAN)
       CPMFindPackage(NAME fmt)
     else()
       CPMAddPackage("gh:fmtlib/fmt#9.1.0")
@@ -32,7 +32,7 @@ function(cloysterhpc_setup_dependencies)
   endif()
 
   if(NOT TARGET spdlog::spdlog)
-    if (cloysterhpc_ENABLE_CONAN)
+    if (opencattus_ENABLE_CONAN)
       CPMFindPackage(NAME spdlog
        OPTIONS
         "SPDLOG_FMT_EXTERNAL ON")
@@ -50,7 +50,7 @@ function(cloysterhpc_setup_dependencies)
   endif()
 
   if(NOT TARGET magic_enum::magic_enum)
-    if (cloysterhpc_ENABLE_CONAN)
+    if (opencattus_ENABLE_CONAN)
       CPMFindPackage(NAME magic_enum)
     else()
       CPMAddPackage(
@@ -63,7 +63,7 @@ function(cloysterhpc_setup_dependencies)
   endif()
 
   if(NOT TARGET gsl-lite::gsl-lite)
-    if (cloysterhpc_ENABLE_CONAN)
+    if (opencattus_ENABLE_CONAN)
       CPMFindPackage(NAME gsl-lite)
     else()
       CPMAddPackage("gh:gsl-lite/gsl-lite@0.41.0")
@@ -71,7 +71,7 @@ function(cloysterhpc_setup_dependencies)
   endif()
 
   if(NOT TARGET CLI11::CLI11)
-    if (cloysterhpc_ENABLE_CONAN)
+    if (opencattus_ENABLE_CONAN)
       CPMFindPackage(NAME CLI11)
     else()
       CPMAddPackage("gh:CLIUtils/CLI11@2.3.2")
@@ -79,7 +79,7 @@ function(cloysterhpc_setup_dependencies)
   endif()
 
   if(NOT TARGET doctest::doctest)
-    if (cloysterhpc_ENABLE_CONAN)
+    if (opencattus_ENABLE_CONAN)
       CPMFindPackage(NAME doctest)
     else()
       CPMAddPackage("gh:doctest/doctest@2.4.11")
@@ -87,7 +87,7 @@ function(cloysterhpc_setup_dependencies)
   endif()
 
   if(NOT TARGET SDBusCpp::sdbus-c++)
-    if (cloysterhpc_ENABLE_CONAN)
+    if (opencattus_ENABLE_CONAN)
       CPMFindPackage(NAME sdbus-c++)
     else()
       CPMAddPackage(

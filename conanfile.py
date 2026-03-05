@@ -2,7 +2,7 @@ from conan import ConanFile
 from conan.tools.cmake import cmake_layout, CMakeToolchain, CMake
 
 class MyProjectConan(ConanFile):
-    name = "CloysterHPC"
+    name = "OpenCATTUS"
     version = "0.1.1"
     settings = "os", "arch", "compiler", "build_type"
 

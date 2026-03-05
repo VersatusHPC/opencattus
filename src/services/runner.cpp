@@ -1,18 +1,18 @@
-#include <cloysterhpc/const.h>
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/services/files.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/options.h>
-#include <cloysterhpc/services/runner.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/const.h>
+#include <opencattus/functions.h>
+#include <opencattus/services/files.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/options.h>
+#include <opencattus/services/runner.h>
+#include <opencattus/utils/singleton.h>
 
 #include <boost/process/v2.hpp>
 
 #include <fmt/format.h>
 #include <ranges>
 
-using cloyster::services::CommandProxy;
-using cloyster::services::Stream;
+using opencattus::services::CommandProxy;
+using opencattus::services::Stream;
 
 namespace {
 
@@ -30,7 +30,7 @@ std::tuple<bool, std::optional<std::string>> retrieveLine(
 CommandProxy runCommandIter(
     const std::string& command, Stream out, bool overrideDryRun)
 {
-    auto opts = cloyster::utils::singleton::options();
+    auto opts = opencattus::utils::singleton::options();
     if (!opts->dryRun || overrideDryRun) {
         LOG_DEBUG("Running interative command: {}", command)
         boost::process::ipstream pipe_stream;
@@ -57,7 +57,7 @@ CommandProxy runCommandIter(
 int runCommand(const std::string& command, std::list<std::string>& output,
     bool overrideDryRun)
 {
-    auto opts = cloyster::utils::singleton::options();
+    auto opts = opencattus::utils::singleton::options();
     if (!opts->dryRun || overrideDryRun) {
         LOG_DEBUG("Running command: {}", command)
         boost::process::ipstream pipe_stream;
@@ -88,11 +88,11 @@ int runCommand(const std::string& command, bool overrideDryRun)
 
 }; // namespace {
 
-namespace cloyster::services::runner::shell::unsafe {
+namespace opencattus::services::runner::shell::unsafe {
 
 int cmd(std::vector<std::string>& output, std::string_view command)
 {
-    auto opts = cloyster::Singleton<const cloyster::services::Options>::get();
+    auto opts = opencattus::Singleton<const opencattus::services::Options>::get();
     if (!opts->dryRun) {
         std::ostringstream scriptStream;
         scriptStream << "set -xeu -o pipefail\n";
@@ -123,7 +123,7 @@ int cmd(std::vector<std::string>& output, std::string_view command)
 
 int cmd(std::string_view command)
 {
-    auto opts = cloyster::Singleton<const cloyster::services::Options>::get();
+    auto opts = opencattus::Singleton<const opencattus::services::Options>::get();
     if (!opts->dryRun) {
         std::ostringstream scriptStream;
         scriptStream << "set -xeu -o pipefail\n";
@@ -151,7 +151,7 @@ int cmd(std::string_view command)
 
 }
 
-namespace cloyster::services::runner::shell {
+namespace opencattus::services::runner::shell {
 
 void cmd(std::string_view cmd)
 {
@@ -164,7 +164,7 @@ void cmd(std::string_view cmd)
 
 }
 
-namespace cloyster::services {
+namespace opencattus::services {
 
 std::optional<std::string> CommandProxy::getline()
 {
@@ -221,13 +221,13 @@ int Runner::executeCommand(
 int Runner::run(const ScriptBuilder& script)
 {
     std::string&& content = script.toString();
-    const auto hash = cloyster::services::files::checksum(content);
+    const auto hash = opencattus::services::files::checksum(content);
     const std::filesystem::path path = fmt::format("/tmp/{}.sh", hash);
     functions::installFile(path, std::move(content));
     executeCommand(fmt::format("chmod +x {}", path));
     const auto exitCode = executeCommand(path);
     if (exitCode != 0) {
-        cloyster::functions::abort(
+        opencattus::functions::abort(
             "Script {} failed with exit code {}", path, exitCode);
     }
 
@@ -342,4 +342,4 @@ int MockRunner::downloadFile(const std::string& url, const std::string& file)
 
 int MockRunner::run(const ScriptBuilder& script) { return 0; }
 
-} // namespace cloyster::services
+} // namespace opencattus::services

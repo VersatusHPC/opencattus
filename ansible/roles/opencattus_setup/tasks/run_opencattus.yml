@@ -1,0 +1,19 @@
+---
+- name: Render answerfile from template
+  template:
+    src: answerfile.j2
+    dest: answerfile.ini
+
+- name: Copy files to the VM
+  shell: >
+    vagrant scp {{ opencattus_binary_path }} {{ vagrant_machine_name }}:~/opencattus &&
+    vagrant scp {{ iso_image_path }} {{ vagrant_machine_name }}:/opt/iso/opencattus-iso.iso &&
+    vagrant scp answerfile.ini {{ vagrant_machine_name }}:~/answerfile.ini
+
+- name: Run OpenCATTUS on the VM
+  shell: vagrant ssh "{{ vagrant_machine_name }}" -c "sudo ./opencattus -l 6 -a answerfile.ini -u"
+
+- name: Clean up local temporary files
+  file:
+    path: answerfile.ini
+    state: absent

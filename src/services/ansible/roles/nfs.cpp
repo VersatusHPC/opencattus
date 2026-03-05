@@ -1,6 +1,6 @@
-#include <cloysterhpc/NFS.h>
-#include <cloysterhpc/services/ansible/roles/nfs.h>
-#include <cloysterhpc/services/log.h>
+#include <opencattus/NFS.h>
+#include <opencattus/services/ansible/roles/nfs.h>
+#include <opencattus/services/log.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -12,10 +12,10 @@
 #include <fmt/core.h>
 
 namespace {
-using namespace cloyster::utils::singleton;
+using namespace opencattus::utils::singleton;
 }
 
-namespace cloyster::services::ansible::roles::nfs {
+namespace opencattus::services::ansible::roles::nfs {
 
 ScriptBuilder installScript(const Role& role, const OS& osinfo)
 {

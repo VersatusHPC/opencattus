@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/view/newt.h>
+#include <opencattus/functions.h>
+#include <opencattus/view/newt.h>
 #include <cstdio> /* sprintf() */
 #include <cstring> /* strlen() */
 #include <newt.h>
@@ -101,8 +101,8 @@ std::vector<const char*> Newt::convertToNewtList(
  * into a percent (a 0 to 100 value)
  */
 bool Newt::progressMenu(const char* title, const char* message,
-    cloyster::services::CommandProxy&& cmd,
-    std::function<std::optional<double>(cloyster::services::CommandProxy&)>
+    opencattus::services::CommandProxy&& cmd,
+    std::function<std::optional<double>(opencattus::services::CommandProxy&)>
         fPercent)
 {
 

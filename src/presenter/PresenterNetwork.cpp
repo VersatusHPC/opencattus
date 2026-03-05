@@ -4,7 +4,7 @@
  */
 
 #include <boost/algorithm/string.hpp>
-#include <cloysterhpc/presenter/PresenterNetwork.h>
+#include <opencattus/presenter/PresenterNetwork.h>
 
 // Maybe a central NetworkCreator class can be added here?
 // The PresenterNetwork receives the NetworkCreator alongside both parameters,
@@ -13,7 +13,7 @@
 
 #include <algorithm>
 
-namespace cloyster::presenter {
+namespace opencattus::presenter {
 
 bool NetworkCreator::checkIfProfileExists(Network::Profile profile)
 {
@@ -75,7 +75,7 @@ void NetworkCreator::saveNetworksToModel(Cluster& model)
 
         // Check moved data
         LOG_DEBUG("Added {} connection on headnode: {} -> {}",
-            cloyster::utils::enums::toString(net.profile),
+            opencattus::utils::enums::toString(net.profile),
             model.getHeadnode()
                 .getConnection(net.profile)
                 .getInterface()
@@ -114,18 +114,18 @@ PresenterNetwork::PresenterNetwork(std::unique_ptr<Cluster>& model,
     , m_network(std::make_unique<Network>(profile, type))
 {
     LOG_DEBUG("Added {} network with type {}",
-        cloyster::utils::enums::toString(profile),
-        cloyster::utils::enums::toString(type));
+        opencattus::utils::enums::toString(profile),
+        opencattus::utils::enums::toString(type));
 
     LOG_DEBUG("Added connection to {} network",
-        cloyster::utils::enums::toString(profile));
+        opencattus::utils::enums::toString(profile));
 
     // TODO: This should be on the header and be constexpr (if possible)
     m_view->message(Messages::title,
         fmt::format(
             "We will now ask questions about your {} ({}) network interface",
-            cloyster::utils::enums::toString(profile),
-            cloyster::utils::enums::toString(type))
+            opencattus::utils::enums::toString(profile),
+            opencattus::utils::enums::toString(type))
             .c_str());
 
     auto interfaces = retrievePossibleInterfaces(nc);

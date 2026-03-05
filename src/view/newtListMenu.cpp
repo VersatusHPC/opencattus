@@ -5,7 +5,7 @@
 
 // This file is empty since the method is now a template
 
-#include <cloysterhpc/view/newt.h>
+#include <opencattus/view/newt.h>
 #include <newt.h>
 #include <ranges>
 

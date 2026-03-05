@@ -21,8 +21,8 @@ endif ()
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Enable Conan 2.0 support
-option(cloysterhpc_ENABLE_CONAN "Use Conan 2 to manage dependencies" ON)
-if (cloysterhpc_ENABLE_CONAN)
+option(opencattus_ENABLE_CONAN "Use Conan 2 to manage dependencies" ON)
+if (opencattus_ENABLE_CONAN)
     set(CMAKE_PROJECT_TOP_LEVEL_INCLUDES cmake/conan_provider.cmake)
 endif ()
 
@@ -45,23 +45,23 @@ endif ()
 
 # Set the project name and language
 project(
-        CloysterHPC
+        OpenCATTUS
         VERSION 0.1.1
-        DESCRIPTION "Cloyster HPC is a turnkey HPC cluster solution with an user-friendly installer"
-        HOMEPAGE_URL "https://github.com/viniciusferrao/cloysterhpc"
+        DESCRIPTION "OpenCATTUS is a turnkey HPC cluster solution with an user-friendly installer"
+        HOMEPAGE_URL "https://github.com/versatushpc/opencattus"
         LANGUAGES CXX C)
 
 include(cmake/PreventInSourceBuilds.cmake)
 include(ProjectOptions.cmake)
 
 
-cloysterhpc_setup_options()
+opencattus_setup_options()
 
-cloysterhpc_global_options()
+opencattus_global_options()
 include(Dependencies.cmake)
-cloysterhpc_setup_dependencies()
+opencattus_setup_dependencies()
 
-cloysterhpc_local_options()
+opencattus_local_options()
 
 # don't know if this should be set globally from here or not...
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
@@ -90,12 +90,12 @@ endif ()
 set(GIT_SHA "${GIT_SHA}" CACHE STRING "SHA this build was generated from")
 set(GIT_SHORT_SHA "${GIT_SHORT_SHA}" CACHE STRING "Short SHA this build was generated from")
 
-set(cloysterhpc_BINARY_NAME "cloysterhpc")
+set(opencattus_BINARY_NAME "opencattus")
 
-target_compile_features(cloysterhpc_options INTERFACE cxx_std_${CMAKE_CXX_STANDARD})
+target_compile_features(opencattus_options INTERFACE cxx_std_${CMAKE_CXX_STANDARD})
 
-add_library(cloysterhpc::cloysterhpc_options ALIAS cloysterhpc_options)
-add_library(cloysterhpc::cloysterhpc_warnings ALIAS cloysterhpc_warnings)
+add_library(opencattus::opencattus_options ALIAS opencattus_options)
+add_library(opencattus::opencattus_warnings ALIAS opencattus_warnings)
 
 # configure files based on CMake configuration options
 add_subdirectory(configured_files)
@@ -116,9 +116,9 @@ if (BUILD_TESTING)
 endif ()
 
 
-if (cloysterhpc_BUILD_FUZZ_TESTS)
+if (opencattus_BUILD_FUZZ_TESTS)
     message(AUTHOR_WARNING "Building Fuzz Tests, using fuzzing sanitizer https://www.llvm.org/docs/LibFuzzer.html")
-    if (NOT cloysterhpc_ENABLE_ADDRESS_SANITIZER AND NOT cloysterhpc_ENABLE_THREAD_SANITIZER)
+    if (NOT opencattus_ENABLE_ADDRESS_SANITIZER AND NOT opencattus_ENABLE_THREAD_SANITIZER)
         message(WARNING "You need asan or tsan enabled for meaningful fuzz testing")
     endif ()
     add_subdirectory(fuzz_test)
@@ -134,7 +134,7 @@ if (MSVC)
 endif ()
 
 # set the startup project for the "play" button in MSVC
-set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT ${cloysterhpc_BINARY_NAME})
+set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT ${opencattus_BINARY_NAME})
 
 if (CMAKE_SKIP_INSTALL_RULES)
     return()
@@ -144,11 +144,11 @@ include(cmake/PackageProject.cmake)
 
 # Add other targets that you want installed here, by default we just package the one executable
 # we know we want to ship
-cloysterhpc_package_project(
+opencattus_package_project(
         TARGETS
-        ${cloysterhpc_BINARY_NAME}
-        cloysterhpc_options
-        cloysterhpc_warnings
+        ${opencattus_BINARY_NAME}
+        opencattus_options
+        opencattus_warnings
         # FIXME: this does not work! CK
         # PRIVATE_DEPENDENCIES_CONFIGURED project_options project_warnings
 )

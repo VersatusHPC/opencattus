@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/presenter/PresenterTime.h>
+#include <opencattus/presenter/PresenterTime.h>
 #include <set>
 
-namespace cloyster::presenter {
+namespace opencattus::presenter {
 
 PresenterTime::PresenterTime(
     std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)

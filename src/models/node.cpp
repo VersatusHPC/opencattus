@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/models/node.h>
+#include <opencattus/models/node.h>
 
-namespace cloyster::models {
+namespace opencattus::models {
 
 Node::Node(std::string_view hostname, OS& os, CPU& cpu,
     std::list<Connection>&& connections, std::optional<BMC> bmc)

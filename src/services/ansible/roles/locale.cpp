@@ -1,5 +1,5 @@
-#include <cloysterhpc/services/ansible/roles/locale.h>
-#include <cloysterhpc/services/log.h>
+#include <opencattus/services/ansible/roles/locale.h>
+#include <opencattus/services/log.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -11,7 +11,7 @@
 #include <fmt/core.h>
 
 namespace {
-using namespace cloyster::utils::singleton;
+using namespace opencattus::utils::singleton;
 void configureLocale()
 {
     LOG_INFO("Setting up locale")
@@ -21,7 +21,7 @@ void configureLocale()
 }
 }
 
-namespace cloyster::services::ansible::roles::locale {
+namespace opencattus::services::ansible::roles::locale {
 
 void run(const Role& role) { configureLocale(); }
 

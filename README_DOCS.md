@@ -1,4 +1,4 @@
-# Welcome to the CloysterHPC documentation
+# Welcome to the OpenCATTUS documentation
 
 ## Building
 - Clone this project

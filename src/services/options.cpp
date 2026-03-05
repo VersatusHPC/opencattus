@@ -1,5 +1,5 @@
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/options.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/options.h>
 
 #include <CLI/CLI.hpp>
 #include <fstream>
@@ -7,7 +7,7 @@
 #include <set>
 #include <vector>
 
-namespace cloyster::services {
+namespace opencattus::services {
 using std::ifstream;
 
 std::unique_ptr<Options> options::factory(int argc, const char** argv)
@@ -38,7 +38,7 @@ std::unique_ptr<Options> options::factory(int argc, const char** argv)
         .dumpAnswerfile = "",
     };
     // Define the CLI11 app
-    CLI::App app("CloysterHPC Options");
+    CLI::App app("OpenCATTUS Options");
 
     // Add options
     app.add_flag("-v,--version", opt.showVersion, "Show version information");
@@ -154,4 +154,4 @@ void Options::maybeStopAfterStep(const std::string& step) const
     }
 }
 
-} // namespace cloyster::services
+} // namespace opencattus::services

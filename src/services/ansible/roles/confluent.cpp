@@ -1,6 +1,6 @@
-#include <cloysterhpc/services/ansible/roles/confluent.h>
-#include <cloysterhpc/services/confluent.h>
-#include <cloysterhpc/services/log.h>
+#include <opencattus/services/ansible/roles/confluent.h>
+#include <opencattus/services/confluent.h>
+#include <opencattus/services/log.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -11,7 +11,7 @@
 
 #include <fmt/core.h>
 
-namespace cloyster::services::ansible::roles::confluent {
+namespace opencattus::services::ansible::roles::confluent {
 
 void run(const Role& role)
 {

@@ -1,5 +1,5 @@
 #include <array>
-#include <cloysterhpc/tempdir.h>
+#include <opencattus/tempdir.h>
 #include <cstdint>
 #include <fmt/format.h>
 #include <random>

@@ -1,4 +1,4 @@
-macro(cloysterhpc_configure_linker project_name)
+macro(opencattus_configure_linker project_name)
   include(CheckCXXCompilerFlag)
 
   set(USER_LINKER_OPTION

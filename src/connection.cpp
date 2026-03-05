@@ -4,10 +4,10 @@
  */
 
 #include <boost/system/detail/errc.hpp>
-#include <cloysterhpc/connection.h>
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/network.h>
-#include <cloysterhpc/services/log.h>
+#include <opencattus/connection.h>
+#include <opencattus/functions.h>
+#include <opencattus/network.h>
+#include <opencattus/services/log.h>
 
 #include <cerrno>
 #include <cstring>
@@ -455,8 +455,8 @@ void Connection::dumpConnection() const
 {
     LOG_DEBUG("Dumping Connection Info:")
     LOG_DEBUG("Connection with Network: {} ({})",
-        cloyster::utils::enums::toString(m_network->getProfile()),
-        cloyster::utils::enums::toString(m_network->getType()));
+        opencattus::utils::enums::toString(m_network->getProfile()),
+        opencattus::utils::enums::toString(m_network->getType()));
 
     LOG_DEBUG("Interface: {}", m_interface.value_or("NONE"))
     LOG_DEBUG("MAC Address: {}", m_mac.value_or("NONE"))
@@ -473,7 +473,7 @@ void Connection::dumpConnection() const
 #include <doctest/doctest.h>
 #endif
 
-TEST_SUITE("cloyster::services::network")
+TEST_SUITE("opencattus::services::network")
 {
     /*
         Network network;

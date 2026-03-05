@@ -1,7 +1,7 @@
-#include <cloysterhpc/utils/containers.h>
-#include <cloysterhpc/utils/network.h>
+#include <opencattus/utils/containers.h>
+#include <opencattus/utils/network.h>
 
-namespace cloyster::utils::network {
+namespace opencattus::utils::network {
 
 std::uint8_t subnetMaskToCIDR(const boost::asio::ip::address& addr)
 {

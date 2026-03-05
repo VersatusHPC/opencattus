@@ -1,8 +1,8 @@
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/services/ansible/roles/check.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/runner.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/functions.h>
+#include <opencattus/services/ansible/roles/check.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/runner.h>
+#include <opencattus/utils/singleton.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -13,11 +13,11 @@
 
 #include <fmt/core.h>
 
-namespace cloyster::services::ansible::roles::check {
+namespace opencattus::services::ansible::roles::check {
 
 void run(const Role& role)
 {
-    using namespace cloyster::utils;
+    using namespace opencattus::utils;
 
     // OFED installation fails with ISO kernel, require update and reboot
     runner::shell::cmd("dnf makecache --repo baseos");
@@ -41,4 +41,4 @@ void run(const Role& role)
     // - no swap?
 }
 
-} // namespace cloyster::services::ansible::roles::check
+} // namespace opencattus::services::ansible::roles::check

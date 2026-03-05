@@ -1,8 +1,8 @@
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/services/ansible/roles/network.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/runner.h>
-#include <cloysterhpc/utils/network.h>
+#include <opencattus/functions.h>
+#include <opencattus/services/ansible/roles/network.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/runner.h>
+#include <opencattus/utils/network.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -15,8 +15,8 @@
 
 namespace {
 
-using namespace cloyster::utils::singleton;
-using namespace cloyster::services::runner;
+using namespace opencattus::utils::singleton;
+using namespace opencattus::services::runner;
 
 void disableNetworkManagerDNSOverride()
 {
@@ -27,9 +27,9 @@ void disableNetworkManagerDNSOverride()
 
     // TODO: We should not violently remove the file, we may need to backup if
     //  the file exists, and remove after the copy
-    cloyster::functions::removeFile(filename);
+    opencattus::functions::removeFile(filename);
     // TODO: Would be better handled with a .conf function
-    cloyster::functions::addStringToFile(filename,
+    opencattus::functions::addStringToFile(filename,
         "[main]\n"
         "dns=none\n");
 
@@ -42,12 +42,12 @@ void disableNetworkManagerDNSOverride()
 void configureManagementNetwork(const Connection& connection)
 {
     const std::string_view ipv6Method = cluster()->getProvisioner()
-            == cloyster::models::Cluster::Provisioner::xCAT
+            == opencattus::models::Cluster::Provisioner::xCAT
         ? "disabled"
         : "link-local";
 
     auto interface = connection.getInterface().value();
-    auto connectionName = cloyster::utils::enums::toString(
+    auto connectionName = opencattus::utils::enums::toString(
         connection.getNetwork()->getProfile());
     LOG_INFO("Setting up {} network", connectionName);
     LOG_ASSERT(connectionName == "Management",
@@ -77,7 +77,7 @@ nmcli device connect {iface}
         fmt::arg("mtu", connection.getMTU()),
         fmt::arg("ip", connection.getAddress().to_string()),
         fmt::arg("cidr",
-            cloyster::utils::network::subnetMaskToCIDR(
+            opencattus::utils::network::subnetMaskToCIDR(
                 connection.getNetwork()->getSubnetMask())),
         fmt::arg("ipv6_method", ipv6Method));
 }
@@ -85,7 +85,7 @@ nmcli device connect {iface}
 void configureApplicationNetwork(const Connection& connection)
 {
     auto interface = connection.getInterface().value();
-    auto connectionName = cloyster::utils::enums::toString(
+    auto connectionName = opencattus::utils::enums::toString(
         connection.getNetwork()->getProfile());
     LOG_INFO("Setting up {} network", connectionName);
     LOG_ASSERT(connectionName == "Application",
@@ -114,14 +114,14 @@ nmcli device connect {iface}
         fmt::arg("mtu", connection.getMTU()),
         fmt::arg("ip", connection.getAddress().to_string()),
         fmt::arg("cidr",
-            cloyster::utils::network::subnetMaskToCIDR(
+            opencattus::utils::network::subnetMaskToCIDR(
                 connection.getNetwork()->getSubnetMask())));
 }
 
 void configureServiceNetwork(const Connection& connection)
 {
     auto interface = connection.getInterface().value();
-    auto connectionName = cloyster::utils::enums::toString(
+    auto connectionName = opencattus::utils::enums::toString(
         connection.getNetwork()->getProfile());
     LOG_INFO("Setting up {} network", connectionName);
     LOG_ASSERT(connectionName == "Service",
@@ -150,7 +150,7 @@ nmcli device connect {iface}
         fmt::arg("mtu", connection.getMTU()),
         fmt::arg("ip", connection.getAddress().to_string()),
         fmt::arg("cidr",
-            cloyster::utils::network::subnetMaskToCIDR(
+            opencattus::utils::network::subnetMaskToCIDR(
                 connection.getNetwork()->getSubnetMask())));
 }
 
@@ -180,7 +180,7 @@ void configureNetworks(const std::list<Connection>& connections)
                 break;
             default:
                 // NOTE: This should never happen
-                cloyster::functions::abort("Invalid network profile {}",
+                opencattus::functions::abort("Invalid network profile {}",
                     connection.getNetwork()->getProfile());
         }
         break;
@@ -209,14 +209,14 @@ void configureHostsFile()
 
     std::string_view filename = CHROOT "/etc/hosts";
 
-    cloyster::functions::backupFile(filename);
-    cloyster::functions::addStringToFile(
+    opencattus::functions::backupFile(filename);
+    opencattus::functions::addStringToFile(
         filename, fmt::format("{}\t{} {}\n", ip, fqdn, hostname));
 }
 
 }
 
-namespace cloyster::services::ansible::roles::network {
+namespace opencattus::services::ansible::roles::network {
 
 void run(const Role& role)
 {

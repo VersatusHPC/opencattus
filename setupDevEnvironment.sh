@@ -3,8 +3,8 @@
 # Copyright 2022 Vinícius Ferrão <vinicius@ferrao.net.br>
 # SPDX-License-Identifier: Apache-2.0
 #
-# This file is part of CloysterHPC
-# https://github.com/viniciusferrao/cloysterhpc
+# This file is part of OpenCATTUS
+# https://github.com/versatushpc/opencattus
 #
 # Script to ease development environment setup on Enterprise Linux (EL) systems
 
@@ -90,7 +90,7 @@ oracle() {
 #
 # Entrypoint
 #
-echo Setting up development environment for CloysterHPC
+echo Setting up development environment for OpenCATTUS
 echo
 
 case $(cut -f 3 -d : /etc/system-release-cpe) in

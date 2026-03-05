@@ -5,11 +5,11 @@
 
 /**
  * @file main.cpp
- * @brief This file is a test runner for the CloysterHPC library.
+ * @brief This file is a test runner for the OpenCATTUS library.
  *
- * It must include cloyster.h file to set the global variables.
+ * It must include opencattus.h file to set the global variables.
  */
-#include <cloysterhpc/cloyster.h>
+#include <opencattus/opencattus.h>
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>

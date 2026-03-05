@@ -13,7 +13,7 @@ systemctl disable --now firewalld
 sed -e 's/^SELINUX=.*/SELINUX=disabled/' -i /etc/selinux/config
 setenforce 0
 
-hostname=cloyster
+hostname=opencattus
 domain=cluster.example.com
 hn_ip=192.168.30.254
 cidr=24

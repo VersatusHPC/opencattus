@@ -1,7 +1,7 @@
-#include <cloysterhpc/models/cluster.h>
-#include <cloysterhpc/patterns/singleton.h>
-#include <cloysterhpc/services/ansible/roles/repos.h>
-#include <cloysterhpc/services/log.h>
+#include <opencattus/models/cluster.h>
+#include <opencattus/patterns/singleton.h>
+#include <opencattus/services/ansible/roles/repos.h>
+#include <opencattus/services/log.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -12,13 +12,13 @@
 
 #include <fmt/core.h>
 
-namespace cloyster::services::ansible::roles::repos {
+namespace opencattus::services::ansible::roles::repos {
 
 void run(const Role& role)
 {
     const auto& osinfo
-        = cloyster::Singleton<models::Cluster>::get()->getHeadnode().getOS();
-    auto repos = cloyster::Singleton<services::repos::RepoManager>::get();
+        = opencattus::Singleton<models::Cluster>::get()->getHeadnode().getOS();
+    auto repos = opencattus::Singleton<services::repos::RepoManager>::get();
     repos->initializeDefaultRepositories();
 }
 

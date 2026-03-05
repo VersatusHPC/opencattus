@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/presenter/PresenterGeneralSettings.h>
+#include <opencattus/presenter/PresenterGeneralSettings.h>
 
-namespace cloyster::presenter {
+namespace opencattus::presenter {
 
-using cloyster::models::Headnode;
+using opencattus::models::Headnode;
 
 PresenterGeneralSettings::PresenterGeneralSettings(
     std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)
@@ -35,13 +35,13 @@ PresenterGeneralSettings::PresenterGeneralSettings(
 
     // Boot target
     m_model->getHeadnode().setBootTarget(
-        cloyster::utils::enums::ofStringOpt<Headnode::BootTarget>(
+        opencattus::utils::enums::ofStringOpt<Headnode::BootTarget>(
             m_view->listMenu(Messages::title, Messages::BootTarget::question,
-                cloyster::utils::enums::toStrings<Headnode::BootTarget>(),
+                opencattus::utils::enums::toStrings<Headnode::BootTarget>(),
                 Messages::BootTarget::help))
             .value());
     LOG_DEBUG("{} boot target set on headnode",
-        cloyster::utils::enums::toString<Headnode::BootTarget>(
+        opencattus::utils::enums::toString<Headnode::BootTarget>(
             m_model->getHeadnode().getBootTarget()));
 }
 

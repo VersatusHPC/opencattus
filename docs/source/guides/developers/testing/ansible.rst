@@ -13,7 +13,7 @@ Dependencies
 
 * Ansible
 * Vagrant
-* Cloyster binary
+* OpenCATTUS binary
 * A ISO for the nodes (WIP)
 
 Example Playbook
@@ -35,7 +35,7 @@ Running
 
    This should be used inside Ansible (/ansible) directory
 
-Run ``ansible-playbook setup.yml --extra-vars "cloyster_binary_path=/path/to/local/cloyster/binary vagrant_machine_name=machine_name iso_image_path=/path/to/iso/image"`` in the same folder of `"setup.yml"` or the playbook you created.
-If you don't want to clean up (remove the virtual machine) after Cloyster ends, set ``"cleanup_needed=false"`` on the --extra-vars.
+Run ``ansible-playbook setup.yml --extra-vars "opencattus_binary_path=/path/to/local/opencattus/binary vagrant_machine_name=machine_name iso_image_path=/path/to/iso/image"`` in the same folder of `"setup.yml"` or the playbook you created.
+If you don't want to clean up (remove the virtual machine) after OpenCATTUS ends, set ``"cleanup_needed=false"`` on the --extra-vars.
 
 For the current list of operating systems supported, read section ":doc:`System Requirements <../../../overview/sys_os_requirements>`"

@@ -1,8 +1,8 @@
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/services/ansible/roles.h>
-#include <cloysterhpc/services/ansible/roles/provisioner.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/functions.h>
+#include <opencattus/services/ansible/roles.h>
+#include <opencattus/services/ansible/roles/provisioner.h>
+#include <opencattus/services/log.h>
+#include <opencattus/utils/singleton.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -13,7 +13,7 @@
 
 #include <fmt/core.h>
 
-namespace cloyster::services::ansible::roles::provisioner {
+namespace opencattus::services::ansible::roles::provisioner {
 
 void run(const Role& role)
 {
@@ -24,7 +24,7 @@ void run(const Role& role)
     } else if (provisioner == "xcat") {
         roles::run(Roles::XCAT, osinfo);
     } else {
-        cloyster::functions::abort("Expecing xcat or confluent at "
+        opencattus::functions::abort("Expecing xcat or confluent at "
                                    "[system].provisioner, found: {}, at {}",
             provisioner, utils::singleton::answerfile()->path());
     }

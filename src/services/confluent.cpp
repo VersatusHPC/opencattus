@@ -1,14 +1,14 @@
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/services/confluent.h>
-#include <cloysterhpc/services/runner.h>
-#include <cloysterhpc/utils/network.h>
-#include <cloysterhpc/utils/optional.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/functions.h>
+#include <opencattus/services/confluent.h>
+#include <opencattus/services/runner.h>
+#include <opencattus/utils/network.h>
+#include <opencattus/utils/optional.h>
+#include <opencattus/utils/singleton.h>
 #include <fmt/core.h>
 
 namespace {
-using namespace cloyster;
-using namespace cloyster::utils;
+using namespace opencattus;
+using namespace opencattus::utils;
 
 void addNode(const models::Node& node, std::string_view image)
 {
@@ -57,14 +57,14 @@ void addNodes(std::string_view image)
 }
 }
 
-namespace cloyster::services {
+namespace opencattus::services {
 
 void Confluent::install()
 {
     using namespace utils::singleton;
 
     const auto image = fmt::format("{distro}-{arch}",
-        fmt::arg("arch", cloyster::utils::enums::toString(os().getArch())),
+        fmt::arg("arch", opencattus::utils::enums::toString(os().getArch())),
         fmt::arg("distro", os().getDistroString()));
 
     runner::shell::fmt(R"d(
@@ -222,7 +222,7 @@ rm -rf /tmp/scratchdir || :
                 .getConnection(Network::Profile::Management)
                 .getAddress()
                 .to_string()),
-        fmt::arg("arch", cloyster::utils::enums::toString(os().getArch())),
+        fmt::arg("arch", opencattus::utils::enums::toString(os().getArch())),
         fmt::arg("distro", os().getDistroString()),
         fmt::arg("osversion", os().getVersion()),
         fmt::arg("isoPath", answerfile()->system.disk_image.string()),

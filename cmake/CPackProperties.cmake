@@ -2,14 +2,14 @@
 set(CPACK_PACKAGE_NAME ${CMAKE_PROJECT_NAME})
 set(CPACK_PACKAGE_VERSION ${CMAKE_PROJECT_VERSION})
 set(CPACK_PACKAGE_CONTACT "vinicius@ferrao.net.br")
-set(CPACK_PACKAGE_VENDOR "CloysterHPC")
+set(CPACK_PACKAGE_VENDOR "OpenCATTUS")
 
 # Specify RPM-specific configurations
 set(CPACK_GENERATOR "RPM")
 set(CPACK_RPM_PACKAGE_RELEASE "1")
 set(CPACK_RPM_PACKAGE_LICENSE "Apache-2.0")
-set(CPACK_RPM_PACKAGE_URL "https://github.com/viniciusferrao/cloysterhpc")
-set(CPACK_RPM_PACKAGE_DESCRIPTION "Cloyster HPC is a turnkey HPC cluster solution with an user-friendly installer.")
+set(CPACK_RPM_PACKAGE_URL "https://github.com/versatushpc/opencattus")
+set(CPACK_RPM_PACKAGE_DESCRIPTION "OpenCATTUS is a turnkey HPC cluster solution with an user-friendly installer.")
 set(CPACK_RPM_PACKAGE_REQUIRES "newt")
 
 # Optionally set the RPM build root directory

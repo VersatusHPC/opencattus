@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/models/cluster.h>
-#include <cloysterhpc/patterns/wrapper.h>
-#include <cloysterhpc/services/init.h>
-#include <cloysterhpc/services/options.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/functions.h>
+#include <opencattus/models/cluster.h>
+#include <opencattus/patterns/wrapper.h>
+#include <opencattus/services/init.h>
+#include <opencattus/services/options.h>
+#include <opencattus/utils/singleton.h>
 
 #include <chrono>
 #include <cstdio> /* FILE*, fopen, fclose */
@@ -18,7 +18,7 @@
 #include <boost/process.hpp>
 #include <boost/property_tree/ini_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
-#include <cloysterhpc/services/log.h>
+#include <opencattus/services/log.h>
 
 #include <fmt/chrono.h>
 #include <fmt/format.h>
@@ -28,10 +28,10 @@
 #include <stdexcept>
 #include <tuple>
 
-TEST_SUITE_BEGIN("cloyster::functions");
+TEST_SUITE_BEGIN("opencattus::functions");
 
-namespace cloyster::functions {
-using cloyster::services::repos::RepoManager;
+namespace opencattus::functions {
+using opencattus::services::repos::RepoManager;
 
 /* Returns a specific environment variable when requested.
  * If the variable is not set it will return as an empty string. That's by
@@ -78,13 +78,13 @@ void writeConfig(const std::string& filename)
 
 void touchFile(const std::filesystem::path& path)
 {
-    auto opts = cloyster::utils::singleton::options();
+    auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would touch the file {}", path.string())
         return;
     }
 
-    if (cloyster::functions::exists(path)) {
+    if (opencattus::functions::exists(path)) {
         LOG_WARN("File already exists, skiping {}", path.string())
         return;
     }
@@ -96,9 +96,9 @@ void touchFile(const std::filesystem::path& path)
 
 void createDirectory(const std::filesystem::path& path)
 {
-    cloyster::services::initializeSingletonsOptions(
-        std::make_unique<cloyster::services::Options>());
-    auto opts = cloyster::utils::singleton::options();
+    opencattus::services::initializeSingletonsOptions(
+        std::make_unique<opencattus::services::Options>());
+    auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would create directory {}", path.string())
         return;
@@ -110,8 +110,8 @@ void createDirectory(const std::filesystem::path& path)
 
 TEST_CASE("createDirectory - recursive creation and idempotency")
 {
-    using cloyster::services::Options;
-    cloyster::Singleton<Options>::init(std::make_unique<Options>(Options {}));
+    using opencattus::services::Options;
+    opencattus::Singleton<Options>::init(std::make_unique<Options>(Options {}));
     const std::filesystem::path testBaseDir = "test/output/functions";
     const std::filesystem::path targetDir = testBaseDir / "foo" / "bar" / "tar";
 
@@ -124,7 +124,7 @@ TEST_CASE("createDirectory - recursive creation and idempotency")
     CHECK_FALSE(std::filesystem::exists(testBaseDir));
 
     // --- Part 1: Test recursive creation ---
-    cloyster::functions::createDirectory(targetDir);
+    opencattus::functions::createDirectory(targetDir);
 
     // Check if the target directory and its parents were created
     CHECK(std::filesystem::exists(targetDir));
@@ -140,7 +140,7 @@ TEST_CASE("createDirectory - recursive creation and idempotency")
 /* Remove file */
 void removeFile(std::string_view filename)
 {
-    auto opts = cloyster::utils::singleton::options();
+    auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would remove file {}, if exists", filename)
         return;
@@ -180,7 +180,7 @@ void backupFile(std::string_view filename)
     const auto& backupFile = fmt::format(
         "{}/backup{}_{}", installPath, filename, getCurrentTimestamp());
 
-    auto opts = cloyster::utils::singleton::options();
+    auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_WARN("Dryn Run: Would create a backup copy of {} on {}", filename,
             backupFile);
@@ -209,7 +209,7 @@ void changeValueInConfigurationFile(
 {
     boost::property_tree::ptree tree;
 
-    auto opts = cloyster::utils::singleton::options();
+    auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would change the {} on {} in configuration file {}",
             value, key, filename);
@@ -243,7 +243,7 @@ void addStringToFile(std::string_view filename, std::string_view string)
 #else
     std::ofstream file(std::string { filename }, std::ios_base::app);
 #endif
-    auto opts = cloyster::utils::singleton::options();
+    auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_WARN(
             "Dry Run: Would add a string in file {}:\n{}", filename, string);
@@ -275,7 +275,7 @@ std::string findAndReplace(const std::string_view& source,
 /// Copy a file, ignore if file exists
 void copyFile(std::filesystem::path source, std::filesystem::path destination)
 {
-    auto opts = cloyster::utils::singleton::options();
+    auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO(
             "Would copy file {} to {}", source.string(), destination.string())
@@ -302,13 +302,13 @@ bool exists(const std::filesystem::path& path)
 
 void installFile(const std::filesystem::path& path, std::istream& data)
 {
-    auto opts = cloyster::utils::singleton::options();
+    auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would install file {}", path.string());
         return;
     }
 
-    if (cloyster::functions::exists(path)) {
+    if (opencattus::functions::exists(path)) {
         LOG_WARN("File already exists: {}, skipping", path.string());
         return;
     }
@@ -331,17 +331,17 @@ HTTPRepo createHTTPRepo(const std::string_view repoName)
     // nodes
     HTTPRepo repo(repoFolder, std::string(repoName),
         fmt::format("http://localhost/repos/{}", repoName));
-    if (cloyster::functions::exists(confPath)) {
+    if (opencattus::functions::exists(confPath)) {
         LOG_WARN("Skipping the creation of HTTP repository, {} already exists",
             confPath);
         return repo;
     }
 
-    cloyster::functions::createDirectory("/var/www/html/repos/");
+    opencattus::functions::createDirectory("/var/www/html/repos/");
     LOG_INFO("Creating HTTP repository {} at {}", confPath, repoFolder);
-    auto runner = cloyster::Singleton<IRunner>::get();
-    cloyster::functions::createDirectory(repoFolder);
-    cloyster::functions::installFile(confPath,
+    auto runner = opencattus::Singleton<IRunner>::get();
+    opencattus::functions::createDirectory(repoFolder);
+    opencattus::functions::installFile(confPath,
         fmt::format(
             R"(<Directory "{0}">
 Options +Indexes +FollowSymLinks
@@ -361,16 +361,16 @@ void backupFilesByExtension(const wrappers::DestinationPath& backupPath,
     const wrappers::SourcePath& sourcePath,
     const wrappers::Extension& extension)
 {
-    const auto opts = cloyster::utils::singleton::options();
+    const auto opts = opencattus::utils::singleton::options();
     if (opts->shouldForce("backups")) {
         std::filesystem::remove_all(backupPath);
     }
 
-    if (!cloyster::functions::exists(backupPath)) {
+    if (!opencattus::functions::exists(backupPath)) {
         LOG_INFO("Backing up {} files from {} to {}", extension, sourcePath,
             backupPath);
-        cloyster::functions::createDirectory(backupPath.get());
-        cloyster::functions::moveFilesWithExtension(
+        opencattus::functions::createDirectory(backupPath.get());
+        opencattus::functions::moveFilesWithExtension(
             sourcePath.get(), backupPath.get(), extension.get());
     } else {
         LOG_INFO("Backup path {} already exists, skipping", backupPath);
@@ -378,4 +378,4 @@ void backupFilesByExtension(const wrappers::DestinationPath& backupPath,
 }
 TEST_SUITE_END();
 
-}; // namespace cloyster
+}; // namespace opencattus

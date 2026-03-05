@@ -3,17 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/presenter/PresenterRepository.h>
+#include <opencattus/functions.h>
+#include <opencattus/presenter/PresenterRepository.h>
 #include <ranges>
 
-namespace cloyster::presenter {
+namespace opencattus::presenter {
 
 PresenterRepository::PresenterRepository(
     std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)
     : Presenter(model, view)
 {
-    auto manager = cloyster::Singleton<services::repos::RepoManager>::get();
+    auto manager = opencattus::Singleton<services::repos::RepoManager>::get();
 
     manager->initializeDefaultRepositories();
 
@@ -35,7 +35,7 @@ PresenterRepository::PresenterRepository(
         auto toDisable = allReposUIAdapter
             | std::views::filter([&toEnable](auto& tuple) {
                   auto& [id, _name, _state] = tuple;
-                  return !cloyster::functions::isIn(toEnable, id);
+                  return !opencattus::functions::isIn(toEnable, id);
               })
             | std::views::transform([](auto& tuple) {
                   auto& [id, _name, _state] = tuple;

@@ -1,6 +1,6 @@
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/services/ansible/roles/sshd.h>
-#include <cloysterhpc/services/log.h>
+#include <opencattus/functions.h>
+#include <opencattus/services/ansible/roles/sshd.h>
+#include <opencattus/services/log.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -15,7 +15,7 @@
 
 namespace {
 
-using namespace cloyster::utils::singleton;
+using namespace opencattus::utils::singleton;
 
 void disallowSSHRootPasswordLogin()
 {
@@ -28,7 +28,7 @@ void disallowSSHRootPasswordLogin()
 
 }
 
-namespace cloyster::services::ansible::roles::sshd {
+namespace opencattus::services::ansible::roles::sshd {
 
 void run(const Role& /*role*/) { disallowSSHRootPasswordLogin(); }
 

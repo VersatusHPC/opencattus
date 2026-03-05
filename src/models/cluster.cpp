@@ -17,26 +17,26 @@
 #include <boost/property_tree/ptree.hpp>
 #include <utility>
 
-#include <cloysterhpc/cloyster.h>
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/models/answerfile.h>
-#include <cloysterhpc/models/cluster.h>
-#include <cloysterhpc/models/headnode.h>
-#include <cloysterhpc/models/pbs.h>
-#include <cloysterhpc/models/slurm.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/options.h>
-#include <cloysterhpc/services/runner.h>
-#include <cloysterhpc/services/xcat.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/opencattus.h>
+#include <opencattus/functions.h>
+#include <opencattus/models/answerfile.h>
+#include <opencattus/models/cluster.h>
+#include <opencattus/models/headnode.h>
+#include <opencattus/models/pbs.h>
+#include <opencattus/models/slurm.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/options.h>
+#include <opencattus/services/runner.h>
+#include <opencattus/services/xcat.h>
+#include <opencattus/utils/singleton.h>
 
 #if __cpp_lib_starts_ends_with < 201711L
 #include <boost/algorithm/string.hpp>
 #endif
 
-using cloyster::services::DryRunner;
-using cloyster::services::IRunner;
-using cloyster::services::Runner;
+using opencattus::services::DryRunner;
+using opencattus::services::IRunner;
+using opencattus::services::Runner;
 
 static constexpr std::unique_ptr<IRunner> makeRunner(const bool option)
 {
@@ -47,7 +47,7 @@ static constexpr std::unique_ptr<IRunner> makeRunner(const bool option)
     }
 }
 
-namespace cloyster::models {
+namespace opencattus::models {
 
 Cluster::Cluster() = default;
 
@@ -117,7 +117,7 @@ Network& Cluster::getNetwork(Network::Profile profile)
 
     throw std::runtime_error(
         fmt::format("Cannot get any network with the profile {}",
-            cloyster::utils::enums::toString(profile)));
+            opencattus::utils::enums::toString(profile)));
 }
 
 #if 0
@@ -227,7 +227,7 @@ void Cluster::setQueueSystem(QueueSystem::Kind kind)
     }
 }
 
-using cloyster::services::Postfix;
+using opencattus::services::Postfix;
 
 std::optional<Postfix>& Cluster::getMailSystem() { return m_mailSystem; }
 
@@ -283,7 +283,7 @@ void Cluster::printNetworks(
 #endif
         LOG_DEBUG("Network [{}]", i++)
         LOG_DEBUG("Profile: {}",
-            cloyster::utils::enums::toString(network->getProfile()))
+            opencattus::utils::enums::toString(network->getProfile()))
         LOG_DEBUG("Address: {}", network->getAddress().to_string())
         LOG_DEBUG("Subnet Mask: {}", network->getSubnetMask().to_string())
         LOG_DEBUG("Gateway: {}", network->getGateway().to_string())
@@ -342,7 +342,7 @@ void Cluster::printData()
 
 void Cluster::fillTestData()
 {
-    setName("Cloyster");
+    setName("OpenCATTUS");
     setFirewall(true);
     setSELinux(SELinuxMode::Disabled);
     setTimezone("America/Sao_Paulo");
@@ -504,7 +504,7 @@ void Cluster::dumpData(const std::filesystem::path& answerfilePath)
 
 void Cluster::fillData(const AnswerFile& answerfil)
 {
-    const auto opts = cloyster::utils::singleton::options();
+    const auto opts = opencattus::utils::singleton::options();
 
     LOG_TRACE("Configure Management Network")
     // Management Network
@@ -564,7 +564,7 @@ void Cluster::fillData(const AnswerFile& answerfil)
     // OS and Information
 
     LOG_INFO("Distro: {}",
-        cloyster::utils::enums::toString(answerfil.system.distro));
+        opencattus::utils::enums::toString(answerfil.system.distro));
     LOG_INFO("Kernel: {}", answerfil.system.kernel.value_or(""));
     LOG_INFO("Version: {}", answerfil.system.version);
 
@@ -603,7 +603,7 @@ void Cluster::fillData(const AnswerFile& answerfil)
                 "anwerfile {} [ofed] section and try again.",
                 opts->answerfile,
                 fmt::join(
-                    cloyster::utils::enums::toStrings<OFED::Kind>(), ", "),
+                    opencattus::utils::enums::toStrings<OFED::Kind>(), ", "),
                 answerfil.ofed.kind));
         }
         setOFED(kind.value(), answerfil.ofed.version.value());
@@ -779,7 +779,7 @@ void Cluster::fillData(const AnswerFile& answerfil)
     } else if (provisioner == "confluent") {
         setProvisioner(Provisioner::Confluent);
     } else {
-        cloyster::functions::abort("Invalid provisioner {}", provisioner);
+        opencattus::functions::abort("Invalid provisioner {}", provisioner);
     }
 
     // FIXME: This should come from /etc/os-release
@@ -932,4 +932,4 @@ void Cluster::fillData(const AnswerFile& answerfil)
     nodeRootPassword = answerfil.nodes.generic->root_password.value();
 }
 
-}; // namespace cloyster::models {
+}; // namespace opencattus::models {

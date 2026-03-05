@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/presenter/PresenterQueueSystem.h>
+#include <opencattus/presenter/PresenterQueueSystem.h>
 
-namespace cloyster::presenter {
+namespace opencattus::presenter {
 
-using cloyster::models::SLURM;
+using opencattus::models::SLURM;
 
 PresenterQueueSystem::PresenterQueueSystem(
     std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)
@@ -15,9 +15,9 @@ PresenterQueueSystem::PresenterQueueSystem(
 {
 
     m_model->setQueueSystem(
-        cloyster::utils::enums::ofStringOpt<QueueSystem::Kind>(
+        opencattus::utils::enums::ofStringOpt<QueueSystem::Kind>(
             m_view->listMenu(Messages::title, Messages::question,
-                cloyster::utils::enums::toStrings<QueueSystem::Kind>(),
+                opencattus::utils::enums::toStrings<QueueSystem::Kind>(),
                 Messages::help))
             .value());
 
@@ -47,16 +47,16 @@ PresenterQueueSystem::PresenterQueueSystem(
             case QueueSystem::Kind::PBS: {
                 const auto& execution = m_view->listMenu(Messages::PBS::title,
                     Messages::PBS::question,
-                    cloyster::utils::enums::toStrings<PBS::ExecutionPlace>(),
+                    opencattus::utils::enums::toStrings<PBS::ExecutionPlace>(),
                     Messages::PBS::help);
 
                 const auto& pbs = dynamic_cast<PBS*>(queue.value().get());
                 pbs->setExecutionPlace(
-                    cloyster::utils::enums::ofStringOpt<PBS::ExecutionPlace>(
+                    opencattus::utils::enums::ofStringOpt<PBS::ExecutionPlace>(
                         execution)
                         .value());
                 LOG_DEBUG("Set PBS Execution Place: {}",
-                    cloyster::utils::enums::toString<PBS::ExecutionPlace>(
+                    opencattus::utils::enums::toString<PBS::ExecutionPlace>(
                         pbs->getExecutionPlace()));
 
                 break;

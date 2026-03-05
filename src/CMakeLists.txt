@@ -12,68 +12,68 @@ include(../cmake/CommonLibraries.cmake)
 
 # Build the presenter on its onw object, to be faster
 # Not wo
-add_library(cloysterhpc_presenter_object OBJECT ${PRESENTER_SOURCE_FILES})
-target_include_directories(cloysterhpc_presenter_object PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
+add_library(opencattus_presenter_object OBJECT ${PRESENTER_SOURCE_FILES})
+target_include_directories(opencattus_presenter_object PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
 target_link_system_libraries(
-        cloysterhpc_presenter_object
+        opencattus_presenter_object
         PRIVATE
         ${COMMON_LIBS})
 
-# Build a library and a ${cloysterhpc_BINARY_NAME} binary that links to the library
-add_library(cloysterhpc_object OBJECT ${SOURCE_FILES})
+# Build a library and a ${opencattus_BINARY_NAME} binary that links to the library
+add_library(opencattus_object OBJECT ${SOURCE_FILES})
 
 # Include glibmm headers as SYSTEM header to avoid warnings
-target_include_directories(cloysterhpc_object SYSTEM PRIVATE ${GLIBMM_INCLUDE_DIRS})
+target_include_directories(opencattus_object SYSTEM PRIVATE ${GLIBMM_INCLUDE_DIRS})
 
-# add_library(cloysterhpc_static STATIC $<TARGET_OBJECTS:cloysterhpc_object>)
-add_library(cloysterhpc_static STATIC $<TARGET_OBJECTS:cloysterhpc_object> $<TARGET_OBJECTS:cloysterhpc_presenter_object>)
-add_executable(${cloysterhpc_BINARY_NAME} main.cpp)
+# add_library(opencattus_static STATIC $<TARGET_OBJECTS:opencattus_object>)
+add_library(opencattus_static STATIC $<TARGET_OBJECTS:opencattus_object> $<TARGET_OBJECTS:opencattus_presenter_object>)
+add_executable(${opencattus_BINARY_NAME} main.cpp)
 
 target_link_libraries(
-        ${cloysterhpc_BINARY_NAME}
+        ${opencattus_BINARY_NAME}
         PRIVATE
-        cloysterhpc_static
-        cloysterhpc::cloysterhpc_options
-        cloysterhpc::cloysterhpc_warnings)
+        opencattus_static
+        opencattus::opencattus_options
+        opencattus::opencattus_warnings)
 
 target_link_system_libraries(
-        ${cloysterhpc_BINARY_NAME}
+        ${opencattus_BINARY_NAME}
         PRIVATE
         ${COMMON_LIBS})
 
 target_link_libraries(
-        cloysterhpc_object
+        opencattus_object
         PRIVATE
-        cloysterhpc::cloysterhpc_options
-        cloysterhpc::cloysterhpc_warnings)
+        opencattus::opencattus_options
+        opencattus::opencattus_warnings)
 
 target_link_system_libraries(
-        cloysterhpc_object
+        opencattus_object
         PRIVATE
         ${COMMON_LIBS})
 
-target_include_directories(cloysterhpc_static PRIVATE
+target_include_directories(opencattus_static PRIVATE
         "${CMAKE_BINARY_DIR}/configured_files/include")
-target_include_directories(cloysterhpc_static ${WARNING_GUARD} PRIVATE
+target_include_directories(opencattus_static ${WARNING_GUARD} PRIVATE
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
 
-target_include_directories(cloysterhpc_object PRIVATE
+target_include_directories(opencattus_object PRIVATE
         "${CMAKE_BINARY_DIR}/configured_files/include")
-target_include_directories(cloysterhpc_object ${WARNING_GUARD} PRIVATE
+target_include_directories(opencattus_object ${WARNING_GUARD} PRIVATE
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
 
-target_include_directories(${cloysterhpc_BINARY_NAME} PRIVATE
+target_include_directories(${opencattus_BINARY_NAME} PRIVATE
         "${CMAKE_BINARY_DIR}/configured_files/include")
-target_include_directories(${cloysterhpc_BINARY_NAME} ${WARNING_GUARD} PRIVATE
+target_include_directories(${opencattus_BINARY_NAME} ${WARNING_GUARD} PRIVATE
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
 
 # Set target locations to the root folder of the project in /bin and /lib.
 # WARNING: This will break multiple target compile, disable it if necessary
 # This is only for convenience
-#set_target_properties(${cloysterhpc_BINARY_NAME}
+#set_target_properties(${opencattus_BINARY_NAME}
 #    PROPERTIES
 #    ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/lib"
 #    LIBRARY_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/lib"

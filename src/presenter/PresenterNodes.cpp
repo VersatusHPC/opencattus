@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/presenter/PresenterNodes.h>
+#include <opencattus/presenter/PresenterNodes.h>
 
-namespace cloyster::presenter {
+namespace opencattus::presenter {
 
 PresenterNodes::PresenterNodes(
     std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)

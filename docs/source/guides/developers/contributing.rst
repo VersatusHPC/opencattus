@@ -1,6 +1,6 @@
 .. _contributing:
 
-Contributing to CloysterHPC
+Contributing to OpenCATTUS
 ===========================
 
 You're very much welcome to contribute with this project.

@@ -30,23 +30,23 @@ cmake --build build
 %install
 echo "INSTALL: $PWD"
 mkdir -p %{buildroot}/usr/bin
-mkdir -p %{buildroot}/opt/cloysterhpc/conf/repos/
-install -m 755 build/src/cloysterhpc %{buildroot}/usr/bin/cloysterhpc
-install -m 644 repos/repos.conf %{buildroot}/opt/cloysterhpc/conf/repos/repos.conf
-install -m 644 repos/alma.conf %{buildroot}/opt/cloysterhpc/conf/repos/alma.conf
-install -m 644 repos/rhel.conf %{buildroot}/opt/cloysterhpc/conf/repos/rhel.conf
-install -m 644 repos/oracle.conf %{buildroot}/opt/cloysterhpc/conf/repos/oracle.conf
-install -m 644 repos/rocky-upstream.conf %{buildroot}/opt/cloysterhpc/conf/repos/rocky-upstream.conf
-install -m 644 repos/rocky-vault.conf %{buildroot}/opt/cloysterhpc/conf/repos/rocky-vault.conf
+mkdir -p %{buildroot}/opt/opencattus/conf/repos/
+install -m 755 build/src/opencattus %{buildroot}/usr/bin/opencattus
+install -m 644 repos/repos.conf %{buildroot}/opt/opencattus/conf/repos/repos.conf
+install -m 644 repos/alma.conf %{buildroot}/opt/opencattus/conf/repos/alma.conf
+install -m 644 repos/rhel.conf %{buildroot}/opt/opencattus/conf/repos/rhel.conf
+install -m 644 repos/oracle.conf %{buildroot}/opt/opencattus/conf/repos/oracle.conf
+install -m 644 repos/rocky-upstream.conf %{buildroot}/opt/opencattus/conf/repos/rocky-upstream.conf
+install -m 644 repos/rocky-vault.conf %{buildroot}/opt/opencattus/conf/repos/rocky-vault.conf
 
 %files
-/usr/bin/cloysterhpc
-/opt/cloysterhpc/conf/repos/repos.conf
-/opt/cloysterhpc/conf/repos/alma.conf
-/opt/cloysterhpc/conf/repos/rhel.conf
-/opt/cloysterhpc/conf/repos/oracle.conf
-/opt/cloysterhpc/conf/repos/rocky-upstream.conf
-/opt/cloysterhpc/conf/repos/rocky-vault.conf
+/usr/bin/opencattus
+/opt/opencattus/conf/repos/repos.conf
+/opt/opencattus/conf/repos/alma.conf
+/opt/opencattus/conf/repos/rhel.conf
+/opt/opencattus/conf/repos/oracle.conf
+/opt/opencattus/conf/repos/rocky-upstream.conf
+/opt/opencattus/conf/repos/rocky-vault.conf
 
 %changelog
 * Thu Sep 16 2025  Daniel Hilst <daniel@versatushpc.com.br> - 1.0-6 - xCAT bugfixes
