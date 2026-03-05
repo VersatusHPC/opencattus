@@ -153,6 +153,19 @@ function(detect_host_profile output_file)
         string(APPEND PROFILE "tools.android:ndk_path=${CMAKE_ANDROID_NDK}\n")
     endif()
 
+    # On EL10+ the Conan libxcrypt recipe fails to build (autotools
+    # --enable-hashes=all incompatible with newer autoconf). Use the
+    # system-provided libxcrypt instead.
+    if(EXISTS "/etc/redhat-release")
+        file(READ "/etc/redhat-release" _EL_RELEASE)
+        string(REGEX MATCH "([0-9]+)\\." _EL_MAJOR_MATCH "${_EL_RELEASE}")
+        if(CMAKE_MATCH_1 AND CMAKE_MATCH_1 GREATER_EQUAL 10)
+            string(APPEND PROFILE "[platform_requires]\n")
+            string(APPEND PROFILE "libxcrypt/4.4.36\n")
+            message(STATUS "CMake-Conan: EL${CMAKE_MATCH_1} detected, using system libxcrypt")
+        endif()
+    endif()
+
     message(STATUS "CMake-Conan: Creating profile ${_FN}")
     file(WRITE ${_FN} ${PROFILE})
     message(STATUS "CMake-Conan: Profile: \n${PROFILE}")
