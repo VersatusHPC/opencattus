@@ -1,5 +1,5 @@
-#ifndef OPENCATTUS_SINGLETON_H_
-#define OPENCATTUS_SINGLETON_H_
+#ifndef OPENCATTUS_UTILS_SINGLETON_H_
+#define OPENCATTUS_UTILS_SINGLETON_H_
 
 #include <opencattus/patterns/singleton.h>
 // WARNING: The getters depend on types defined in these

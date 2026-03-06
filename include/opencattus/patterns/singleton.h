@@ -1,5 +1,5 @@
-#ifndef OPENCATTUS_SINGLETON_H_
-#define OPENCATTUS_SINGLETON_H_
+#ifndef OPENCATTUS_PATTERNS_SINGLETON_H_
+#define OPENCATTUS_PATTERNS_SINGLETON_H_
 
 #include <gsl/gsl-lite.hpp>
 #include <memory>
