@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/presenter/PresenterNodes.h>
+#include <opencattus/presenter/PresenterNodes.h>
 
-namespace cloyster::presenter {
+namespace opencattus::presenter {
 
 PresenterNodes::PresenterNodes(
     std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)
@@ -17,7 +17,8 @@ PresenterNodes::PresenterNodes(
     // Node formation questions
     // TODO: Placeholder data
     auto fields = std::to_array<std::pair<std::string, std::string>>({
-        { Messages::Nodes::prefix, "n" }, { Messages::Nodes::padding, "2" },
+        { Messages::Nodes::prefix, "n" },
+        { Messages::Nodes::padding, "2" },
         { Messages::Nodes::startIP, "" },
         //{Messages::Nodes::rootPassword, ""},
         //{Messages::Nodes::confirmRootPassword, ""},

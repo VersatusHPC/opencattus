@@ -3,7 +3,7 @@
 # https://github.com/lefticus/cppbestpractices/blob/master/02-Use_the_Tools_Available.md
 
 function(
-  cloysterhpc_set_project_warnings
+  opencattus_set_project_warnings
   project_name
   WARNINGS_AS_ERRORS
   MSVC_WARNINGS

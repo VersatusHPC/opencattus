@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/models/queuesystem.h>
-#include <cloysterhpc/services/runner.h>
+#include <opencattus/models/queuesystem.h>
+#include <opencattus/services/runner.h>
 
-namespace cloyster::models {
+namespace opencattus::models {
 QueueSystem::QueueSystem(const Cluster& cluster)
     : m_cluster(cluster)
 {

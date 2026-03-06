@@ -7,16 +7,16 @@
 #include <fstream>
 #include <iostream>
 
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/mailsystem/postfix.h>
-#include <cloysterhpc/services/files.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/runner.h>
+#include <opencattus/functions.h>
+#include <opencattus/mailsystem/postfix.h>
+#include <opencattus/services/files.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/runner.h>
 
-namespace cloyster::services {
+namespace opencattus::services {
 
-using cloyster::services::IRunner;
-using cloyster::services::files::KeyFile;
+using opencattus::services::IRunner;
+using opencattus::services::files::KeyFile;
 
 Postfix::Postfix(Profile profile)
     : IService("postfix.service")
@@ -118,7 +118,7 @@ void Postfix::setKeyFile(const std::optional<std::filesystem::path>& key_file)
 void Postfix::install()
 {
     LOG_INFO("Installing Postfix");
-    cloyster::Singleton<IRunner>::get()->executeCommand(
+    opencattus::Singleton<IRunner>::get()->executeCommand(
         "dnf -y install postfix");
 }
 
@@ -167,7 +167,7 @@ void Postfix::createFiles(const std::filesystem::path& basedir)
 
     KeyFile baseini(mainFile);
     baseini.loadData(
-#include "cloysterhpc/tmpl/postfix/main.cf.tmpl"
+#include "opencattus/tmpl/postfix/main.cf.tmpl"
     );
 
     if (m_hostname) {
@@ -215,12 +215,12 @@ void Postfix::createFiles(const std::filesystem::path& basedir)
 
     if (!std::filesystem::exists(basedir / "transport.db")) {
         auto transport = basedir / "transport";
-        cloyster::Singleton<IRunner>::get()->executeCommand(
+        opencattus::Singleton<IRunner>::get()->executeCommand(
             fmt::format("postmap hash:{}", transport.string()));
     }
 
     if (!std::filesystem::exists(basedir / "aliases")) {
-        cloyster::functions::touchFile(basedir / "aliases");
+        opencattus::functions::touchFile(basedir / "aliases");
     }
 }
 
@@ -255,7 +255,7 @@ void Postfix::configureSASL(const std::filesystem::path& basedir)
         return;
     }
 
-    cloyster::functions::addStringToFile(filename.string(),
+    opencattus::functions::addStringToFile(filename.string(),
         fmt::format("[{}]:{} {}:{}", m_smtp_server.value(), m_port.value(),
             m_username.value(), m_password.value()));
 
@@ -265,7 +265,7 @@ void Postfix::configureSASL(const std::filesystem::path& basedir)
         std::filesystem::perm_options::add);
 
     auto passwordFile = basedir / "sasl_password";
-    cloyster::Singleton<IRunner>::get()->executeCommand(
+    opencattus::Singleton<IRunner>::get()->executeCommand(
         fmt::format("postmap {}", passwordFile.string()));
 
     std::filesystem::permissions(dbFilename,
@@ -288,4 +288,4 @@ void Postfix::configureRelay(const std::filesystem::path& basedir)
     ini.save();
 }
 
-}; // namespace cloyster::services
+}; // namespace opencattus::services

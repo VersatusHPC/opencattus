@@ -3,14 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/models/cluster.h>
-#include <cloysterhpc/models/slurm.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/osservice.h>
 #include <filesystem>
+#include <opencattus/functions.h>
+#include <opencattus/models/cluster.h>
+#include <opencattus/models/slurm.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/osservice.h>
 
-namespace cloyster::models {
+namespace opencattus::models {
 SLURM::SLURM(const Cluster& cluster)
     : QueueSystem(cluster)
 {
@@ -19,18 +19,18 @@ SLURM::SLURM(const Cluster& cluster)
 
 void SLURM::installServer()
 {
-    cloyster::Singleton<const cloyster::services::IOSService>::get()->install(
-        "ohpc-slurm-server");
+    opencattus::Singleton<const opencattus::services::IOSService>::get()
+        ->install("ohpc-slurm-server");
 }
 
 void SLURM::configureServer()
 {
     const std::string configurationFile { "/etc/slurm/slurm.conf" };
-    cloyster::functions::removeFile(configurationFile);
+    opencattus::functions::removeFile(configurationFile);
 
     // Ensure that the directory exists
-    // TODO: This may be made on cloyster::addStringToFile?
-    cloyster::functions::createDirectory("/etc/slurm");
+    // TODO: This may be made on opencattus::addStringToFile?
+    opencattus::functions::createDirectory("/etc/slurm");
 
     std::vector<std::string> nodes;
     nodes.reserve(m_cluster.getNodes().size());
@@ -44,25 +44,25 @@ void SLURM::configureServer()
                 node.getCPU().getThreadsPerCore()));
 
     const auto& conf { fmt::format(
-#include "cloysterhpc/tmpl/slurm.conf.tmpl"
+#include "opencattus/tmpl/slurm.conf.tmpl"
         , fmt::arg("clusterName", m_cluster.getName()),
         fmt::arg("controlMachine", m_cluster.getHeadnode().getFQDN()),
         fmt::arg("partitionName", getDefaultQueue()),
         fmt::arg("nodesDeclaration", fmt::join(nodes, "\n"))) };
 
-    cloyster::functions::addStringToFile(configurationFile, conf);
+    opencattus::functions::addStringToFile(configurationFile, conf);
 }
 
 void SLURM::enableServer()
 {
-    auto osservice = cloyster::Singleton<const services::IOSService>::get();
+    auto osservice = opencattus::Singleton<const services::IOSService>::get();
     osservice->enableService("munge");
     osservice->enableService("slurmctld");
 }
 
 void SLURM::startServer()
 {
-    auto osservice = cloyster::Singleton<const services::IOSService>::get();
+    auto osservice = opencattus::Singleton<const services::IOSService>::get();
     osservice->startService("munge");
     osservice->startService("slurmctld");
 }

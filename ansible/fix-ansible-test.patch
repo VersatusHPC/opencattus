@@ -1,7 +1,7 @@
-diff --git a/ansible/roles/cloyster_setup/provision/rhel9.yml b/ansible/roles/cloyster_setup/provision/rhel9.yml
+diff --git a/ansible/roles/opencattus_setup/provision/rhel9.yml b/ansible/roles/opencattus_setup/provision/rhel9.yml
 index 02ff213..968471d 100644
---- a/ansible/roles/cloyster_setup/provision/rhel9.yml
-+++ b/ansible/roles/cloyster_setup/provision/rhel9.yml
+--- a/ansible/roles/opencattus_setup/provision/rhel9.yml
++++ b/ansible/roles/opencattus_setup/provision/rhel9.yml
 @@ -48,6 +48,12 @@
      - name: Install packages
        ansible.builtin.dnf:
@@ -15,10 +15,10 @@ index 02ff213..968471d 100644
            - libasan8
            - libubsan
          state: present
-diff --git a/ansible/roles/cloyster_setup/tasks/cleanup.yml b/ansible/roles/cloyster_setup/tasks/cleanup.yml
+diff --git a/ansible/roles/opencattus_setup/tasks/cleanup.yml b/ansible/roles/opencattus_setup/tasks/cleanup.yml
 index 87f8fc2..4c38652 100644
---- a/ansible/roles/cloyster_setup/tasks/cleanup.yml
-+++ b/ansible/roles/cloyster_setup/tasks/cleanup.yml
+--- a/ansible/roles/opencattus_setup/tasks/cleanup.yml
++++ b/ansible/roles/opencattus_setup/tasks/cleanup.yml
 @@ -1,6 +1,9 @@
  ---
  - name: Destroy Vagrant machine

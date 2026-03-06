@@ -10,14 +10,14 @@
 #include <glibmm/fileutils.h>
 #include <glibmm/keyfile.h>
 
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/services/files.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/utils/formatters.h>
+#include <opencattus/functions.h>
+#include <opencattus/services/files.h>
+#include <opencattus/services/log.h>
+#include <opencattus/utils/formatters.h>
 
-namespace cloyster::services::files {
+namespace opencattus::services::files {
 
-TEST_SUITE_BEGIN("cloyster::services::files");
+TEST_SUITE_BEGIN("opencattus::services::files");
 
 struct KeyFile::Impl {
     fs::path m_path;
@@ -32,7 +32,7 @@ KeyFile::KeyFile(const fs::path& path)
     : m_impl(std::make_unique<KeyFile::Impl>(Glib::KeyFile(), path))
 {
     m_impl->m_path = path;
-    if (cloyster::functions::exists(path)) {
+    if (opencattus::functions::exists(path)) {
         m_impl->m_keyfile->load_from_file(path);
     }
 }
@@ -300,4 +300,4 @@ TEST_CASE("create/remove/read/write/append")
 
 TEST_SUITE_END();
 
-} // namespace cloyster::services::files
+} // namespace opencattus::services::files

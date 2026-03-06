@@ -1,9 +1,9 @@
-# CloysterHPC
+# OpenCATTUS
 
-CloysterHPC is a software that guides the user to set up
+OpenCATTUS is a software that guides the user to set up
 an [HPC](https://en.wikipedia.org/wiki/High-performance_computing) clustered
 environment. It asks for specific questions regarding the system to get an 
-HPC cluster up and running as quick as possible. That's CloysterHPC.
+HPC cluster up and running as quick as possible. That's OpenCATTUS.
 
 Its goal is to enhance the installation and maintenance experience, making it
 user-friendly, creating an easy-to-use questionnaire built with a familiar
@@ -18,7 +18,7 @@ should be self-explanatory since help information is baked directly into it.
 
 # Architecture
 
-CloysterHPC is written in modern C++ with some C code for compatibility
+OpenCATTUS is written in modern C++ with some C code for compatibility
 with
 [newt](https://pagure.io/newt), that's used as the terminal user interface.
 The software follows the Object-Oriented Paradigm and implements a simplified
@@ -35,7 +35,7 @@ needed.
 
 ## Dependencies
 
-* CloysterHPC requires [boost](https://www.boost.org) C++ libraries.
+* OpenCATTUS requires [boost](https://www.boost.org) C++ libraries.
 * External [fmt](https://fmt.dev/latest/index.html) library is required while
   `std::format` isn't available in major compilers.
 * Logging is available through [spdlog](https://github.com/gabime/spdlog).
@@ -56,7 +56,7 @@ automatic.
 
 ## Decisions
 
-* CloysterHPC uses C++23 as the programming languages. We are not looking
+* OpenCATTUS uses C++23 as the programming languages. We are not looking
   for memory and performance optimization here, we strive for correctness. The
   features that we want are a
   flexible software that can interact with the Operating System without much
@@ -95,7 +95,7 @@ automatic.
   scratch, most evidently: [xCAT](https://xcat.org)
   and [OpenHPC](http://openhpc.community). We also push changes on consumed
   projects to enhance them, so we directly benefit from those changes.
-* CloysterHPC is not made to run inside a container. It needs _bare metal_
+* OpenCATTUS is not made to run inside a container. It needs _bare metal_
   access.
 * Why this isn't written in the __whatever__ language since it's more modern?
   -- _Simply because I tend to write better C++ and C code than other languages,
@@ -106,7 +106,7 @@ automatic.
 
 ## Status
 
-CloysterHPC is alpha quality software. Some features are still missing, but
+OpenCATTUS is alpha quality software. Some features are still missing, but
 they are on the roadmap. Production use should be done with caution and with
 preliminar testing.
 
@@ -157,7 +157,7 @@ To run tests you need to run `ctest` inside the build directory.
 
 # Open Source Apache License
 
-CloysterHPC is made available under
+OpenCATTUS is made available under
 the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0).
 
 # Developers

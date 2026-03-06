@@ -5,9 +5,9 @@
 
 #include <stdexcept>
 
-#include <cloysterhpc/models/cpu.h>
+#include <opencattus/models/cpu.h>
 
-namespace cloyster::models {
+namespace opencattus::models {
 
 CPU::CPU()
     : m_sockets(0)

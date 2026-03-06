@@ -1,5 +1,5 @@
-#include <cloysterhpc/services/ansible/roles/ood.h>
-#include <cloysterhpc/services/log.h>
+#include <opencattus/services/ansible/roles/ood.h>
+#include <opencattus/services/log.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -10,7 +10,7 @@
 
 #include <fmt/core.h>
 
-namespace cloyster::services::ansible::roles::ood {
+namespace opencattus::services::ansible::roles::ood {
 
 void run(const Role& role) { throw std::logic_error("Not implemented"); }
 

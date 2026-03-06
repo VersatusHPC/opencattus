@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/models/headnode.h>
-#include <cloysterhpc/services/log.h>
+#include <opencattus/models/headnode.h>
+#include <opencattus/services/log.h>
 
 #include <algorithm> /* std::remove */
 #include <fstream>
@@ -18,7 +18,7 @@
 #include <boost/algorithm/string/split.hpp>
 #include <string>
 
-namespace cloyster::models {
+namespace opencattus::models {
 
 /* The constructor should discover everything we need from the machine that is
  * running the software. We always consider that the software runs from the
@@ -34,7 +34,7 @@ Headnode::Headnode()
 
 void Headnode::discoverNames()
 {
-    struct utsname system {};
+    struct utsname system { };
     uname(&system);
 
     std::string fqdn = system.nodename;

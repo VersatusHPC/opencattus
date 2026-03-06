@@ -1,11 +1,11 @@
 
-#include <cloysterhpc/models/cluster.h>
-#include <cloysterhpc/patterns/singleton.h>
-#include <cloysterhpc/services/ansible/role.h>
-#include <cloysterhpc/services/ansible/roles/timesync.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/scriptbuilder.h>
 #include <fmt/core.h>
+#include <opencattus/models/cluster.h>
+#include <opencattus/patterns/singleton.h>
+#include <opencattus/services/ansible/role.h>
+#include <opencattus/services/ansible/roles/timesync.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/scriptbuilder.h>
 #include <string_view>
 
 #ifdef BUILD_TESTING
@@ -15,12 +15,12 @@
 #include <doctest/doctest.h>
 #endif
 
-namespace cloyster::services::ansible::roles::timesync {
+namespace opencattus::services::ansible::roles::timesync {
 
 ScriptBuilder installScript(
-    const Role& role, const cloyster::models::OS& osinfo)
+    const Role& role, const opencattus::models::OS& osinfo)
 {
-    using namespace cloyster;
+    using namespace opencattus;
     ScriptBuilder builder(osinfo);
 
     LOG_ASSERT(role.roleName() == "timesync",
@@ -28,7 +28,7 @@ ScriptBuilder installScript(
 
     builder.addPackage("chrony");
 
-    const auto& connections = cloyster::Singleton<models::Cluster>::get()
+    const auto& connections = opencattus::Singleton<models::Cluster>::get()
                                   ->getHeadnode()
                                   .getConnections();
 
@@ -54,4 +54,4 @@ ScriptBuilder installScript(
     return builder;
 }
 
-} // namespace cloyster::services::ansible::roles::timesync
+} // namespace opencattus::services::ansible::roles::timesync

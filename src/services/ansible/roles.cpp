@@ -2,15 +2,15 @@
 #include <fmt/core.h>
 #include <fmt/ranges.h>
 
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/patterns/singleton.h>
-#include <cloysterhpc/services/ansible/roles.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/runner.h>
-#include <cloysterhpc/utils/enums.h>
+#include <opencattus/functions.h>
+#include <opencattus/patterns/singleton.h>
+#include <opencattus/services/ansible/roles.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/runner.h>
+#include <opencattus/utils/enums.h>
 #include <utility>
 
-namespace cloyster::services::ansible::roles {
+namespace opencattus::services::ansible::roles {
 
 // NOTE: I little bit of explanation on why this API is like this:
 //
@@ -112,7 +112,7 @@ RoleRunnable getRunnable(const Role& role, const models::OS& osinfo)
         case Roles::SPACK:
             return wrap(spack::installScript(role, osinfo));
         default:
-            cloyster::functions::abort("Unknown role {}", role.role());
+            opencattus::functions::abort("Unknown role {}", role.role());
     };
 
     std::unreachable();

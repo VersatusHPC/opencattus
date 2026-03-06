@@ -3,7 +3,7 @@ include(cmake/LibFuzzer.cmake)
 include(CMakeDependentOption)
 include(CheckCXXCompilerFlag)
 
-macro(cloysterhpc_supports_sanitizers)
+macro(opencattus_supports_sanitizers)
   if((CMAKE_CXX_COMPILER_ID MATCHES ".*Clang.*" OR CMAKE_CXX_COMPILER_ID MATCHES ".*GNU.*") AND NOT WIN32)
     set(SUPPORTS_UBSAN ON)
   else()
@@ -17,179 +17,179 @@ macro(cloysterhpc_supports_sanitizers)
   endif()
 endmacro()
 
-macro(cloysterhpc_setup_options)
-  option(cloysterhpc_ENABLE_HARDENING "Enable hardening" ON)
-  option(cloysterhpc_ENABLE_COVERAGE "Enable coverage reporting" OFF)
+macro(opencattus_setup_options)
+  option(opencattus_ENABLE_HARDENING "Enable hardening" ON)
+  option(opencattus_ENABLE_COVERAGE "Enable coverage reporting" OFF)
   cmake_dependent_option(
-    cloysterhpc_ENABLE_GLOBAL_HARDENING
+    opencattus_ENABLE_GLOBAL_HARDENING
     "Attempt to push hardening options to built dependencies"
     ON
-    cloysterhpc_ENABLE_HARDENING
+    opencattus_ENABLE_HARDENING
     OFF)
 
-  if(NOT PROJECT_IS_TOP_LEVEL OR cloysterhpc_PACKAGING_MAINTAINER_MODE)
-    option(cloysterhpc_ENABLE_IPO "Enable IPO/LTO" OFF)
-    option(cloysterhpc_WARNINGS_AS_ERRORS "Treat Warnings As Errors" OFF)
-    option(cloysterhpc_ENABLE_USER_LINKER "Enable user-selected linker" OFF)
-    option(cloysterhpc_ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" OFF)
-    option(cloysterhpc_ENABLE_SANITIZER_LEAK "Enable leak sanitizer" OFF)
-    option(cloysterhpc_ENABLE_SANITIZER_UNDEFINED "Enable undefined sanitizer" OFF)
-    option(cloysterhpc_ENABLE_SANITIZER_THREAD "Enable thread sanitizer" OFF)
-    option(cloysterhpc_ENABLE_SANITIZER_MEMORY "Enable memory sanitizer" OFF)
-    option(cloysterhpc_ENABLE_UNITY_BUILD "Enable unity builds" OFF)
-    option(cloysterhpc_ENABLE_CLANG_TIDY "Enable clang-tidy" OFF)
-    option(cloysterhpc_ENABLE_CPPCHECK "Enable cpp-check analysis" OFF)
-    option(cloysterhpc_ENABLE_PCH "Enable precompiled headers" OFF)
-    option(cloysterhpc_ENABLE_CACHE "Enable ccache" OFF)
+  if(NOT PROJECT_IS_TOP_LEVEL OR opencattus_PACKAGING_MAINTAINER_MODE)
+    option(opencattus_ENABLE_IPO "Enable IPO/LTO" OFF)
+    option(opencattus_WARNINGS_AS_ERRORS "Treat Warnings As Errors" OFF)
+    option(opencattus_ENABLE_USER_LINKER "Enable user-selected linker" OFF)
+    option(opencattus_ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" OFF)
+    option(opencattus_ENABLE_SANITIZER_LEAK "Enable leak sanitizer" OFF)
+    option(opencattus_ENABLE_SANITIZER_UNDEFINED "Enable undefined sanitizer" OFF)
+    option(opencattus_ENABLE_SANITIZER_THREAD "Enable thread sanitizer" OFF)
+    option(opencattus_ENABLE_SANITIZER_MEMORY "Enable memory sanitizer" OFF)
+    option(opencattus_ENABLE_UNITY_BUILD "Enable unity builds" OFF)
+    option(opencattus_ENABLE_CLANG_TIDY "Enable clang-tidy" OFF)
+    option(opencattus_ENABLE_CPPCHECK "Enable cpp-check analysis" OFF)
+    option(opencattus_ENABLE_PCH "Enable precompiled headers" OFF)
+    option(opencattus_ENABLE_CACHE "Enable ccache" OFF)
   else()
-    option(cloysterhpc_ENABLE_IPO "Enable IPO/LTO" ON)
-    option(cloysterhpc_WARNINGS_AS_ERRORS "Treat Warnings As Errors" OFF)
-    option(cloysterhpc_ENABLE_USER_LINKER "Enable user-selected linker" OFF)
-    option(cloysterhpc_ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" OFF)
-    option(cloysterhpc_ENABLE_SANITIZER_LEAK "Enable leak sanitizer" OFF)
-    option(cloysterhpc_ENABLE_SANITIZER_UNDEFINED "Enable undefined sanitizer" OFF)
-    option(cloysterhpc_ENABLE_SANITIZER_THREAD "Enable thread sanitizer" OFF)
-    option(cloysterhpc_ENABLE_SANITIZER_MEMORY "Enable memory sanitizer" OFF)
-    option(cloysterhpc_ENABLE_UNITY_BUILD "Enable unity builds" OFF)
-    option(cloysterhpc_ENABLE_CLANG_TIDY "Enable clang-tidy" OFF)
-    option(cloysterhpc_ENABLE_CPPCHECK "Enable cpp-check analysis" ON)
-    option(cloysterhpc_ENABLE_PCH "Enable precompiled headers" OFF)
-    option(cloysterhpc_ENABLE_CACHE "Enable ccache" ON)
+    option(opencattus_ENABLE_IPO "Enable IPO/LTO" ON)
+    option(opencattus_WARNINGS_AS_ERRORS "Treat Warnings As Errors" OFF)
+    option(opencattus_ENABLE_USER_LINKER "Enable user-selected linker" OFF)
+    option(opencattus_ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" OFF)
+    option(opencattus_ENABLE_SANITIZER_LEAK "Enable leak sanitizer" OFF)
+    option(opencattus_ENABLE_SANITIZER_UNDEFINED "Enable undefined sanitizer" OFF)
+    option(opencattus_ENABLE_SANITIZER_THREAD "Enable thread sanitizer" OFF)
+    option(opencattus_ENABLE_SANITIZER_MEMORY "Enable memory sanitizer" OFF)
+    option(opencattus_ENABLE_UNITY_BUILD "Enable unity builds" OFF)
+    option(opencattus_ENABLE_CLANG_TIDY "Enable clang-tidy" OFF)
+    option(opencattus_ENABLE_CPPCHECK "Enable cpp-check analysis" ON)
+    option(opencattus_ENABLE_PCH "Enable precompiled headers" OFF)
+    option(opencattus_ENABLE_CACHE "Enable ccache" ON)
   endif()
 
   if(NOT PROJECT_IS_TOP_LEVEL)
     mark_as_advanced(
-      cloysterhpc_ENABLE_IPO
-      cloysterhpc_WARNINGS_AS_ERRORS
-      cloysterhpc_ENABLE_USER_LINKER
-      cloysterhpc_ENABLE_SANITIZER_ADDRESS
-      cloysterhpc_ENABLE_SANITIZER_LEAK
-      cloysterhpc_ENABLE_SANITIZER_UNDEFINED
-      cloysterhpc_ENABLE_SANITIZER_THREAD
-      cloysterhpc_ENABLE_SANITIZER_MEMORY
-      cloysterhpc_ENABLE_UNITY_BUILD
-      cloysterhpc_ENABLE_CLANG_TIDY
-      cloysterhpc_ENABLE_CPPCHECK
-      cloysterhpc_ENABLE_COVERAGE
-      cloysterhpc_ENABLE_PCH
-      cloysterhpc_ENABLE_CACHE)
+      opencattus_ENABLE_IPO
+      opencattus_WARNINGS_AS_ERRORS
+      opencattus_ENABLE_USER_LINKER
+      opencattus_ENABLE_SANITIZER_ADDRESS
+      opencattus_ENABLE_SANITIZER_LEAK
+      opencattus_ENABLE_SANITIZER_UNDEFINED
+      opencattus_ENABLE_SANITIZER_THREAD
+      opencattus_ENABLE_SANITIZER_MEMORY
+      opencattus_ENABLE_UNITY_BUILD
+      opencattus_ENABLE_CLANG_TIDY
+      opencattus_ENABLE_CPPCHECK
+      opencattus_ENABLE_COVERAGE
+      opencattus_ENABLE_PCH
+      opencattus_ENABLE_CACHE)
   endif()
 
-  cloysterhpc_check_libfuzzer_support(LIBFUZZER_SUPPORTED)
-  if(LIBFUZZER_SUPPORTED AND (cloysterhpc_ENABLE_SANITIZER_ADDRESS OR cloysterhpc_ENABLE_SANITIZER_THREAD OR cloysterhpc_ENABLE_SANITIZER_UNDEFINED))
+  opencattus_check_libfuzzer_support(LIBFUZZER_SUPPORTED)
+  if(LIBFUZZER_SUPPORTED AND (opencattus_ENABLE_SANITIZER_ADDRESS OR opencattus_ENABLE_SANITIZER_THREAD OR opencattus_ENABLE_SANITIZER_UNDEFINED))
     set(DEFAULT_FUZZER ON)
   else()
     set(DEFAULT_FUZZER OFF)
   endif()
 
-  option(cloysterhpc_BUILD_FUZZ_TESTS "Enable fuzz testing executable" ${DEFAULT_FUZZER})
+  option(opencattus_BUILD_FUZZ_TESTS "Enable fuzz testing executable" ${DEFAULT_FUZZER})
 
 endmacro()
 
-macro(cloysterhpc_global_options)
-  if(cloysterhpc_ENABLE_IPO)
+macro(opencattus_global_options)
+  if(opencattus_ENABLE_IPO)
     include(cmake/InterproceduralOptimization.cmake)
-    cloysterhpc_enable_ipo()
+    opencattus_enable_ipo()
   endif()
 
-  if(cloysterhpc_ENABLE_HARDENING AND cloysterhpc_ENABLE_GLOBAL_HARDENING)
+  if(opencattus_ENABLE_HARDENING AND opencattus_ENABLE_GLOBAL_HARDENING)
     include(cmake/Hardening.cmake)
     if(NOT SUPPORTS_UBSAN 
-       OR cloysterhpc_ENABLE_SANITIZER_UNDEFINED
-       OR cloysterhpc_ENABLE_SANITIZER_ADDRESS
-       OR cloysterhpc_ENABLE_SANITIZER_THREAD
-       OR cloysterhpc_ENABLE_SANITIZER_LEAK)
+       OR opencattus_ENABLE_SANITIZER_UNDEFINED
+       OR opencattus_ENABLE_SANITIZER_ADDRESS
+       OR opencattus_ENABLE_SANITIZER_THREAD
+       OR opencattus_ENABLE_SANITIZER_LEAK)
       set(ENABLE_UBSAN_MINIMAL_RUNTIME FALSE)
     else()
       set(ENABLE_UBSAN_MINIMAL_RUNTIME TRUE)
     endif()
-    message("${cloysterhpc_ENABLE_HARDENING} ${ENABLE_UBSAN_MINIMAL_RUNTIME} ${cloysterhpc_ENABLE_SANITIZER_UNDEFINED}")
-    cloysterhpc_enable_hardening(cloysterhpc_options ON ${ENABLE_UBSAN_MINIMAL_RUNTIME})
+    message("${opencattus_ENABLE_HARDENING} ${ENABLE_UBSAN_MINIMAL_RUNTIME} ${opencattus_ENABLE_SANITIZER_UNDEFINED}")
+    opencattus_enable_hardening(opencattus_options ON ${ENABLE_UBSAN_MINIMAL_RUNTIME})
   endif()
 endmacro()
 
-macro(cloysterhpc_local_options)
+macro(opencattus_local_options)
   if(PROJECT_IS_TOP_LEVEL)
     include(cmake/StandardProjectSettings.cmake)
   endif()
 
-  add_library(cloysterhpc_warnings INTERFACE)
-  add_library(cloysterhpc_options INTERFACE)
+  add_library(opencattus_warnings INTERFACE)
+  add_library(opencattus_options INTERFACE)
 
   include(cmake/CompilerWarnings.cmake)
-  cloysterhpc_set_project_warnings(
-    cloysterhpc_warnings
-    ${cloysterhpc_WARNINGS_AS_ERRORS}
+  opencattus_set_project_warnings(
+    opencattus_warnings
+    ${opencattus_WARNINGS_AS_ERRORS}
     ""
     ""
     ""
     "")
 
-  if(cloysterhpc_ENABLE_USER_LINKER)
+  if(opencattus_ENABLE_USER_LINKER)
     include(cmake/Linker.cmake)
-    configure_linker(cloysterhpc_options)
+    configure_linker(opencattus_options)
   endif()
 
   include(cmake/Sanitizers.cmake)
-  cloysterhpc_enable_sanitizers(
-    cloysterhpc_options
-    ${cloysterhpc_ENABLE_SANITIZER_ADDRESS}
-    ${cloysterhpc_ENABLE_SANITIZER_LEAK}
-    ${cloysterhpc_ENABLE_SANITIZER_UNDEFINED}
-    ${cloysterhpc_ENABLE_SANITIZER_THREAD}
-    ${cloysterhpc_ENABLE_SANITIZER_MEMORY})
+  opencattus_enable_sanitizers(
+    opencattus_options
+    ${opencattus_ENABLE_SANITIZER_ADDRESS}
+    ${opencattus_ENABLE_SANITIZER_LEAK}
+    ${opencattus_ENABLE_SANITIZER_UNDEFINED}
+    ${opencattus_ENABLE_SANITIZER_THREAD}
+    ${opencattus_ENABLE_SANITIZER_MEMORY})
 
-  set_target_properties(cloysterhpc_options PROPERTIES UNITY_BUILD ${cloysterhpc_ENABLE_UNITY_BUILD})
+  set_target_properties(opencattus_options PROPERTIES UNITY_BUILD ${opencattus_ENABLE_UNITY_BUILD})
 
-  if(cloysterhpc_ENABLE_PCH)
+  if(opencattus_ENABLE_PCH)
     target_precompile_headers(
-      cloysterhpc_options
+      opencattus_options
       INTERFACE
       <vector>
       <string>
       <utility>)
   endif()
 
-  if(cloysterhpc_ENABLE_CACHE)
+  if(opencattus_ENABLE_CACHE)
     include(cmake/Cache.cmake)
-    cloysterhpc_enable_cache()
+    opencattus_enable_cache()
   endif()
 
   include(cmake/StaticAnalyzers.cmake)
-  if(cloysterhpc_ENABLE_CLANG_TIDY)
-    cloysterhpc_enable_clang_tidy(cloysterhpc_options ${cloysterhpc_WARNINGS_AS_ERRORS})
+  if(opencattus_ENABLE_CLANG_TIDY)
+    opencattus_enable_clang_tidy(opencattus_options ${opencattus_WARNINGS_AS_ERRORS})
   endif()
 
-  if(cloysterhpc_ENABLE_CPPCHECK)
-    cloysterhpc_enable_cppcheck(${cloysterhpc_WARNINGS_AS_ERRORS} "" # override cppcheck options
+  if(opencattus_ENABLE_CPPCHECK)
+    opencattus_enable_cppcheck(${opencattus_WARNINGS_AS_ERRORS} "" # override cppcheck options
     )
   endif()
 
-  if(cloysterhpc_ENABLE_COVERAGE)
+  if(opencattus_ENABLE_COVERAGE)
     include(cmake/Tests.cmake)
-    cloysterhpc_enable_coverage(cloysterhpc_options)
+    opencattus_enable_coverage(opencattus_options)
   endif()
 
-  if(cloysterhpc_WARNINGS_AS_ERRORS)
+  if(opencattus_WARNINGS_AS_ERRORS)
     check_cxx_compiler_flag("-Wl,--fatal-warnings" LINKER_FATAL_WARNINGS)
     if(LINKER_FATAL_WARNINGS)
       # This is not working consistently, so disabling for now
-      # target_link_options(cloysterhpc_options INTERFACE -Wl,--fatal-warnings)
+      # target_link_options(opencattus_options INTERFACE -Wl,--fatal-warnings)
     endif()
   endif()
 
-  if(cloysterhpc_ENABLE_HARDENING AND NOT cloysterhpc_ENABLE_GLOBAL_HARDENING)
+  if(opencattus_ENABLE_HARDENING AND NOT opencattus_ENABLE_GLOBAL_HARDENING)
     include(cmake/Hardening.cmake)
     if(NOT SUPPORTS_UBSAN 
-       OR cloysterhpc_ENABLE_SANITIZER_UNDEFINED
-       OR cloysterhpc_ENABLE_SANITIZER_ADDRESS
-       OR cloysterhpc_ENABLE_SANITIZER_THREAD
-       OR cloysterhpc_ENABLE_SANITIZER_LEAK)
+       OR opencattus_ENABLE_SANITIZER_UNDEFINED
+       OR opencattus_ENABLE_SANITIZER_ADDRESS
+       OR opencattus_ENABLE_SANITIZER_THREAD
+       OR opencattus_ENABLE_SANITIZER_LEAK)
       set(ENABLE_UBSAN_MINIMAL_RUNTIME FALSE)
     else()
       set(ENABLE_UBSAN_MINIMAL_RUNTIME TRUE)
     endif()
-    cloysterhpc_enable_hardening(cloysterhpc_options OFF ${ENABLE_UBSAN_MINIMAL_RUNTIME})
+    opencattus_enable_hardening(opencattus_options OFF ${ENABLE_UBSAN_MINIMAL_RUNTIME})
   endif()
 
 endmacro()

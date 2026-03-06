@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/presenter/PresenterInfiniband.h>
+#include <opencattus/presenter/PresenterInfiniband.h>
 
 #include <algorithm>
 
-namespace cloyster::presenter {
+namespace opencattus::presenter {
 
 PresenterInfiniband::PresenterInfiniband(std::unique_ptr<Cluster>& model,
     std::unique_ptr<Newt>& view, NetworkCreator& nc)
@@ -26,13 +26,13 @@ PresenterInfiniband::PresenterInfiniband(std::unique_ptr<Cluster>& model,
             Messages::title, Messages::question, Messages::help)) {
 
         // @FIXME: Prompt for the version
-        m_model->setOFED(cloyster::utils::enums::ofStringOpt<OFED::Kind>(
+        m_model->setOFED(opencattus::utils::enums::ofStringOpt<OFED::Kind>(
             m_view->listMenu(Messages::title, Messages::OFED::question,
-                cloyster::utils::enums::toStrings<OFED::Kind>(),
+                opencattus::utils::enums::toStrings<OFED::Kind>(),
                 Messages::OFED::help))
                 .value());
         LOG_DEBUG("Set OFED stack as: {}",
-            cloyster::utils::enums::toString<OFED::Kind>(
+            opencattus::utils::enums::toString<OFED::Kind>(
                 m_model->getOFED()->getKind()));
 
         try {
@@ -40,7 +40,8 @@ PresenterInfiniband::PresenterInfiniband(std::unique_ptr<Cluster>& model,
                 nc, Network::Profile::Application, Network::Type::Infiniband);
         } catch (const std::exception& ex) {
             LOG_ERROR("Failed to add {} network: {}",
-                cloyster::utils::enums::toString(Network::Profile::Application),
+                opencattus::utils::enums::toString(
+                    Network::Profile::Application),
                 ex.what());
         }
     }

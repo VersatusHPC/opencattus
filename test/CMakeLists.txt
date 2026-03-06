@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 3.26.5)
 
-project(CloysterHPC-tests LANGUAGES CXX)
+project(OpenCATTUS-tests LANGUAGES CXX)
 
 # ---- Test as standalone project the exported config package ----
 if (PROJECT_IS_TOP_LEVEL OR TEST_INSTALLED_VERSION)
     enable_testing()
 
-    find_package(cloysterhpc CONFIG REQUIRED) # for intro, project_options, ...
+    find_package(opencattus CONFIG REQUIRED) # for intro, project_options, ...
 
-    if (NOT TARGET cloysterhpc_options)
+    if (NOT TARGET opencattus_options)
         message(FATAL_ERROR "Required config package not found!")
         return() # be strictly paranoid for Template Janitor github action! CK
     endif ()
@@ -32,20 +32,20 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../src/*
 list(REMOVE_ITEM SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../src/main.cpp)
 message(STATUS "Source files found are: ${SOURCES}")
 
-add_library(cloysterhpc_test_object OBJECT ${TEST_SOURCES} ${SOURCES})
+add_library(opencattus_test_object OBJECT ${TEST_SOURCES} ${SOURCES})
 add_executable(${PROJECT_NAME} main.cpp)
 
 # Enable BUILD_TESTING macro to compile the test shipped on the source files
-target_compile_definitions(cloysterhpc_test_object PRIVATE BUILD_TESTING=1)
+target_compile_definitions(opencattus_test_object PRIVATE BUILD_TESTING=1)
 
 include(../cmake/CommonLibraries.cmake)
 
 target_link_libraries(
         ${PROJECT_NAME}
         PRIVATE
-        cloysterhpc_test_object
-        cloysterhpc::cloysterhpc_warnings
-        cloysterhpc::cloysterhpc_options)
+        opencattus_test_object
+        opencattus::opencattus_warnings
+        opencattus::opencattus_options)
 
 target_link_system_libraries(
         ${PROJECT_NAME}
@@ -53,26 +53,26 @@ target_link_system_libraries(
         ${COMMON_LIBS})
 
 # Include glibmm headers as SYSTEM header to avoid warnings
-target_include_directories(cloysterhpc_test_object SYSTEM PRIVATE ${GLIBMM_INCLUDE_DIRS})
+target_include_directories(opencattus_test_object SYSTEM PRIVATE ${GLIBMM_INCLUDE_DIRS})
 
 target_include_directories(${PROJECT_NAME} ${WARNING_GUARD} PRIVATE
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/../include>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/../include>)
 
 target_link_libraries(
-        cloysterhpc_test_object
+        opencattus_test_object
         PRIVATE
-        cloysterhpc::cloysterhpc_options
-        cloysterhpc::cloysterhpc_warnings)
+        opencattus::opencattus_options
+        opencattus::opencattus_warnings)
 
 target_link_system_libraries(
-        cloysterhpc_test_object
+        opencattus_test_object
         PRIVATE
         ${COMMON_LIBS})
 
-target_include_directories(cloysterhpc_test_object PRIVATE
+target_include_directories(opencattus_test_object PRIVATE
         "${CMAKE_BINARY_DIR}/../configured_files/include")
-target_include_directories(cloysterhpc_test_object ${WARNING_GUARD} PRIVATE
+target_include_directories(opencattus_test_object ${WARNING_GUARD} PRIVATE
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/../include>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/../include>)
 
@@ -92,7 +92,7 @@ endif ()
 # testing frameworks add the tests target instead: add_test(NAME ${PROJECT_NAME} COMMAND
 # ${PROJECT_NAME})
 
-# if (cloysterhpc_ENABLE_CONAN)
+# if (opencattus_ENABLE_CONAN)
 #     string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LOWER)
 #     string(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_UPPER)
 #     string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" CMAKE_SYSTEM_PROCESSOR_LOWER)

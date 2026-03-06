@@ -1,0 +1,106 @@
+# Example repofile model to use with OpenCATTUS.
+
+[opencattus-OL-BaseOS]
+name=Oracle Linux 8 BaseOS Latest ($basearch)
+baseurl=https://yum$ociregion.oracle.com/repo/OracleLinux/OL9/baseos/latest/$basearch/
+enabled=0
+gpgcheck=1
+gpgkey=https://yum.oracle.com/RPM-GPG-KEY-oracle-ol9
+
+[opencattus-Rocky-BaseOS]
+name=Rocky Linux $releasever - BaseOS
+baseurl=http://dl.rockylinux.org/$contentdir/$releasever/BaseOS/$basearch/os/
+enabled=0
+gpgcheck=1
+gpgkey=https://mirror.versatushpc.com.br/rocky/linux/RPM-GPG-KEY-Rocky-9
+
+[opencattus-AlmaLinux-BaseOS]
+name=AlmaLinux $releasever - BaseOS
+baseurl=https://repo.almalinux.org/almalinux/$releasever/BaseOS/$basearch/os/
+enabled=0
+gpgcheck=1
+gpgkey=https://mirror.versatushpc.com.br/almalinux/almalinux/RPM-GPG-KEY-AlmaLinux-9
+
+[opencattus-beegfs]
+name=BeeGFS
+baseurl=https://mirror.versatushpc.com.br/beegfs/beegfs_7.4.2/dists/rhel9/
+enabled=1
+gpgcheck=1
+gpgkey=https://mirror.versatushpc.com.br/beegfs/beegfs_7.4.2/gpg/GPG-KEY-beegfs
+
+[opencattus-grafana]
+name=grafana
+baseurl=https://mirror.versatushpc.com.br/grafana/
+enabled=1
+gpgcheck=1
+gpgkey=https://rpm.grafana.com/gpg.key
+
+[opencattus-influxdata]
+name=InfluxData Repository - Stable
+baseurl=https://mirror.versatushpc.com.br/influxdata/
+enabled=1
+gpgcheck=1
+gpgkey=https://repos.influxdata.com/influxdata-archive_compat.key
+
+[opencattus-oneAPI]
+name=Intel oneAPI repository
+baseurl=https://mirror.versatushpc.com.br/oneAPI/
+enabled=1
+gpgcheck=1
+gpgkey=https://yum.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS-2019.PUB
+
+[opencattus-zabbix]
+name=zabbix
+baseurl=https://mirror.versatushpc.com.br/zabbix/zabbix/6.5/rhel/9/x86_64/
+enabled=1
+gpgcheck=1
+gpgkey=https://mirror.versatushpc.com.br/zabbix/RPM-GPG-KEY-ZABBIX
+
+[opencattus-elrepo]
+name=elrepo
+baseurl=https://mirror.versatushpc.com.br/elrepo/elrepo/el9/x86_64/
+enabled=1
+gpgcheck=1
+gpgkey=https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
+
+[opencattus-rpmfusion-free-updates]
+name=rpmfusion-free-updates
+baseurl=https://mirror.versatushpc.com.br/rpmfusion/free/el/updates/9/x86_64/
+enabled=1
+gpgcheck=1
+gpgkey=https://mirror.versatushpc.com.br/rpmfusion/free/el/RPM-GPG-KEY-rpmfusion-free-el-9
+
+[opencattus-epel]
+name=Extra Packages for Enterprise Linux 9 - $basearch
+baseurl=https://mirror.versatushpc.com.br/epel/9/Everything/x86_64/
+enabled=1
+gpgcheck=1
+gpgkey=https://mirror.versatushpc.com.br/epel/RPM-GPG-KEY-EPEL-9
+
+[opencattus-epel-debuginfo]
+name=Extra Packages for Enterprise Linux 9 - $basearch - Debug
+baseurl=https://mirror.versatushpc.com.br/epel/9/Everything/x86_64/debug/
+enabled=1
+gpgcheck=1
+gpgkey=https://mirror.versatushpc.com.br/epel/RPM-GPG-KEY-EPEL-9
+
+[opencattus-epel-source]
+name=Extra Packages for Enterprise Linux 9 - $basearch - Source
+baseurl=https://mirror.versatushpc.com.br/epel/9/Everything/source/tree/
+enabled=1
+gpgcheck=1
+gpgkey=https://mirror.versatushpc.com.br/epel/RPM-GPG-KEY-EPEL-9
+
+[opencattus-openhpc]
+name=OpenHPC
+baseurl=https://mirror.versatushpc.com.br/openhpc/3/EL_9/
+enabled=1
+gpgcheck=1
+gpgkey=https://obs.openhpc.community/projects/OpenHPC3/public_key
+
+[opencattus-openhpc-updates]
+name=OpenHPC Updates
+baseurl=https://mirror.versatushpc.com.br/openhpc/3/updates/EL_9/
+enabled=1
+gpgcheck=1
+gpgkey=https://obs.openhpc.community/projects/OpenHPC3/public_key

@@ -3,22 +3,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/presenter/PresenterGeneralSettings.h>
-#include <cloysterhpc/presenter/PresenterHostId.h>
-#include <cloysterhpc/presenter/PresenterInfiniband.h>
-#include <cloysterhpc/presenter/PresenterInstall.h>
-#include <cloysterhpc/presenter/PresenterInstructions.h>
-#include <cloysterhpc/presenter/PresenterLocale.h>
-#include <cloysterhpc/presenter/PresenterMailSystem.h>
-#include <cloysterhpc/presenter/PresenterNetwork.h>
-#include <cloysterhpc/presenter/PresenterNodes.h>
-#include <cloysterhpc/presenter/PresenterNodesOperationalSystem.h>
-#include <cloysterhpc/presenter/PresenterQueueSystem.h>
-#include <cloysterhpc/presenter/PresenterRepository.h>
-#include <cloysterhpc/presenter/PresenterTime.h>
-#include <cloysterhpc/presenter/PresenterWelcome.h>
+#include <opencattus/presenter/PresenterGeneralSettings.h>
+#include <opencattus/presenter/PresenterHostId.h>
+#include <opencattus/presenter/PresenterInfiniband.h>
+#include <opencattus/presenter/PresenterInstall.h>
+#include <opencattus/presenter/PresenterInstructions.h>
+#include <opencattus/presenter/PresenterLocale.h>
+#include <opencattus/presenter/PresenterMailSystem.h>
+#include <opencattus/presenter/PresenterNetwork.h>
+#include <opencattus/presenter/PresenterNodes.h>
+#include <opencattus/presenter/PresenterNodesOperationalSystem.h>
+#include <opencattus/presenter/PresenterQueueSystem.h>
+#include <opencattus/presenter/PresenterRepository.h>
+#include <opencattus/presenter/PresenterTime.h>
+#include <opencattus/presenter/PresenterWelcome.h>
 
-namespace cloyster::presenter {
+namespace opencattus::presenter {
 PresenterInstall::PresenterInstall(
     std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)
     : Presenter(model, view)
@@ -57,7 +57,7 @@ PresenterInstall::PresenterInstall(
         Call<PresenterNetwork>(nc, Network::Profile::External);
     } catch (const std::exception& ex) {
         LOG_ERROR("Failed to add {} network: {}",
-            cloyster::utils::enums::toString(Network::Profile::External),
+            opencattus::utils::enums::toString(Network::Profile::External),
             ex.what());
     }
 
@@ -65,7 +65,7 @@ PresenterInstall::PresenterInstall(
         Call<PresenterNetwork>(nc, Network::Profile::Management);
     } catch (const std::exception& ex) {
         LOG_ERROR("Failed to add {} network: {}",
-            cloyster::utils::enums::toString(Network::Profile::Management),
+            opencattus::utils::enums::toString(Network::Profile::Management),
             ex.what());
     }
 

@@ -4,19 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/services/ansible/roles.h>
-#include <cloysterhpc/services/ansible/roles/aide.h>
-#include <cloysterhpc/services/ansible/roles/audit.h>
-#include <cloysterhpc/services/ansible/roles/fail2ban.h>
-#include <cloysterhpc/services/ansible/roles/spack.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/options.h>
-#include <cloysterhpc/services/osservice.h>
-#include <cloysterhpc/services/repos.h>
-#include <cloysterhpc/services/runner.h>
-#include <cloysterhpc/services/shell.h>
-#include <cloysterhpc/services/xcat.h>
+#include <opencattus/functions.h>
+#include <opencattus/services/ansible/roles.h>
+#include <opencattus/services/ansible/roles/aide.h>
+#include <opencattus/services/ansible/roles/audit.h>
+#include <opencattus/services/ansible/roles/fail2ban.h>
+#include <opencattus/services/ansible/roles/spack.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/options.h>
+#include <opencattus/services/osservice.h>
+#include <opencattus/services/repos.h>
+#include <opencattus/services/runner.h>
+#include <opencattus/services/shell.h>
+#include <opencattus/services/xcat.h>
 
 #include <boost/process.hpp>
 #include <boost/property_tree/ini_parser.hpp>
@@ -24,22 +24,22 @@
 #include <fmt/format.h>
 #include <memory>
 
-#include <cloysterhpc/NFS.h>
-#include <cloysterhpc/models/cluster.h>
-#include <cloysterhpc/models/pbs.h>
-#include <cloysterhpc/models/queuesystem.h>
-#include <cloysterhpc/models/slurm.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/NFS.h>
+#include <opencattus/models/cluster.h>
+#include <opencattus/models/pbs.h>
+#include <opencattus/models/queuesystem.h>
+#include <opencattus/models/slurm.h>
+#include <opencattus/utils/singleton.h>
 
-#include <cloysterhpc/dbus_client.h>
+#include <opencattus/dbus_client.h>
 #include <ranges>
 
-using cloyster::models::Cluster;
-using cloyster::models::OS;
-using cloyster::services::IOSService;
-using cloyster::services::IRunner;
+using opencattus::models::Cluster;
+using opencattus::models::OS;
+using opencattus::services::IOSService;
+using opencattus::services::IRunner;
 
-namespace cloyster::services {
+namespace opencattus::services {
 
 Shell::Shell()
 {

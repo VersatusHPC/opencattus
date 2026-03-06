@@ -1,12 +1,12 @@
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/services/osservice.h>
-#include <cloysterhpc/utils/string.h>
+#include <opencattus/functions.h>
+#include <opencattus/services/osservice.h>
+#include <opencattus/utils/string.h>
 #include <stdexcept>
 
-namespace cloyster::services {
-using cloyster::Singleton;
-using cloyster::functions::makeUniqueDerived;
-using cloyster::services::IOSService;
+namespace opencattus::services {
+using opencattus::Singleton;
+using opencattus::functions::makeUniqueDerived;
+using opencattus::services::IOSService;
 
 class ELOSService final : public IOSService {
     OS m_osinfo;
@@ -41,60 +41,60 @@ public:
 
     [[nodiscard]] std::vector<std::string> getAvailableLocales() const override
     {
-        auto runner = cloyster::Singleton<IRunner>::get();
+        auto runner = opencattus::Singleton<IRunner>::get();
         return runner->checkOutput("locale -a");
     }
 
     [[nodiscard]] bool install(std::string_view package) const override
     {
-        return (cloyster::Singleton<IRunner>::get()->executeCommand(
+        return (opencattus::Singleton<IRunner>::get()->executeCommand(
                     fmt::format("dnf -y install {}", package))
             != 0);
     }
 
     [[nodiscard]] bool reinstall(std::string_view package) const override
     {
-        return (cloyster::Singleton<IRunner>::get()->executeCommand(
+        return (opencattus::Singleton<IRunner>::get()->executeCommand(
                     fmt::format("dnf -y reinstall {}", package))
             != 0);
     }
 
     [[nodiscard]] bool groupInstall(std::string_view package) const override
     {
-        return (cloyster::Singleton<IRunner>::get()->executeCommand(
+        return (opencattus::Singleton<IRunner>::get()->executeCommand(
                     fmt::format("dnf -y groupinstall \"{}\"", package))
             != 0);
     }
 
     [[nodiscard]] bool remove(std::string_view package) const override
     {
-        return (cloyster::Singleton<IRunner>::get()->executeCommand(
+        return (opencattus::Singleton<IRunner>::get()->executeCommand(
                     fmt::format("dnf -y remove {}", package))
             != 0);
     }
 
     [[nodiscard]] bool update(std::string_view package) const override
     {
-        return (cloyster::Singleton<IRunner>::get()->executeCommand(
+        return (opencattus::Singleton<IRunner>::get()->executeCommand(
                     fmt::format("dnf -y update {}", package))
             != 0);
     }
 
     [[nodiscard]] bool update() const override
     {
-        return (
-            cloyster::Singleton<IRunner>::get()->executeCommand("dnf -y update")
+        return (opencattus::Singleton<IRunner>::get()->executeCommand(
+                    "dnf -y update")
             != 0);
     }
 
     void check() const override
     {
-        cloyster::Singleton<IRunner>::get()->executeCommand("dnf check");
+        opencattus::Singleton<IRunner>::get()->executeCommand("dnf check");
     }
 
     void pinOSVersion() const override
     {
-        const auto runner = cloyster::Singleton<IRunner>::get();
+        const auto runner = opencattus::Singleton<IRunner>::get();
         switch (m_osinfo.getDistro()) {
             // Rocky Linux is pinned by using Vault, this is done
             // during the repository generation
@@ -116,7 +116,7 @@ public:
 
     void clean() const override
     {
-        cloyster::Singleton<IRunner>::get()->executeCommand("dnf clean all");
+        opencattus::Singleton<IRunner>::get()->executeCommand("dnf clean all");
     }
 
     [[nodiscard]] std::vector<std::string> repolist() const override
@@ -181,7 +181,7 @@ bool RockyLinux::shouldUseVault(const OS& osinfo)
     }
     const auto lastVersion = osinfo.getVersion();
     LOG_INFO("Checking if Rocky {} should use vault", lastVersion);
-    auto output = cloyster::functions::getHttpStatus(
+    auto output = opencattus::functions::getHttpStatus(
         fmt::format("https://dl.rockylinux.org/vault/rocky/{}/BaseOS/x86_64/os/"
                     "repodata/repomd.xml",
             lastVersion));
@@ -192,4 +192,4 @@ bool RockyLinux::shouldUseVault(const OS& osinfo)
     return should;
 }
 
-}; // namespace cloyster::services {
+}; // namespace opencattus::services {

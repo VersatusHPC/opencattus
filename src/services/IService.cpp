@@ -1,9 +1,9 @@
-#include <cloysterhpc/cloyster.h>
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/services/IService.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/options.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/functions.h>
+#include <opencattus/opencattus.h>
+#include <opencattus/services/IService.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/options.h>
+#include <opencattus/utils/singleton.h>
 
 /* BUG: Refactor:
  * Legacy casting.
@@ -14,7 +14,7 @@
  * Warnings during compilation.
  */
 
-namespace cloyster::services {
+namespace opencattus::services {
 
 using EnableRType
     = std::vector<sdbus::Struct<std::string, std::string, std::string>>;
@@ -31,7 +31,7 @@ bool IService::handleException(const sdbus::Error& e, const std::string_view fn)
 
 void IService::enable()
 {
-    const auto opts = cloyster::utils::singleton::options();
+    const auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would have enabled the service {}", m_name)
         return;
@@ -54,7 +54,7 @@ void IService::enable()
 
 void IService::disable()
 {
-    const auto opts = cloyster::utils::singleton::options();
+    const auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would have disabled the service {}", m_name)
         return;
@@ -75,7 +75,7 @@ void IService::disable()
 
 void IService::start()
 {
-    const auto opts = cloyster::utils::singleton::options();
+    const auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would have started the service {}", m_name)
         return;
@@ -87,7 +87,7 @@ void IService::start()
 
 void IService::restart()
 {
-    const auto opts = cloyster::utils::singleton::options();
+    const auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would have restarted the service {}", m_name)
         return;
@@ -99,7 +99,7 @@ void IService::restart()
 
 void IService::stop()
 {
-    const auto opts = cloyster::utils::singleton::options();
+    const auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would have stopped the service {}", m_name)
         return;
@@ -109,4 +109,4 @@ void IService::stop()
     callObjectFunction("StopUnit", "replace");
 }
 
-}; // namespace cloyster::services
+}; // namespace opencattus::services

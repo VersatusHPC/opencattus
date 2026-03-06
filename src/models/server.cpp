@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/models/server.h>
-#include <cloysterhpc/services/log.h>
+#include <opencattus/functions.h>
+#include <opencattus/models/server.h>
+#include <opencattus/services/log.h>
 #include <regex>
 #include <string_view>
 
-namespace cloyster::models {
+namespace opencattus::models {
 Server::Server(std::string_view hostname, OS& os, CPU& cpu,
     std::list<Connection>&& connections, std::optional<BMC> bmc)
     : m_os(os)
@@ -121,7 +121,7 @@ const Connection& Server::getConnection(Network::Profile profile) const
 
     throw std::runtime_error(
         fmt::format("Cannot get any connection with profile {}",
-            cloyster::utils::enums::toString(profile)));
+            opencattus::utils::enums::toString(profile)));
 }
 
 void Server::setConnection(const std::list<Connection>& connection)
@@ -137,4 +137,4 @@ const CPU& Server::getCPU() const noexcept { return m_cpu; }
 
 void Server::setCPU(const CPU& cpu) { m_cpu = cpu; }
 
-} // namespace cloyster::models {
+} // namespace opencattus::models {

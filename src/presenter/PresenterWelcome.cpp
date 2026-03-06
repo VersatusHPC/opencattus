@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/presenter/PresenterWelcome.h>
+#include <opencattus/presenter/PresenterWelcome.h>
 
-namespace cloyster::presenter {
+namespace opencattus::presenter {
 
 PresenterWelcome::PresenterWelcome(
     std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)

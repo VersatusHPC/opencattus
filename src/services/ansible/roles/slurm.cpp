@@ -1,8 +1,8 @@
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/services/ansible/roles/slurm.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/runner.h>
-#include <cloysterhpc/utils/optional.h>
+#include <opencattus/functions.h>
+#include <opencattus/services/ansible/roles/slurm.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/runner.h>
+#include <opencattus/utils/optional.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -13,14 +13,14 @@
 
 #include <fmt/core.h>
 
-namespace cloyster::services::ansible::roles::slurm {
+namespace opencattus::services::ansible::roles::slurm {
 
 void run(const Role& role)
 {
-    using namespace cloyster::utils::singleton;
-    namespace optional = cloyster::utils::optional;
+    using namespace opencattus::utils::singleton;
+    namespace optional = opencattus::utils::optional;
     const auto nodesNames = answerfile()->nodes.nodesNames();
-    cloyster::functions::abortif(nodesNames.size() < 1,
+    opencattus::functions::abortif(nodesNames.size() < 1,
         "At last one node need to be defined in the answerfile {}",
         answerfile()->path());
     const auto nodesConfig = optional::unwrap(answerfile()->nodes.generic,

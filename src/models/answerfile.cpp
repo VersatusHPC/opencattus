@@ -13,16 +13,16 @@
 #include <boost/algorithm/string/split.hpp>
 #include <boost/lexical_cast.hpp>
 
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/models/answerfile.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/options.h>
-#include <cloysterhpc/services/osservice.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/functions.h>
+#include <opencattus/models/answerfile.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/options.h>
+#include <opencattus/services/osservice.h>
+#include <opencattus/utils/singleton.h>
 
-using cloyster::services::Postfix;
+using opencattus::services::Postfix;
 
-namespace cloyster::models {
+namespace opencattus::models {
 
 AnswerFile::AnswerFile(const std::filesystem::path& path)
     : m_path(path)
@@ -134,7 +134,7 @@ void AnswerFile::dumpHostnameSettings()
 
 void AnswerFile::dumpSystemSettings()
 {
-    auto distroName = cloyster::utils::enums::toString(system.distro);
+    auto distroName = opencattus::utils::enums::toString(system.distro);
 
     m_keyfile.setString("system", "disk_image", system.disk_image.string());
     m_keyfile.setString("system", "distro", std::string { distroName });
@@ -202,7 +202,7 @@ void AnswerFile::dumpPostfix()
         return;
     }
 
-    auto profileName = cloyster::utils::enums::toString(postfix.profile);
+    auto profileName = opencattus::utils::enums::toString(postfix.profile);
     m_keyfile.setString("postfix", "profile", std::string { profileName });
     m_keyfile.setString(
         "postfix", "smtpd_tls_cert_file", postfix.cert_file.string());
@@ -411,13 +411,13 @@ void AnswerFile::loadHostnameSettings()
 void AnswerFile::loadSystemSettings()
 {
     system.disk_image = m_keyfile.getString("system", "disk_image");
-    auto opts = cloyster::utils::singleton::options();
+    auto opts = opencattus::utils::singleton::options();
 
     // Verify supported distros
     auto afDistro = m_keyfile.getString("system", "distro");
     if (const auto& formatDistro
-        = cloyster::utils::enums::ofStringOpt<OS::Distro>(
-            afDistro, cloyster::utils::enums::Case::Insensitive)) {
+        = opencattus::utils::enums::ofStringOpt<OS::Distro>(
+            afDistro, opencattus::utils::enums::Case::Insensitive)) {
         system.distro = formatDistro.value();
     } else {
         if (opts->dryRun) {
@@ -621,9 +621,9 @@ void AnswerFile::loadPostfix()
         m_keyfile.getString("postfix", "destination"), boost::is_any_of(", "),
         boost::token_compress_on);
 
-    auto castProfile = cloyster::utils::enums::ofStringOpt<Postfix::Profile>(
+    auto castProfile = opencattus::utils::enums::ofStringOpt<Postfix::Profile>(
         m_keyfile.getString("postfix", "profile"),
-        cloyster::utils::enums::Case::Insensitive);
+        opencattus::utils::enums::Case::Insensitive);
 
     if (castProfile.has_value())
         postfix.profile = castProfile.value();
@@ -679,10 +679,10 @@ auto AnswerFile::path() const -> const std::filesystem::path& { return m_path; }
 
 void AnswerFile::loadSlurm()
 {
-    cloyster::functions::abortif(!m_keyfile.hasGroup("slurm"),
+    opencattus::functions::abortif(!m_keyfile.hasGroup("slurm"),
         "slurm section missing in asnwerfile {}", path());
 
-    using namespace cloyster::utils;
+    using namespace opencattus::utils;
     slurm.mariadb_root_password = optional::unwrap(
         m_keyfile.getStringOpt("slurm", "mariadb_root_password"),
         "mariadb_root_password missing in the answerfile {}", path());

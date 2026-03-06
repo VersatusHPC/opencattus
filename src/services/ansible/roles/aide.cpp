@@ -1,5 +1,5 @@
-#include <cloysterhpc/services/ansible/roles/aide.h>
-#include <cloysterhpc/services/log.h>
+#include <opencattus/services/ansible/roles/aide.h>
+#include <opencattus/services/log.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -13,12 +13,12 @@
 
 #include <fmt/core.h>
 
-namespace cloyster::services::ansible::roles::aide {
+namespace opencattus::services::ansible::roles::aide {
 
 ScriptBuilder installScript(
-    const Role& role, const cloyster::models::OS& osinfo)
+    const Role& role, const opencattus::models::OS& osinfo)
 {
-    using namespace cloyster;
+    using namespace opencattus;
 
     ScriptBuilder builder(osinfo);
 
@@ -38,4 +38,4 @@ ScriptBuilder installScript(
     return builder;
 }
 
-} // namespace cloyster::services::ansible::roles::aide
+} // namespace opencattus::services::ansible::roles::aide

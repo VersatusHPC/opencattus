@@ -1,5 +1,5 @@
-#include <cloysterhpc/services/ansible/roles/firewall.h>
-#include <cloysterhpc/services/log.h>
+#include <opencattus/services/ansible/roles/firewall.h>
+#include <opencattus/services/log.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -11,7 +11,7 @@
 #include <fmt/core.h>
 
 namespace {
-using namespace cloyster::utils::singleton;
+using namespace opencattus::utils::singleton;
 void configureFirewall()
 {
     LOG_INFO("Setting up firewall")
@@ -48,7 +48,7 @@ void configureFirewall()
 
 }
 
-namespace cloyster::services::ansible::roles::firewall {
+namespace opencattus::services::ansible::roles::firewall {
 
 void run(const Role& role) { configureFirewall(); }
 

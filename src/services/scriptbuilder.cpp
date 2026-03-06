@@ -4,10 +4,10 @@
 #include <boost/algorithm/string/join.hpp>
 #include <fmt/format.h>
 
-#include <cloysterhpc/models/os.h>
-#include <cloysterhpc/utils/formatters.h>
+#include <opencattus/models/os.h>
+#include <opencattus/utils/formatters.h>
 
-#include <cloysterhpc/services/scriptbuilder.h>
+#include <opencattus/services/scriptbuilder.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -16,11 +16,11 @@
 #include <doctest/doctest.h>
 #endif
 
-namespace cloyster::services {
+namespace opencattus::services {
 
-TEST_SUITE_BEGIN("cloyster::services::ScriptBuilder");
+TEST_SUITE_BEGIN("opencattus::services::ScriptBuilder");
 
-using namespace cloyster::models;
+using namespace opencattus::models;
 
 ScriptBuilder::ScriptBuilder(const OS& osinfo)
     : m_os(osinfo)
@@ -86,7 +86,7 @@ ScriptBuilder& ScriptBuilder::removeLineWithKeyFromFile(
 TEST_CASE("Basic")
 {
     const OS osinfo
-        = cloyster::models::OS(OS::Distro::Rocky, OS::Platform::el9, 5);
+        = opencattus::models::OS(OS::Distro::Rocky, OS::Platform::el9, 5);
     ScriptBuilder builder(osinfo);
 
     builder.addNewLine()
@@ -105,4 +105,4 @@ TEST_CASE("Basic")
 
 TEST_SUITE_END();
 
-}; // namespace cloyster::services
+}; // namespace opencattus::services

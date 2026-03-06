@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/presenter/PresenterNodesOperationalSystem.h>
-#include <cloysterhpc/services/log.h>
+#include <opencattus/functions.h>
+#include <opencattus/presenter/PresenterNodesOperationalSystem.h>
+#include <opencattus/services/log.h>
 
 #include <algorithm>
 #include <boost/algorithm/string/classification.hpp>
@@ -19,7 +19,7 @@
 
 namespace fs = std::filesystem;
 
-namespace cloyster::presenter {
+namespace opencattus::presenter {
 
 std::string PresenterNodesOperationalSystem::getDownloadURL(
     OS::Distro distro, PresenterNodesVersionCombo version)
@@ -27,7 +27,7 @@ std::string PresenterNodesOperationalSystem::getDownloadURL(
     auto [majorVersion, minorVersion, arch] = version;
 
     fmt::dynamic_format_arg_store<fmt::format_context> store;
-    store.push_back(fmt::arg("arch", cloyster::utils::enums::toString(arch)));
+    store.push_back(fmt::arg("arch", opencattus::utils::enums::toString(arch)));
     store.push_back(fmt::arg("major", majorVersion));
     store.push_back(fmt::arg("minor", minorVersion));
 
@@ -91,7 +91,7 @@ PresenterNodesOperationalSystem::selectVersion(OS::Distro distro)
         | std::views::transform([](const PresenterNodesVersionCombo& c) {
               auto [maj, min, arch] = c;
               return fmt::format("{}.{} ({})", maj, min,
-                  cloyster::utils::enums::toString(arch));
+                  opencattus::utils::enums::toString(arch));
           });
 
     std::vector<std::string> versions;
@@ -158,13 +158,13 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
         //@TODO Implement newt GUI progress bar
         auto command = Singleton<IRunner>::get()->executeCommandIter(
             fmt::format("wget -NP /root {}", distroDownloadURL),
-            cloyster::services::Stream::Stderr);
+            opencattus::services::Stream::Stderr);
 
         auto desc = fmt::format(
             Messages::OperationalSystemDownloadIso::Progress::download,
             selectedDistro->first, distroDownloadURL);
         m_view->progressMenu(Messages::title, desc.c_str(), std::move(command),
-            [&](cloyster::services::CommandProxy& cmd)
+            [&](opencattus::services::CommandProxy& cmd)
                 -> std::optional<double> {
                 auto out = cmd.getline();
                 if (!out) {
@@ -255,11 +255,12 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
                 // it.
 
                 /**
-                   [root@cloyster home]# mount -o loop /opt/iso/cloyster-iso.iso
-                 /mnt mount: /mnt: WARNING: device write-protected, mounted
-                 read-only. [root@cloyster home]# ls /mnt AppStream  BaseOS  EFI
-                 images  isolinux  LICENSE  media.repo  TRANS.TBL [root@cloyster
-                 home]# less /mnt/media.repo [InstallMedia] name=Rocky Linux 8.8
+                   [root@opencattus home]# mount -o loop
+                 /opt/iso/opencattus-iso.iso /mnt mount: /mnt: WARNING: device
+                 write-protected, mounted read-only. [root@opencattus home]# ls
+                 /mnt AppStream  BaseOS  EFI images  isolinux  LICENSE
+                 media.repo  TRANS.TBL [root@opencattus home]# less
+                 /mnt/media.repo [InstallMedia] name=Rocky Linux 8.8
                    mediaid=None
                    metadata_expire=-1
                    gpgcheck=0

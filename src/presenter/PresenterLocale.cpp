@@ -3,16 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/presenter/PresenterLocale.h>
-#include <cloysterhpc/services/osservice.h>
+#include <opencattus/presenter/PresenterLocale.h>
+#include <opencattus/services/osservice.h>
 
-namespace cloyster::presenter {
+namespace opencattus::presenter {
 
 PresenterLocale::PresenterLocale(
     std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)
     : Presenter(model, view)
 {
-    auto osservice = cloyster::Singleton<cloyster::services::IOSService>::get();
+    auto osservice
+        = opencattus::Singleton<opencattus::services::IOSService>::get();
     auto availableLocales = osservice->getAvailableLocales();
 
     const auto& selectedLocale = m_view->listMenu(

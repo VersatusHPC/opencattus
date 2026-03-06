@@ -4,7 +4,7 @@
 System Requirements
 ===================
 
-Before you attempt to run Cloyster, make sure your head node meets the minimum requirements.
+Before you attempt to run OpenCATTUS, make sure your head node meets the minimum requirements.
 
 Minimum Hardware Requirements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

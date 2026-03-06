@@ -1,21 +1,21 @@
-# Ansible role for Cloyster
-An Ansible role that provision a Vagrant virtual machine with Cloyster and runs it, for tests purpose.
+# Ansible role for OpenCATTUS
+An Ansible role that provision a Vagrant virtual machine with OpenCATTUS and runs it, for tests purpose.
 
 ## Requirements
 - Ansible
 - Vagrant
-- Cloyster binary
+- OpenCATTUS binary
 - A ISO for the nodes (WIP)
 
 ## Example Playbook
 ```yaml
 ---
-- name: Cloyster Vagrant Setup
+- name: OpenCATTUS Vagrant Setup
   hosts: localhost
   become: yes
   gather_facts: false
   roles:
-    - cloyster_setup
+    - opencattus_setup
 ```
 
 ## Example Vagrantfile
@@ -28,7 +28,7 @@ An Ansible role that provision a Vagrant virtual machine with Cloyster and runs 
 require 'yaml'
 
 # Load the shared config file
-config_file = File.join(File.dirname(__FILE__), 'roles/cloyster_setup/vars/machines.yml')
+config_file = File.join(File.dirname(__FILE__), 'roles/opencattus_setup/vars/machines.yml')
 config = YAML.load_file(config_file)
 machines = config['machines']
 
@@ -44,7 +44,7 @@ Vagrant.configure("2") do |config|
       m.vm.box = "#{conf['box']}"
       m.vm.network 'private_network', ip: "#{conf['vagrant_external_network_address']}", name: "external_network"
       m.vm.network 'private_network', ip: "#{conf['vagrant_management_network_address']}", name: "management_network"
-      m.vm.hostname = "cloyster.hpc"
+      m.vm.hostname = "opencattus.hpc"
       m.vm.provider 'libvirt' do |lv|
         lv.memory = conf['memory']
         lv.cpus = conf['cpus']
@@ -53,7 +53,7 @@ Vagrant.configure("2") do |config|
         lv.uri = 'qemu:///system'
       end
       m.vm.provision "ansible" do |ansible|
-        ansible.playbook = "roles/cloyster_setup/provision/#{conf['provision']}"
+        ansible.playbook = "roles/opencattus_setup/provision/#{conf['provision']}"
         ansible.compatibility_mode = "2.0"
       end
       m.vm.synced_folder '.', '/vagrant', type: "rsync"
@@ -63,6 +63,6 @@ end
 ```
 
 ## How to use
-Run `ansible-playbook setup.yml --extra-vars "cloyster_binary_path=/path/to/local/cloyster/binary vagrant_machine_name=machine_name iso_image_path=/path/to/iso/image"` in the same folder of "`setup.yml`" or the playbook you created.
+Run `ansible-playbook setup.yml --extra-vars "opencattus_binary_path=/path/to/local/opencattus/binary vagrant_machine_name=machine_name iso_image_path=/path/to/iso/image"` in the same folder of "`setup.yml`" or the playbook you created.
 
-If you don't want to clean up (remove the virtual machine) after Cloyster ends, set `"cleanup_needed=false"` on the `--extra-vars`.
+If you don't want to clean up (remove the virtual machine) after OpenCATTUS ends, set `"cleanup_needed=false"` on the `--extra-vars`.

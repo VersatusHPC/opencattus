@@ -1,7 +1,7 @@
 include(CheckCXXCompilerFlag)
 
 macro(
-  cloysterhpc_enable_hardening
+  opencattus_enable_hardening
   target
   global
   ubsan_minimal_runtime)

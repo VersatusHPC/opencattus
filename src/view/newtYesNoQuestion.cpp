@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/view/newt.h>
+#include <opencattus/view/newt.h>
 
 bool Newt::yesNoQuestion(
     const char* title, const char* message, const char* helpMessage)

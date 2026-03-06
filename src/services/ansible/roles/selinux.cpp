@@ -1,7 +1,7 @@
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/models/cluster.h>
-#include <cloysterhpc/services/ansible/roles/selinux.h>
-#include <cloysterhpc/services/log.h>
+#include <opencattus/functions.h>
+#include <opencattus/models/cluster.h>
+#include <opencattus/services/ansible/roles/selinux.h>
+#include <opencattus/services/log.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -13,7 +13,7 @@
 #include <fmt/core.h>
 
 namespace {
-using namespace cloyster::utils::singleton;
+using namespace opencattus::utils::singleton;
 
 void disableSELinux()
 {
@@ -21,8 +21,8 @@ void disableSELinux()
 
     const auto filename = CHROOT "/etc/sysconfig/selinux";
 
-    cloyster::functions::backupFile(filename);
-    cloyster::functions::changeValueInConfigurationFile(
+    opencattus::functions::backupFile(filename);
+    opencattus::functions::changeValueInConfigurationFile(
         filename, "SELINUX", "disabled");
 
     LOG_WARN("SELinux has been disabled")
@@ -32,17 +32,17 @@ void configureSELinuxMode()
     LOG_INFO("Setting up SELinux")
 
     switch (cluster()->getSELinux()) {
-        case cloyster::models::Cluster::SELinuxMode::Permissive:
+        case opencattus::models::Cluster::SELinuxMode::Permissive:
             ::runner()->executeCommand("setenforce 0");
             /* Permissive mode */
             break;
 
-        case cloyster::models::Cluster::SELinuxMode::Enforcing:
+        case opencattus::models::Cluster::SELinuxMode::Enforcing:
             /* Enforcing mode */
             ::runner()->executeCommand("setenforce 1");
             break;
 
-        case cloyster::models::Cluster::SELinuxMode::Disabled:
+        case opencattus::models::Cluster::SELinuxMode::Disabled:
             disableSELinux();
             break;
     }
@@ -50,7 +50,7 @@ void configureSELinuxMode()
 
 }
 
-namespace cloyster::services::ansible::roles::selinux {
+namespace opencattus::services::ansible::roles::selinux {
 
 void run(const Role& role) { configureSELinuxMode(); }
 

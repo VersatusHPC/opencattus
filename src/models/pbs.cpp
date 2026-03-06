@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/models/pbs.h>
+#include <opencattus/models/pbs.h>
 
-namespace cloyster::models {
+namespace opencattus::models {
 
 PBS::PBS(const Cluster& cluster)
     : QueueSystem(cluster)

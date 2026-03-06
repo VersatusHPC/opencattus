@@ -22,7 +22,7 @@ reboot
 
 # Export is required otherwise the variables are not visible
 # during image customization
-export hostname=cloyster
+export hostname=opencattus
 export domain=cluster.example.com
 export hn_ip=192.168.30.254
 export cidr=24

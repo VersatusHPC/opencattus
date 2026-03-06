@@ -4,7 +4,7 @@
 Assembling an answerfile
 ========================
 
-Cloyster' CLI answerfile (used only in Command Line Interface) is a INI-based file that contains settings definitions and values used during Cloyster execution. In the following example answerfile, you specify various options (some options are obligatory and some optional). These options include the cluster information, time values, networking (external, management and application networks}, desired system iso file and the nodes to be used within the cluster.
+OpenCATTUS' CLI answerfile (used only in Command Line Interface) is a INI-based file that contains settings definitions and values used during OpenCATTUS execution. In the following example answerfile, you specify various options (some options are obligatory and some optional). These options include the cluster information, time values, networking (external, management and application networks}, desired system iso file and the nodes to be used within the cluster.
 
 Information
 ~~~~~~~~~~~
@@ -14,8 +14,8 @@ This section requires information about your cluster and your company.
 .. code-block:: ini
 
     [information]
-    cluster_name=cloyster
-    company_name=cloyster-enterprises
+    cluster_name=opencattus
+    company_name=opencattus-enterprises
     administrator_email=foo@example.com
 
 Time
@@ -38,7 +38,7 @@ This section requires your machine hostname and domain name.
 .. code-block:: ini
 
     [hostname]
-    hostname=cloyster
+    hostname=opencattus
     domain_name=cluster.example.com
 
 Networks
@@ -53,7 +53,7 @@ This network is used by the management node to control the nodes out of band via
 
 .. code-block:: ini
 
-    # Cloyster must have an external network
+    # OpenCATTUS must have an external network
     [network_external]
     interface=enp1s0
     #ip_address=172.16.144.0
@@ -71,7 +71,7 @@ This network is used by the management node to install and manage the OS of the 
 
 .. code-block:: ini
 
-    # Cloyster must have an management network
+    # OpenCATTUS must have an management network
     [network_management]
     interface=enp8s0
     ip_address=172.26.255.254
@@ -97,7 +97,7 @@ This network is used by the applications on the compute nodes. Usually an IB net
     #subnet_mask=255.255.0.0
     #network_address=172.26.0.1
     #gateway=0.0.0.0
-    #domain_name=cloysterhpc.example
+    #domain_name=opencattus.example
     #nameservers=0.0.0.0,0.0.0.0
     #mac_address=de:ad:be:ff:00:01
 

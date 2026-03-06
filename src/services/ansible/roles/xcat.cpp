@@ -1,7 +1,7 @@
-#include <cloysterhpc/NFS.h>
-#include <cloysterhpc/services/ansible/roles/xcat.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/xcat.h>
+#include <opencattus/NFS.h>
+#include <opencattus/services/ansible/roles/xcat.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/xcat.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -13,10 +13,10 @@
 #include <fmt/core.h>
 
 namespace {
-using namespace cloyster::utils::singleton;
+using namespace opencattus::utils::singleton;
 }
 
-namespace cloyster::services::ansible::roles::xcat {
+namespace opencattus::services::ansible::roles::xcat {
 
 void run(const Role& role)
 {

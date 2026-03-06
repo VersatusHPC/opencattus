@@ -1,4 +1,4 @@
-# Contributing to CloysterHPC
+# Contributing to OpenCATTUS
 
 You're very much welcome to contribute with this project.
 Not only pushing code, but also testing it, improving the documentation and reporting bugs.

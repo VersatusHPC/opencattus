@@ -6,35 +6,35 @@
 #include <cctype>
 #include <cstdlib>
 
-#include <cloysterhpc/cloyster.h>
-#include <cloysterhpc/const.h>
-#include <cloysterhpc/dbus_client.h>
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/models/cluster.h>
-#include <cloysterhpc/presenter/PresenterInstall.h>
-#include <cloysterhpc/services/ansible/roles.h>
-#include <cloysterhpc/services/confluent.h>
-#include <cloysterhpc/services/files.h>
-#include <cloysterhpc/services/init.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/options.h>
-#include <cloysterhpc/services/shell.h>
-#include <cloysterhpc/services/xcat.h>
-#include <cloysterhpc/utils/formatters.h>
-#include <cloysterhpc/utils/singleton.h>
-#include <cloysterhpc/verification.h>
-#include <cloysterhpc/view/newt.h>
+#include <opencattus/const.h>
+#include <opencattus/dbus_client.h>
+#include <opencattus/functions.h>
+#include <opencattus/models/cluster.h>
+#include <opencattus/opencattus.h>
+#include <opencattus/presenter/PresenterInstall.h>
+#include <opencattus/services/ansible/roles.h>
+#include <opencattus/services/confluent.h>
+#include <opencattus/services/files.h>
+#include <opencattus/services/init.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/options.h>
+#include <opencattus/services/shell.h>
+#include <opencattus/services/xcat.h>
+#include <opencattus/utils/formatters.h>
+#include <opencattus/utils/singleton.h>
+#include <opencattus/verification.h>
+#include <opencattus/view/newt.h>
 
 #include <internal_use_only/config.hpp>
 
-#ifdef _CLOYSTER_I18N
+#ifdef _OPENCATTUS_I18N
 #include "include/i18n-cpp.hpp"
 #endif
 
 namespace {
 
-using namespace cloyster;
-using namespace cloyster::services;
+using namespace opencattus;
+using namespace opencattus::services;
 
 // Run test commands and exit. This is to make easier to test
 // code during development and troubleshooting.  Use a combination of
@@ -45,9 +45,9 @@ int runTestCommand(const std::string& testCommand,
 #ifndef NDEBUG
     LOG_INFO("Running test command {} {} ", testCommand,
         fmt::join(testCommandArgs, ","));
-    auto cluster = cloyster::Singleton<cloyster::models::Cluster>::get();
-    auto runner = cloyster::Singleton<cloyster::functions::IRunner>::get();
-    auto repoManager = cloyster::Singleton<repos::RepoManager>::get();
+    auto cluster = opencattus::Singleton<opencattus::models::Cluster>::get();
+    auto runner = opencattus::Singleton<opencattus::functions::IRunner>::get();
+    auto repoManager = opencattus::Singleton<repos::RepoManager>::get();
     if (testCommand == "execute-command") {
         runner->checkCommand(testCommandArgs[0]);
     } else if (testCommand == "initialize-repos") {
@@ -56,11 +56,11 @@ int runTestCommand(const std::string& testCommand,
             R"(bash -c "dnf config-manager --set-enabled '*' && dnf makecache -y" )");
     } else if (testCommand == "create-http-repo") {
         assert(testCommandArgs.size() > 0);
-        cloyster::functions::createHTTPRepo(testCommandArgs[0]);
+        opencattus::functions::createHTTPRepo(testCommandArgs[0]);
     } else if (testCommand == "parse-key-file") {
         assert(testCommandArgs.size() > 0);
         LOG_INFO("Loading file {}", testCommandArgs[0]);
-        auto file = cloyster::services::files::KeyFile(testCommandArgs[0]);
+        auto file = opencattus::services::files::KeyFile(testCommandArgs[0]);
         LOG_INFO("Groups: {}", fmt::join(file.getGroups(), ","));
         LOG_INFO("Contents: {}", file.toData());
     } else if (testCommand == "confluent-install") {
@@ -69,20 +69,20 @@ int runTestCommand(const std::string& testCommand,
     } else if (testCommand == "install-mellanox-ofed") {
         OFED(OFED::Kind::Mellanox, "latest").install();
     } else if (testCommand == "image-install-mellanox-ofed") {
-        auto provisioner = std::make_unique<cloyster::services::XCAT>();
+        auto provisioner = std::make_unique<opencattus::services::XCAT>();
         provisioner->configureInfiniband();
     } else if (testCommand == "dump-headnode-os") {
         LOG_INFO("OS: {}", cluster->getHeadnode().getOS());
     } else if (testCommand == "dump-xcat-osimage") {
-        auto provisioner = std::make_unique<cloyster::services::XCAT>();
+        auto provisioner = std::make_unique<opencattus::services::XCAT>();
         LOG_INFO("xCAT osimage: {}", provisioner->getImage());
     } else if (testCommand == "xcat-patch") {
-        auto provisioner = std::make_unique<cloyster::services::XCAT>();
+        auto provisioner = std::make_unique<opencattus::services::XCAT>();
         provisioner->patchInstall();
     } else if (testCommand == "ansible-role") {
         assert(testCommandArgs.size() == 1);
         // Execute a single role
-        cloyster::services::ansible::roles::run(
+        opencattus::services::ansible::roles::run(
             ansible::roles::parseRoleString(testCommandArgs[0]),
             cluster->getHeadnode().getOS());
     } else {
@@ -139,7 +139,7 @@ int main(int argc, const char** argv)
 
     if (optsMut->testCommand.empty()) {
         // skip during tests, we do not want to run tests as root
-        cloyster::checkEffectiveUserId();
+        opencattus::checkEffectiveUserId();
     }
 
     // --test implies --unattended
@@ -154,14 +154,14 @@ int main(int argc, const char** argv)
             char response = 'N';
             fmt::print("{} will now modify your system, do you want to "
                        "continue? [Y/N]\n",
-                cloyster::productName);
+                opencattus::productName);
             std::cin >> response;
 
             if (std::toupper(response) == 'Y') {
-                LOG_INFO("Running {}.\n", cloyster::productName)
+                LOG_INFO("Running {}.\n", opencattus::productName)
                 break;
             } else if (std::toupper(response) == 'N') {
-                LOG_INFO("Stopping {}.\n", cloyster::productName)
+                LOG_INFO("Stopping {}.\n", opencattus::productName)
                 return EXIT_SUCCESS;
             }
         }
@@ -183,7 +183,7 @@ int main(int argc, const char** argv)
     static_assert(std::is_const_v<std::remove_reference_t<decltype(*opts)>>);
 
     LOG_INFO("Initializing the model");
-    auto model = std::make_unique<cloyster::models::Cluster>();
+    auto model = std::make_unique<opencattus::models::Cluster>();
     LOG_INFO("Model initialized");
     std::unique_ptr<models::AnswerFile> answerfile;
     if (!opts->answerfile.empty()) {
@@ -202,7 +202,7 @@ int main(int argc, const char** argv)
         // Entrypoint; if the view is constructed it will start the TUI.
         auto view = std::make_unique<Newt>();
         auto presenter
-            = std::make_unique<cloyster::presenter::PresenterInstall>(
+            = std::make_unique<opencattus::presenter::PresenterInstall>(
                 model, view);
     }
 
@@ -220,10 +220,10 @@ int main(int argc, const char** argv)
     LOG_TRACE("Starting execution engine");
     auto executionEngine = [&]() -> std::unique_ptr<Execution> {
         if (opts->roles.empty()) {
-            return std::make_unique<cloyster::services::Shell>();
+            return std::make_unique<opencattus::services::Shell>();
         } else {
             return std::make_unique<
-                cloyster::services::ansible::roles::Executor>();
+                opencattus::services::ansible::roles::Executor>();
         };
     }();
 

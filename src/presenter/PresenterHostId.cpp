@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/presenter/PresenterHostId.h>
+#include <opencattus/presenter/PresenterHostId.h>
 
-namespace cloyster::presenter {
+namespace opencattus::presenter {
 
 PresenterHostId::PresenterHostId(
     std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)

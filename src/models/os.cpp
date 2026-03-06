@@ -3,15 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/cloyster.h>
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/models/os.h>
 #include <magic_enum/magic_enum.hpp>
+#include <opencattus/functions.h>
+#include <opencattus/models/os.h>
+#include <opencattus/opencattus.h>
 #include <stdexcept>
 #include <variant>
 
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/services/log.h>
+#include <opencattus/utils/singleton.h>
 
 #include <fstream>
 #include <memory>
@@ -23,18 +23,18 @@
 #include <algorithm>
 #include <gsl/gsl-lite.hpp>
 
-namespace cloyster::models {
+namespace opencattus::models {
 
 OS::OS()
 {
     LOG_INFO("Initializing OS (ctr 1)");
-    struct utsname system {};
+    struct utsname system { };
     // @FIXME: Unfortunately this runs during the initialization of the
     //  cluster instance. Which prevents us of running this during testing
     //  in a machine that does not have /etc/os-release file.
     //  The isTest flag below is used to fill up default values during tests
     //  to make it possible to run outside of target machines
-    auto opts = cloyster::utils::singleton::options();
+    auto opts = opencattus::utils::singleton::options();
     const bool isTest = !opts->testCommand.empty();
     uname(&system);
 
@@ -118,8 +118,8 @@ OS::OS(const Distro& distro, const Platform& platform,
             m_majorVersion = 8;
             break;
         default:
-            cloyster::functions::abort("Invalid platform: {}",
-                cloyster::utils::enums::toString(platform));
+            opencattus::functions::abort("Invalid platform: {}",
+                opencattus::utils::enums::toString(platform));
     }
 }
 
@@ -143,7 +143,7 @@ void OS::setFamily(Family family) { m_family = family; }
 
 void OS::setFamily(std::string_view family)
 {
-    if (const auto& rv = cloyster::utils::enums::ofStringOpt<Family>(family))
+    if (const auto& rv = opencattus::utils::enums::ofStringOpt<Family>(family))
         setFamily(rv.value());
     else
         throw std::runtime_error(fmt::format("Unsupported OS: {}", family));
@@ -163,11 +163,11 @@ void OS::setPlatform(OS::Platform platform)
 
 void OS::setPlatform(std::string_view platform)
 {
-    using namespace cloyster::utils;
+    using namespace opencattus::utils;
     auto enumValue
         = enums::ofStringOpt<Platform>(platform, enums::Case::Insensitive);
     if (!enumValue) {
-        cloyster::functions::abort("Unsupported Platform: {}", platform);
+        opencattus::functions::abort("Unsupported Platform: {}", platform);
     } else {
         setPlatform(enumValue.value());
     }
@@ -220,7 +220,7 @@ void OS::setDistro(OS::Distro distro) { m_distro = distro; }
 
 void OS::setDistro(std::string_view distro)
 {
-    using namespace cloyster::utils;
+    using namespace opencattus::utils;
     if (const auto& rval = enums::ofStringOpt<OS::Distro>(
             std::string(distro), enums::Case::Insensitive)) {
         setDistro(rval.value());
@@ -303,14 +303,14 @@ void OS::printData() const
 {
 #ifndef NDEBUG
     LOG_DEBUG("Architecture: {}",
-        cloyster::utils::enums::toString(std::get<Arch>(m_arch)))
+        opencattus::utils::enums::toString(std::get<Arch>(m_arch)))
     LOG_DEBUG("Family: {}",
-        cloyster::utils::enums::toString(std::get<Family>(m_family)))
+        opencattus::utils::enums::toString(std::get<Family>(m_family)))
     LOG_DEBUG("Kernel Release: {}", m_kernel.value_or(""))
     // LOG_DEBUG("Platform: {}",
-    //     cloyster::utils::enums::toString(std::get<Platform>(m_platform)))
+    //     opencattus::utils::enums::toString(std::get<Platform>(m_platform)))
     LOG_DEBUG("Distribution: {}",
-        cloyster::utils::enums::toString(std::get<Distro>(m_distro)))
+        opencattus::utils::enums::toString(std::get<Distro>(m_distro)))
     LOG_DEBUG("Major Version: {}", m_majorVersion)
     LOG_DEBUG("Minor Version: {}", m_minorVersion)
 #endif

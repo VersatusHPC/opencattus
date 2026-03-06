@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/services/log.h>
+#include <opencattus/services/log.h>
 
 #include <boost/algorithm/string.hpp>
 #include <memory>

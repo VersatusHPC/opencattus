@@ -4,16 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cloysterhpc/cloyster.h>
-#include <cloysterhpc/diskImage.h>
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/models/os.h>
-#include <cloysterhpc/services/cache.h>
-#include <cloysterhpc/services/files.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/options.h>
-#include <cloysterhpc/utils/optional.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/diskImage.h>
+#include <opencattus/functions.h>
+#include <opencattus/models/os.h>
+#include <opencattus/opencattus.h>
+#include <opencattus/services/cache.h>
+#include <opencattus/services/files.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/options.h>
+#include <opencattus/utils/optional.h>
+#include <opencattus/utils/singleton.h>
 #include <unordered_map>
 
 // @FIXME: This file need some work
@@ -41,15 +41,15 @@ void DiskImage::setPath(const std::filesystem::path& path)
 bool DiskImage::isKnownImage(const std::filesystem::path& path)
 {
     constexpr auto toDistroImage = [](std::string_view imageView)
-        -> std::optional<cloyster::models::OS::Distro> {
+        -> std::optional<opencattus::models::OS::Distro> {
         if (imageView.starts_with("Rocky")) {
-            return cloyster::models::OS::Distro::Rocky;
+            return opencattus::models::OS::Distro::Rocky;
         } else if (imageView.starts_with("rhel")) {
-            return cloyster::models::OS::Distro::RHEL;
+            return opencattus::models::OS::Distro::RHEL;
         } else if (imageView.starts_with("OracleLinux")) {
-            return cloyster::models::OS::Distro::OL;
+            return opencattus::models::OS::Distro::OL;
         } else if (imageView.starts_with("AlmaLinux")) {
-            return cloyster::models::OS::Distro::AlmaLinux;
+            return opencattus::models::OS::Distro::AlmaLinux;
         }
         return std::nullopt;
     };
@@ -71,7 +71,7 @@ bool DiskImage::isKnownImage(const std::filesystem::path& path)
     return false;
 }
 
-cloyster::models::OS::Distro DiskImage::getDistro() const
+opencattus::models::OS::Distro DiskImage::getDistro() const
 {
     LOG_ASSERT(m_distro.has_value(), "Trying to getDistro() uninitialized");
     return m_distro.value();
@@ -81,7 +81,7 @@ cloyster::models::OS::Distro DiskImage::getDistro() const
 bool DiskImage::hasVerifiedChecksum(const std::filesystem::path& path)
 {
 
-    const auto opts = cloyster::utils::singleton::options();
+    const auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would verify disk image checksum.")
         return true;
@@ -115,7 +115,7 @@ bool DiskImage::hasVerifiedChecksum(const std::filesystem::path& path)
     };
 
     std::string checksum
-        = cloyster::services::cache::fs::checksum("iso-checksum", path);
+        = opencattus::services::cache::fs::checksum("iso-checksum", path);
     LOG_INFO("SHA256 checksum of file {} is: {}", path.string(), checksum);
 
     if (auto pair = hash_map.find(path.filename().string());
@@ -138,7 +138,7 @@ bool DiskImage::hasVerifiedChecksum(const std::filesystem::path& path)
 #include <doctest/doctest.h>
 #endif
 
-TEST_SUITE("cloyster::services::diskimage")
+TEST_SUITE("opencattus::services::diskimage")
 {
     /*
     DiskImage diskImage;

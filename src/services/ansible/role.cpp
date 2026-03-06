@@ -1,8 +1,8 @@
-#include <cloysterhpc/services/ansible/role.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/scriptbuilder.h>
-#include <cloysterhpc/utils/optional.h>
-#include <cloysterhpc/utils/string.h>
+#include <opencattus/services/ansible/role.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/scriptbuilder.h>
+#include <opencattus/utils/optional.h>
+#include <opencattus/utils/string.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -13,7 +13,7 @@
 
 #include <fmt/core.h>
 
-namespace cloyster::services::ansible::roles {
+namespace opencattus::services::ansible::roles {
 
 Role parseRoleString(const std::string& input)
 {

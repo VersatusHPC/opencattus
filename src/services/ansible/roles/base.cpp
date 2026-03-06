@@ -2,12 +2,12 @@
 
 #include <set>
 
-#include <cloysterhpc/models/cluster.h>
-#include <cloysterhpc/patterns/singleton.h>
-#include <cloysterhpc/services/ansible/role.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/scriptbuilder.h>
-#include <cloysterhpc/utils/string.h>
+#include <opencattus/models/cluster.h>
+#include <opencattus/patterns/singleton.h>
+#include <opencattus/services/ansible/role.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/scriptbuilder.h>
+#include <opencattus/utils/string.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -17,12 +17,12 @@
 #endif
 
 #include <fmt/core.h>
-namespace cloyster::services::ansible::roles::base {
+namespace opencattus::services::ansible::roles::base {
 
 ScriptBuilder installScript(
-    const Role& role, const cloyster::models::OS& osinfo)
+    const Role& role, const opencattus::models::OS& osinfo)
 {
-    using namespace cloyster;
+    using namespace opencattus;
     ScriptBuilder builder(osinfo);
 
     LOG_ASSERT(role.roleName() == "base",
@@ -80,14 +80,14 @@ ScriptBuilder installScript(
     if (const auto iter = role.vars().find("base_packages");
         iter != role.vars().end()) {
         for (const auto& pkg :
-            cloyster::utils::string::split(iter->second, " ")) {
+            opencattus::utils::string::split(iter->second, " ")) {
             allPackages.emplace(pkg);
         }
     }
     builder.addPackages(allPackages);
 
     // Configure timezone
-    const auto& cluster = cloyster::Singleton<models::Cluster>::get();
+    const auto& cluster = opencattus::Singleton<models::Cluster>::get();
     builder.addCommand(
         "timedatectl set-timezone {}", cluster->getTimezone().getTimezone());
 

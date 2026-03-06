@@ -1,4 +1,4 @@
-macro(cloysterhpc_enable_cppcheck WARNINGS_AS_ERRORS CPPCHECK_OPTIONS)
+macro(opencattus_enable_cppcheck WARNINGS_AS_ERRORS CPPCHECK_OPTIONS)
   find_program(CPPCHECK cppcheck)
   if(CPPCHECK)
 
@@ -54,7 +54,7 @@ macro(cloysterhpc_enable_cppcheck WARNINGS_AS_ERRORS CPPCHECK_OPTIONS)
        "")
 
       if ("${CMAKE_CXX_STANDARD}" STREQUAL "23")
-        # cppcheck does not support c++23 for some reason (in the cloyster dev server)
+        # cppcheck does not support c++23 for some reason (in the opencattus dev server)
         set(CMAKE_CXX_CPPCHECK ${CMAKE_CXX_CPPCHECK} --std=c++20)
       else()
         set(CMAKE_CXX_CPPCHECK ${CMAKE_CXX_CPPCHECK} --std=c++${CMAKE_CXX_STANDARD})
@@ -68,7 +68,7 @@ macro(cloysterhpc_enable_cppcheck WARNINGS_AS_ERRORS CPPCHECK_OPTIONS)
   endif()
 endmacro()
 
-macro(cloysterhpc_enable_clang_tidy target WARNINGS_AS_ERRORS)
+macro(opencattus_enable_clang_tidy target WARNINGS_AS_ERRORS)
 
   find_program(CLANGTIDY clang-tidy)
   if(CLANGTIDY)
@@ -121,7 +121,7 @@ macro(cloysterhpc_enable_clang_tidy target WARNINGS_AS_ERRORS)
   endif()
 endmacro()
 
-macro(cloysterhpc_enable_include_what_you_use)
+macro(opencattus_enable_include_what_you_use)
   find_program(INCLUDE_WHAT_YOU_USE include-what-you-use)
   if(INCLUDE_WHAT_YOU_USE)
     set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE ${INCLUDE_WHAT_YOU_USE})

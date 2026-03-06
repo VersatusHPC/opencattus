@@ -5,16 +5,16 @@
 
 #include <fmt/core.h>
 
-#include <cloysterhpc/cloyster.h>
-#include <cloysterhpc/functions.h>
-#include <cloysterhpc/ofed.h>
-#include <cloysterhpc/services/options.h>
-#include <cloysterhpc/services/osservice.h>
-#include <cloysterhpc/services/repos.h>
-#include <cloysterhpc/utils/singleton.h>
+#include <opencattus/functions.h>
+#include <opencattus/ofed.h>
+#include <opencattus/opencattus.h>
+#include <opencattus/services/options.h>
+#include <opencattus/services/osservice.h>
+#include <opencattus/services/repos.h>
+#include <opencattus/utils/singleton.h>
 #include <utility>
 
-using cloyster::functions::IRunner;
+using opencattus::functions::IRunner;
 
 void OFED::setKind(Kind kind) { m_kind = kind; }
 
@@ -22,7 +22,7 @@ OFED::Kind OFED::getKind() const { return m_kind; }
 
 bool OFED::installed() const
 {
-    const auto opts = cloyster::utils::singleton::options();
+    const auto opts = opencattus::utils::singleton::options();
     if (opts->shouldForce("infiniband-install")) {
         return false;
     }
@@ -32,7 +32,7 @@ bool OFED::installed() const
         return false;
     }
 
-    auto runner = cloyster::Singleton<IRunner>::get();
+    auto runner = opencattus::Singleton<IRunner>::get();
     switch (m_kind) {
         case OFED::Kind::Mellanox:
             return runner->executeCommand("rpm -q doca-ofed") == 0;
@@ -49,7 +49,7 @@ bool OFED::installed() const
 
 void OFED::install() const
 {
-    const auto opts = cloyster::utils::singleton::options();
+    const auto opts = opencattus::utils::singleton::options();
 
     if (opts->dryRun) {
         LOG_WARN("Dry-Run: Skiping OFED installation");
@@ -65,17 +65,17 @@ void OFED::install() const
 
     switch (m_kind) {
         case OFED::Kind::Inbox:
-            cloyster::Singleton<cloyster::services::IOSService>::get()
+            opencattus::Singleton<opencattus::services::IOSService>::get()
                 ->groupInstall("Infiniband Support");
             break;
 
         case OFED::Kind::Mellanox: {
             auto runner
-                = cloyster::Singleton<cloyster::services::IRunner>::get();
-            auto repoManager = cloyster::Singleton<
-                cloyster::services::repos::RepoManager>::get();
+                = opencattus::Singleton<opencattus::services::IRunner>::get();
+            auto repoManager = opencattus::Singleton<
+                opencattus::services::repos::RepoManager>::get();
             const auto kernelVersion
-                = cloyster::utils::singleton::answerfile()->system.kernel;
+                = opencattus::utils::singleton::answerfile()->system.kernel;
 
             repoManager->enable("doca");
             // Install the required packages
@@ -83,7 +83,7 @@ void OFED::install() const
             if (kernelVersion) {
                 LOG_WARN("Building OFED with kernel version from the "
                          "answerfile {} @ [system].kernel: {}",
-                    cloyster::utils::singleton::answerfile()->path(),
+                    opencattus::utils::singleton::answerfile()->path(),
                     kernelVersion.value());
                 runner->checkCommand(
                     fmt::format("dnf -y install --nogpg kernel-{kernelVersion} "

@@ -2,7 +2,7 @@
 
 # -- Project information
 
-project = 'CloysterHPC'
+project = 'OpenCATTUS'
 copyright = '2021-2024, Vinícius Ferrão'
 author = 'Vinícius Ferrão'
 

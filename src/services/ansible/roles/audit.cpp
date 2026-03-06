@@ -1,10 +1,10 @@
 // src/services/ansible/roles/audit.cpp
 
-#include <cloysterhpc/services/ansible/role.h>
-#include <cloysterhpc/services/ansible/roles/audit.h>
-#include <cloysterhpc/services/log.h>
-#include <cloysterhpc/services/scriptbuilder.h>
-#include <cloysterhpc/utils/string.h>
+#include <opencattus/services/ansible/role.h>
+#include <opencattus/services/ansible/roles/audit.h>
+#include <opencattus/services/log.h>
+#include <opencattus/services/scriptbuilder.h>
+#include <opencattus/utils/string.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -17,12 +17,12 @@
 #include <string_view>
 
 // @FIXME: Not creating the rules at /etc/audit/rules.d files
-namespace cloyster::services::ansible::roles::audit {
+namespace opencattus::services::ansible::roles::audit {
 
 ScriptBuilder installScript(
-    const Role& role, const cloyster::models::OS& osinfo)
+    const Role& role, const opencattus::models::OS& osinfo)
 {
-    using namespace cloyster;
+    using namespace opencattus;
     ScriptBuilder builder(osinfo);
 
     builder.addNewLine()
