@@ -10,12 +10,12 @@ jobs:
       image: rockylinux:9
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
     - name: Install git
       run: |
         dnf install -y git
+
+    - name: Checkout code
+      uses: actions/checkout@v4
 
     - name: Get CMake Dependencies Hash
       id: cmake-hash
