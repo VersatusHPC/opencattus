@@ -45,14 +45,17 @@ needed.
   with [gsl-lite](https://github.com/gsl-lite/gsl-lite).
 * [newt](https://pagure.io/newt) for Terminal UI.
 * [glibmm](https://developer.gnome.org/glibmm/stable/) for Glib bindings to interact with the OS.
+* [sdbus-cpp](https://github.com/Kistler-Group/sdbus-cpp) for D-Bus IPC communication.
 * Testing framework provided by [doctest](https://github.com/doctest/doctest).
 * [CLI11](https://github.com/CLIUtils/CLI11) to parse command line arguments.
 
-Only [newt](https://pagure.io/newt) must be pre-installed for compilation. We
-don't ship it. Everything else should be found and installed
-by [Conan](http://conan.io) during
+Some libraries must be pre-installed from the OS since they are not available
+through Conan: [newt](https://pagure.io/newt),
+[glibmm](https://developer.gnome.org/glibmm/stable/), and libxcrypt.
+Everything else should be found and installed
+by [Conan](https://conan.io) during
 [CMake](https://cmake.org). Our shipped build script should handle this
-automatic.
+automatically.
 
 ## Decisions
 
@@ -83,7 +86,7 @@ automatic.
   style](https://en.wikipedia.org/wiki/INI_file) or equivalent configuration
   file.
 * Build system is based on [CMake](https://cmake.org)
-  and [Conan](http://conan.io) for package management. It was
+  and [Conan](https://conan.io) for package management. It was
   heavily based on
   [cpp_starter_project](https://github.com/cpp-best-practices/cpp_starter_project)
   with some modifications.
@@ -117,8 +120,8 @@ nature and `root` execution requirements.
 
 ### Recommended VM settings
 
-* EL8.10 or EL9.5 and higher based system with **minimal** package selection
-* EL10 Beta is supported only for development purposes
+* EL8.10, EL9.6, or EL10 and higher based system with **minimal** package selection
+* EL10 support is limited to compilation and development purposes
 * Half of system CPU cores as vCPU
 * At least 4GB of RAM
 * 50GB of Disk
