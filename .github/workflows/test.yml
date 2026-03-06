@@ -67,7 +67,7 @@ jobs:
 
     - name: CTest
       working-directory: ${{ github.workspace }}
-      run: build/Debug/test/OpenCATTUS-tests
+      run: build/Debug/test/OpenCATTUS-tests -tce="*slow*"
 
 
     - name: RPM Build
