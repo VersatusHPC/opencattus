@@ -66,10 +66,10 @@ public:
 private:
     Profile m_profile;
     Type m_type;
-    address m_address { };
-    address m_subnetMask { };
-    address m_gateway { };
-    uint16_t m_vlan { };
+    address m_address {};
+    address m_subnetMask {};
+    address m_gateway {};
+    uint16_t m_vlan {};
     std::string m_domainName;
     std::vector<address> m_nameservers;
 

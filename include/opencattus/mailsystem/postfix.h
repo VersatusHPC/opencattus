@@ -22,15 +22,15 @@ public:
 
 private:
     Profile m_profile;
-    std::optional<std::string> m_hostname { };
-    std::optional<std::string> m_domain { };
-    std::optional<std::string> m_smtp_server { };
-    std::optional<std::vector<std::string>> m_destination { };
-    std::optional<std::uint16_t> m_port { };
-    std::optional<std::string> m_username { };
-    std::optional<std::string> m_password { };
-    std::optional<std::filesystem::path> m_cert_file { };
-    std::optional<std::filesystem::path> m_key_file { };
+    std::optional<std::string> m_hostname {};
+    std::optional<std::string> m_domain {};
+    std::optional<std::string> m_smtp_server {};
+    std::optional<std::vector<std::string>> m_destination {};
+    std::optional<std::uint16_t> m_port {};
+    std::optional<std::string> m_username {};
+    std::optional<std::string> m_password {};
+    std::optional<std::filesystem::path> m_cert_file {};
+    std::optional<std::filesystem::path> m_key_file {};
     void install();
     void createFiles(const std::filesystem::path& basedir);
     void configureSASL(const std::filesystem::path& basedir);

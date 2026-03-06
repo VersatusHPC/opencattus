@@ -68,8 +68,8 @@ private:
     std::variant<std::monostate, Platform> m_platform;
     std::variant<std::monostate, Distro> m_distro;
     std::optional<std::string> m_kernel; // kernel version may be uninitialized
-    unsigned m_majorVersion { };
-    unsigned m_minorVersion { };
+    unsigned m_majorVersion {};
+    unsigned m_minorVersion {};
 
     void setMajorVersion(unsigned int majorVersion);
 

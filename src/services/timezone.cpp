@@ -44,7 +44,7 @@ std::multimap<std::string, std::string> Timezone::getAvailableTimezones() const
 std::multimap<std::string, std::string> Timezone::fetchAvailableTimezones()
 {
     auto opts = opencattus::utils::singleton::options();
-    std::multimap<std::string, std::string> timezones { };
+    std::multimap<std::string, std::string> timezones {};
     if (opts->dryRun) {
         LOG_DEBUG("Dry-Run skipping fetching available system timezones")
         return timezones;

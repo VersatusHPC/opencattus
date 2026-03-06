@@ -546,7 +546,7 @@ struct RepoAssembler final {
         const UpstreamRepo<UChecker>& upstream, const bool enabled = false,
         const bool forceUpstream = false)
     {
-        auto repo = RPMRepository { };
+        auto repo = RPMRepository {};
         repo.group(static_cast<std::string>(repoid.id));
         repo.id(static_cast<std::string>(repoid.id));
         repo.name(static_cast<std::string>(repoid.name));
@@ -634,7 +634,7 @@ public:
     void insert(const std::string& filename, RepoConfig& value)
     {
         if (!m_files.contains(filename)) {
-            m_files.emplace(filename, std::vector<RepoConfig> { });
+            m_files.emplace(filename, std::vector<RepoConfig> {});
         }
         m_files.at(filename).emplace_back(value);
     }
@@ -1003,7 +1003,7 @@ public:
     void enable(const std::vector<std::string>& repos, bool value)
     {
         auto byIdPtr = [](const std::shared_ptr<RPMRepositoryFile>& rptr) {
-            return std::hash<std::string> { }(rptr->path());
+            return std::hash<std::string> {}(rptr->path());
         };
         std::unordered_set<std::shared_ptr<RPMRepositoryFile>,
             decltype(byIdPtr)>
@@ -1032,7 +1032,7 @@ public:
     {
         // Function to iterate over map by id
         constexpr auto byId
-            = [](auto& repo) { return std::hash<std::string> { }(repo.id()); };
+            = [](auto& repo) { return std::hash<std::string> {}(repo.id()); };
 
         std::unordered_set<RPMRepository, decltype(byId)> output;
         for (auto& [_id1, repoFile] : m_filesIdx) {
@@ -1102,7 +1102,7 @@ struct RepoConfAdapter final {
 TEST_CASE("RepoAdapter")
 {
 #ifdef BUILD_TESTING
-    Options opts { };
+    Options opts {};
     opencattus::services::initializeSingletonsOptions(
         std::make_unique<const Options>(opts));
     // Log::init(5);
@@ -1199,7 +1199,7 @@ TEST_CASE("RepoNames")
     struct ShouldUseVaultService final {
         static bool shouldUseVault(const OS& osinfo) { return false; }
     };
-    const auto enabler = RepoNames<ShouldUseVaultService> { };
+    const auto enabler = RepoNames<ShouldUseVaultService> {};
     const RepoConfigVars& vars = RepoConfigVars {
         .arch = "x86_64",
         .beegfsVersion = "beegfs_7.3.3",
@@ -1433,7 +1433,7 @@ TEST_SUITE("opencattus::services::repos [slow]")
 #ifdef BUILD_TESTING
         using namespace opencattus::services;
         opencattus::services::initializeSingletonsOptions(
-            std::make_unique<const Options>(Options { }));
+            std::make_unique<const Options>(Options {}));
         const auto repos = std::filesystem::path("./repos");
         REQUIRE(opencattus::functions::exists(repos / "repos.conf"));
         const auto confs

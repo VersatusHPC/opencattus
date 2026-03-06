@@ -51,7 +51,7 @@ CommandProxy runCommandIter(
         }
     }
 
-    return CommandProxy { };
+    return CommandProxy {};
 }
 
 int runCommand(const std::string& command, std::list<std::string>& output,
@@ -181,7 +181,7 @@ std::optional<std::string> CommandProxy::getline()
               }
 
               valid = false;
-              return std::string { };
+              return std::string {};
           });
 
     valid = new_valid;
@@ -201,7 +201,7 @@ std::optional<std::string> CommandProxy::getUntil(char chr)
             }
 
             valid = false;
-            return std::string { };
+            return std::string {};
         });
 
     valid = new_valid;
@@ -238,7 +238,7 @@ int Runner::run(const ScriptBuilder& script)
 
 CommandProxy Runner::executeCommandIter(const std::string& cmd, Stream /*out*/)
 {
-    return CommandProxy { }; // Return an invalid CommandProxy
+    return CommandProxy {}; // Return an invalid CommandProxy
 }
 
 int Runner::downloadFile(const std::string& url, const std::string& file)
@@ -294,7 +294,7 @@ CommandProxy DryRunner::executeCommandIter(
     const std::string& cmd, Stream /*out*/)
 {
     LOG_WARN("Dry Run: Would execute iterative command: {}", cmd);
-    return CommandProxy { }; // Return an invalid CommandProxy
+    return CommandProxy {}; // Return an invalid CommandProxy
 }
 
 int DryRunner::downloadFile(const std::string& url, const std::string& file)
@@ -320,7 +320,7 @@ void MockRunner::checkCommand(const std::string& cmd) { }
 
 std::vector<std::string> MockRunner::checkOutput(const std::string& /*cmd*/)
 {
-    return { };
+    return {};
 }
 
 const std::vector<std::string>& MockRunner::listCommands() const
@@ -332,7 +332,7 @@ CommandProxy MockRunner::executeCommandIter(
     const std::string& cmd, Stream /*out*/)
 {
     m_cmds.push_back(cmd);
-    return CommandProxy { }; // Return an invalid CommandProxy
+    return CommandProxy {}; // Return an invalid CommandProxy
 }
 
 int MockRunner::downloadFile(const std::string& url, const std::string& file)

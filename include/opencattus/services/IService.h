@@ -47,7 +47,7 @@ private:
             if (!handleException(e, function)) {
                 throw;
             }
-            return { };
+            return {};
         }
     }
 
@@ -67,7 +67,7 @@ private:
             if (!handleException(e, function)) {
                 throw;
             }
-            return { };
+            return {};
         }
     }
 

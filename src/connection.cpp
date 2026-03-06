@@ -56,7 +56,7 @@ namespace {
  */
 class ifaddrslist {
 private:
-    ifaddrs* m_ptr { };
+    ifaddrs* m_ptr {};
 
 public:
     // The const iterator class
@@ -378,7 +378,7 @@ address Connection::fetchAddress(const std::string& interface)
     }
 
     freeifaddrs(ifaddr);
-    return { };
+    return {};
     throw std::runtime_error(fmt::format(
         "Interface {} does not have an IP address defined", interface));
 }

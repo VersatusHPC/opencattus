@@ -110,8 +110,8 @@ void run(const Role& role, const models::OS& osinfo);
  * @param osinfo The operating system information used to evaluate the role
  * condition.
  */
-void run(Roles role, const models::OS& osinfo, Role::Vars&& vars = { },
-    Role::Tags&& tags = { },
+void run(Roles role, const models::OS& osinfo, Role::Vars&& vars = {},
+    Role::Tags&& tags = {},
     std::optional<
         std::function<bool(const models::OS& osinfo)>>&& = std::nullopt);
 

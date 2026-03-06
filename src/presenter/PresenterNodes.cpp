@@ -17,8 +17,7 @@ PresenterNodes::PresenterNodes(
     // Node formation questions
     // TODO: Placeholder data
     auto fields = std::to_array<std::pair<std::string, std::string>>({
-        { Messages::Nodes::prefix, "n" },
-        { Messages::Nodes::padding, "2" },
+        { Messages::Nodes::prefix, "n" }, { Messages::Nodes::padding, "2" },
         { Messages::Nodes::startIP, "" },
         //{Messages::Nodes::rootPassword, ""},
         //{Messages::Nodes::confirmRootPassword, ""},

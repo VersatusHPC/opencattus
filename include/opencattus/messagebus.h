@@ -53,7 +53,7 @@ public:
         return std::visit(
             overloaded {
                 [](sdbus::MethodReply arg) {
-                    T result { };
+                    T result {};
                     arg >> result;
                     return result;
                 },
@@ -73,8 +73,8 @@ public:
     {
         return std::visit(overloaded {
                               [](sdbus::MethodReply arg) {
-                                  T1 result1 { };
-                                  T2 result2 { };
+                                  T1 result1 {};
+                                  T2 result2 {};
                                   arg >> result1;
                                   arg >> result2;
                                   return std::make_tuple<T1, T2>(
@@ -159,7 +159,8 @@ public:
 class MessageBus {
 public:
     [[nodiscard]] virtual std::unique_ptr<MessageBusMethod> method(
-        std::string interface, std::string method) = 0;
+        std::string interface, std::string method)
+        = 0;
     virtual ~MessageBus() = default;
 };
 

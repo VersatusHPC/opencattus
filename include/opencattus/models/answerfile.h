@@ -397,7 +397,8 @@ public:
         = default;
     AnswerfileValidationException(AnswerfileValidationException&&) = delete;
     AnswerfileValidationException& operator=(
-        const AnswerfileValidationException&) = default;
+        const AnswerfileValidationException&)
+        = default;
     AnswerfileValidationException& operator=(AnswerfileValidationException&&)
         = delete;
 

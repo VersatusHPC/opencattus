@@ -111,8 +111,7 @@ void createDirectory(const std::filesystem::path& path)
 TEST_CASE("createDirectory - recursive creation and idempotency")
 {
     using opencattus::services::Options;
-    opencattus::Singleton<Options>::init(
-        std::make_unique<Options>(Options { }));
+    opencattus::Singleton<Options>::init(std::make_unique<Options>(Options {}));
     const std::filesystem::path testBaseDir = "test/output/functions";
     const std::filesystem::path targetDir = testBaseDir / "foo" / "bar" / "tar";
 
