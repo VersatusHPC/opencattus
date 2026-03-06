@@ -66,8 +66,8 @@ jobs:
         cmake --build build/Debug # Or Debug
 
     - name: CTest
-      working-directory: ${{ github.workspace }}/build/Debug
-      run: test/OpenCATTUS-tests
+      working-directory: ${{ github.workspace }}
+      run: build/Debug/test/OpenCATTUS-tests
 
 
     - name: RPM Build
