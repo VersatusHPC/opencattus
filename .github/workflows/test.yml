@@ -47,9 +47,13 @@ jobs:
         dnf install -y cmake ninja-build ccache gcc-c++ python pip libasan libubsan gcc-toolset-14 \
           gcc-toolset-14-libubsan-devel gcc-toolset-14-libasan-devel cppcheck \
           glibmm24 glibmm24-devel newt-devel rpmdevtools perl-File-\* perl-threads \
-          perl-Thread perl-Thread-Queue perl-FindBin
+          perl-Thread perl-Thread-Queue perl-FindBin dbus-daemon
 
-        python3 -m venv .venv 
+        # Start D-Bus system bus (needed by tests that initialize the MessageBus singleton)
+        mkdir -p /run/dbus
+        dbus-daemon --system --fork
+
+        python3 -m venv .venv
         source .venv/bin/activate
         pip3 install conan
         source ./rhel-gcc-toolset-14.sh
