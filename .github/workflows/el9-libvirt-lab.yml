@@ -1,7 +1,6 @@
 name: EL9 Libvirt Lab
 
 on:
-  pull_request:
   workflow_dispatch:
     inputs:
       base_image:
@@ -12,6 +11,11 @@ on:
         description: EL9 DVD ISO path on the self-hosted runner
         required: false
         type: string
+      keep_lab:
+        description: Keep the lab after the workflow finishes for manual inspection
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: opencattus-el9-lab
@@ -103,6 +107,14 @@ jobs:
             tail -n 200 "${log_dir}/headnode/journal.txt" || true
           fi
 
+      - name: Report retained lab
+        if: always() && github.event.inputs.keep_lab == 'true'
+        run: |
+          set -euo pipefail
+          echo "Keeping lab ${LAB_NAME} for manual inspection."
+          echo "Artifacts: /var/lib/libvirt/images/opencattus-gha/${LAB_NAME}"
+          echo "Logs: /var/tmp/opencattus-lab/${LAB_NAME}/logs"
+
       - name: Destroy lab
-        if: always()
+        if: always() && github.event.inputs.keep_lab != 'true'
         run: testing/libvirt/opencattus-el9-lab.sh -c "${OPENCATTUS_LAB_ENV}" destroy || true

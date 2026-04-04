@@ -53,12 +53,14 @@ The default config also assumes a single active lab on the host. If you want mul
 
 This repo's CI is intended to run on your own GitHub Actions runner, not on GitHub-hosted machines.
 
+The fast build/test and packaging workflows can run automatically on the self-hosted runner. The EL9 libvirt lab is different on purpose: it is manual-only, so developers choose when to spend the time and host capacity on a full cluster run.
+
 For the EL9 libvirt workflow, set these repository variables to paths that exist on the self-hosted runner:
 
 - `OPENCATTUS_EL9_BASE_IMAGE`
 - `OPENCATTUS_EL9_CLUSTER_ISO`
 
-The workflow uses the checked-out source tree as `OPENCATTUS_SOURCE_DIR`, creates an isolated lab named from the GitHub run id, prints the tail of the collected logs on failure, and destroys the lab afterwards to avoid leaking VMs and libvirt networks on the runner host.
+Run the workflow from the Actions tab when you want a full unattended cluster gate. The workflow uses the checked-out source tree as `OPENCATTUS_SOURCE_DIR`, creates an isolated lab named from the GitHub run id, prints the tail of the collected logs on failure, and destroys the lab afterwards by default. Set the `keep_lab` workflow input to keep the failed or successful lab around for manual inspection.
 
 ## Useful commands
 
