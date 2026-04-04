@@ -1,6 +1,8 @@
 # Ansible role for OpenCATTUS
 An Ansible role that provision a Vagrant virtual machine with OpenCATTUS and runs it, for tests purpose.
 
+> This is the older Vagrant-based path. For current EL9 recovery and unattended cluster validation, prefer `testing/libvirt`.
+
 ## Requirements
 - Ansible
 - Vagrant
