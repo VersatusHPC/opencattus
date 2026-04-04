@@ -44,8 +44,9 @@ void dumpPreInstallState()
     shell::cmd("systemctl --no-pager list-units --plain --type=service --all");
 
     LOG_INFO("Firewall configuration");
-    // firewalld may not be running
-    shell::cmd("firewall-cmd --list-all-zones || true");
+    shell::cmd("if command -v firewall-cmd >/dev/null 2>&1; then "
+               "firewall-cmd --list-all-zones; else "
+               "echo 'firewall-cmd not installed'; fi");
 
     LOG_INFO("End of cluster state dump");
     opts->maybeStopAfterStep("dump-cluster-state");
