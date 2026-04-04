@@ -375,7 +375,8 @@ TEST_CASE("getHttpStatus retries until success")
         = std::make_unique<SequencedRunner>(std::vector<std::string> { "404",
             "200" });
     auto* runnerPtr = runner.get();
-    Singleton<IRunner>::init(std::move(runner));
+    std::unique_ptr<IRunner> runnerBase = std::move(runner);
+    Singleton<IRunner>::init(std::move(runnerBase));
 
     CHECK(getHttpStatus("https://example.com/repo", 3) == "200");
     CHECK(runnerPtr->commands().size() == 2);

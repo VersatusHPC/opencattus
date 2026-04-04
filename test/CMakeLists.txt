@@ -88,27 +88,26 @@ endif ()
 
 # ---- Add Tests ----
 
-# Note: doctest and similar testing frameworks can automatically configure CMake tests. For other
-# testing frameworks add the tests target instead: add_test(NAME ${PROJECT_NAME} COMMAND
-# ${PROJECT_NAME})
+# Register the doctest runner explicitly. The source tree ships fixture files
+# under `test/sample` and repository configs under `repos/`, so the test binary
+# needs to run from the repo root instead of the build directory.
+add_test(
+        NAME ${PROJECT_NAME}
+        COMMAND ${PROJECT_NAME} --test-case-exclude=*slow*)
+set_tests_properties(
+        ${PROJECT_NAME}
+        PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
-# if (opencattus_ENABLE_CONAN)
-#     string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LOWER)
-#     string(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_UPPER)
-#     string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" CMAKE_SYSTEM_PROCESSOR_LOWER)
-# 
-#     # Hack to fix wrong architecture name for aarch64 during Conan install
-#     if (CMAKE_SYSTEM_PROCESSOR_LOWER STREQUAL "aarch64")
-#         set(CMAKE_SYSTEM_PROCESSOR_LOWER "armv8")
-#     endif ()
-# 
-#     include(${doctest_DIR}/doctest-${CMAKE_BUILD_TYPE_LOWER}-${CMAKE_SYSTEM_PROCESSOR_LOWER}-data.cmake)
-#     include(${doctest_BUILD_DIRS_${CMAKE_BUILD_TYPE_UPPER}}/doctest.cmake)
-# else ()
-#     include(${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake)
-# endif ()
-# 
-# doctest_discover_tests(${PROJECT_NAME})
+add_test(
+        NAME ${PROJECT_NAME}.slow
+        COMMAND ${PROJECT_NAME} --test-case=*slow*)
+set_tests_properties(
+        ${PROJECT_NAME}.slow
+        PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        LABELS slow
+        DISABLED TRUE)
 
 # ---- code coverage ----
 

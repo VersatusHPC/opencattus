@@ -12,6 +12,7 @@
 #endif
 
 #include <fmt/core.h>
+#include <ifaddrs.h>
 
 namespace {
 
@@ -195,18 +196,49 @@ void run(const Role& role)
 
 TEST_CASE("renderStaticConnectionScript activates the generated profile")
 {
+    const auto interfaceName = []() {
+        struct ifaddrs* interfaces = nullptr;
+        if (getifaddrs(&interfaces) != 0) {
+            throw std::runtime_error("Unable to enumerate network interfaces");
+        }
+
+        for (auto* current = interfaces; current != nullptr;
+             current = current->ifa_next) {
+            if (current->ifa_name == nullptr) {
+                continue;
+            }
+            if (std::string_view(current->ifa_name) == "lo") {
+                continue;
+            }
+
+            const std::string name = current->ifa_name;
+            freeifaddrs(interfaces);
+            return name;
+        }
+
+        freeifaddrs(interfaces);
+        throw std::runtime_error("No non-loopback network interface available");
+    }();
+
     Network network(Network::Profile::Management, Network::Type::Ethernet);
     network.setSubnetMask("255.255.255.0");
 
     Connection connection(&network);
-    connection.setInterface("oc-mgmt0");
+    connection.setInterface(interfaceName);
     connection.setAddress("192.168.30.254");
 
     const auto script = renderStaticConnectionScript(connection, "disabled");
 
     CHECK(script.contains("nmcli connection up \"Management\""));
     CHECK(script.contains(
-        "awk -F: '$2==\"oc-mgmt0\" {print $1}' | while read -r "
-        "existing_connection; do"));
+        fmt::format("awk -F: '$2==\"{}\" {{print $1}}' | while read -r ",
+            interfaceName)
+            + "existing_connection; do"));
+    CHECK(script.contains(
+        fmt::format("nmcli device set {} managed yes", interfaceName)));
+    CHECK(script.contains(
+        fmt::format("nmcli connection add type Ethernet mtu 1500 ifname {} "
+                    "con-name \"Management\"",
+            interfaceName)));
     CHECK_FALSE(script.contains("nmcli device connect oc-mgmt0"));
 }
