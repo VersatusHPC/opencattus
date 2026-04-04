@@ -1,78 +1,115 @@
-name: Test Workflow
+name: Self-Hosted CI
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: opencattus-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  build-and-test:
-    runs-on: ubuntu-latest # Or another standard runner
-
-    container:
-      image: rockylinux:9
+  fast-tests:
+    name: Fast Tests
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+    timeout-minutes: 60
 
     steps:
-    - name: Install git
-      run: |
-        dnf install -y git
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Verify runner prerequisites
+        run: |
+          set -euo pipefail
+          for cmd in cmake ninja python3 ccache pkg-config; do
+            command -v "${cmd}" >/dev/null || {
+              echo "Missing required command on self-hosted runner: ${cmd}" >&2
+              exit 1
+            }
+          done
 
-    - name: Get CMake Dependencies Hash
-      id: cmake-hash
-      run: |
-        CMAKE_FILE_PATH="cmake/CommonLibraries.cmake"
-        if [ -f "$CMAKE_FILE_PATH" ]; then
-          CMAKE_HASH=$(git hash-object "$CMAKE_FILE_PATH")
-          echo "cmake_hash=$CMAKE_HASH" >> "$GITHUB_OUTPUT"
-        else
-          echo "cmake_hash=no-cmake-file" >> "$GITHUB_OUTPUT"
-        fi
+          pkg-config --exists glibmm-2.4 || {
+            echo "Missing glibmm development files on self-hosted runner" >&2
+            exit 1
+          }
 
-    - name: Cache Dependencies
-      uses: actions/cache@v4
-      id: dependency-cache
-      with:
-        path: |
-          build
-          ~/.conan
-        key: ${{ runner.os }}-deps-${{ steps.cmake-hash.outputs.cmake_hash }}
-        restore-keys: |
-          ${{ runner.os }}-deps-
+          pkg-config --exists newt || {
+            echo "Missing newt development files on self-hosted runner" >&2
+            exit 1
+          }
 
-    - name: Set up dependencies
-      working-directory: ${{ github.workspace }}
-      run: |
-        dnf install -y dnf-plugins-core epel-release
-        dnf config-manager --set-enabled crb
-        dnf install -y cmake ninja-build ccache gcc-c++ python pip libasan libubsan gcc-toolset-14 \
-          gcc-toolset-14-libubsan-devel gcc-toolset-14-libasan-devel cppcheck \
-          glibmm24 glibmm24-devel newt-devel rpmdevtools perl-File-\* perl-threads \
-          perl-Thread perl-Thread-Queue perl-FindBin dbus-daemon
+      - name: Prepare Conan environment
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv
+          source .venv/bin/activate
+          python3 -m pip install --upgrade pip
+          python3 -m pip install conan
 
-        # Start D-Bus system bus (needed by tests that initialize the MessageBus singleton)
-        mkdir -p /run/dbus
-        dbus-daemon --system --fork
+      - name: Configure
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          cmake -S . -B build-host -G Ninja -DBUILD_TESTING=ON
 
-        python3 -m venv .venv
-        source .venv/bin/activate
-        pip3 install conan
-        source ./rhel-gcc-toolset-14.sh
-        cmake -S . -DCMAKE_BUILD_TYPE=Debug -G Ninja -B build/Debug
+      - name: Build app and test runner
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          cmake --build build-host --target opencattus OpenCATTUS-tests -j"$(nproc)"
 
-    - name: CMake build
-      working-directory: ${{ github.workspace }}
-      run: |
-        source .venv/bin/activate
-        cmake --build build/Debug # Or Debug
+      - name: Run fast test suite
+        run: ctest --test-dir build-host --output-on-failure
 
-    - name: CTest
-      working-directory: ${{ github.workspace }}
-      run: build/Debug/test/OpenCATTUS-tests -tce="*slow*"
+  rpm-build:
+    name: RPM Build
+    needs: fast-tests
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+    timeout-minutes: 60
 
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: RPM Build
-      working-directory: ${{ github.workspace }}
-      run: |
-        git config --global --add safe.directory '*'
-        source .venv/bin/activate
-        ./buildrpm.sh
+      - name: Verify runner prerequisites
+        run: |
+          set -euo pipefail
+          command -v podman >/dev/null || {
+            echo "Missing required command on self-hosted runner: podman" >&2
+            exit 1
+          }
+          command -v git >/dev/null || {
+            echo "Missing required command on self-hosted runner: git" >&2
+            exit 1
+          }
+
+      - name: Build RPM in Rocky Linux 9 container
+        run: |
+          set -euo pipefail
+          podman run --rm \
+            -e GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+            -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:Z" \
+            -w "${GITHUB_WORKSPACE}" \
+            docker.io/library/rockylinux:9 \
+            bash -lc '
+              set -euo pipefail
+              dnf install -y git rpmdevtools rpm-build tar gzip
+              git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+              VERSION=$(awk "/Version:/ {print \$2}" rpmspecs/opencattus.spec)
+              rpmdev-setuptree
+              cp rpmspecs/opencattus.spec ~/rpmbuild/SPECS/
+              git archive -o ~/rpmbuild/SOURCES/opencattus-${VERSION}.tar.gz \
+                --format tgz HEAD --prefix opencattus-${VERSION}/
+              rpmbuild -ba ~/rpmbuild/SPECS/opencattus.spec
+              ls -l ~/rpmbuild/RPMS/*/opencattus-installer*.rpm
+            '

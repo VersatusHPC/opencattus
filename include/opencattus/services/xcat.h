@@ -71,6 +71,7 @@ private:
     Image m_stateless;
 
     static void setDHCPInterfaces(std::string_view interface);
+    static void setPrecreateMyPostscripts(bool enabled);
     static void setDomain(std::string_view domain);
 
     /**
@@ -134,6 +135,14 @@ private:
      * Mutates m_stateless
      */
     void configureTimeService();
+
+    /**
+     * @brief Configures boot-time services required by stateless nodes.
+     *
+     * This prepares SSH and related runtime directories so EL9 diskless nodes
+     * come up reachable before xCAT postbootscripts finish.
+     */
+    void configureRemoteAccess();
 
     /**
      * @brief Configures SLURM settings.

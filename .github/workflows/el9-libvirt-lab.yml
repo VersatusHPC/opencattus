@@ -1,0 +1,120 @@
+name: EL9 Libvirt Lab
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_image:
+        description: EL9 cloud image path on the self-hosted runner
+        required: false
+        type: string
+      cluster_iso:
+        description: EL9 DVD ISO path on the self-hosted runner
+        required: false
+        type: string
+      keep_lab:
+        description: Keep the lab after the workflow finishes for manual inspection
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: opencattus-el9-lab
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rocky9-xcat-lab:
+    name: Rocky 9 xCAT lab
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+    timeout-minutes: 240
+    env:
+      EL9_BASE_IMAGE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.base_image || vars.OPENCATTUS_EL9_BASE_IMAGE }}
+      EL9_CLUSTER_ISO: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.cluster_iso || vars.OPENCATTUS_EL9_CLUSTER_ISO }}
+      LAB_NAME: gha-opencattus-${{ github.run_id }}-${{ github.run_attempt }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify runner prerequisites
+        run: |
+          set -euo pipefail
+          for cmd in genisoimage python3 qemu-img rsync ssh virsh; do
+            command -v "${cmd}" >/dev/null || {
+              echo "Missing required command on self-hosted runner: ${cmd}" >&2
+              exit 1
+            }
+          done
+
+          command -v vbmc >/dev/null || command -v /usr/local/bin/vbmc >/dev/null || {
+            echo "Missing VirtualBMC on self-hosted runner" >&2
+            exit 1
+          }
+
+          [[ -n "${EL9_BASE_IMAGE}" ]] || {
+            echo "Set OPENCATTUS_EL9_BASE_IMAGE as a repository variable or workflow input" >&2
+            exit 1
+          }
+          [[ -n "${EL9_CLUSTER_ISO}" ]] || {
+            echo "Set OPENCATTUS_EL9_CLUSTER_ISO as a repository variable or workflow input" >&2
+            exit 1
+          }
+          [[ -f "${EL9_BASE_IMAGE}" ]] || {
+            echo "EL9 base image not found: ${EL9_BASE_IMAGE}" >&2
+            exit 1
+          }
+          [[ -f "${EL9_CLUSTER_ISO}" ]] || {
+            echo "EL9 cluster ISO not found: ${EL9_CLUSTER_ISO}" >&2
+            exit 1
+          }
+
+      - name: Render lab config
+        run: |
+          set -euo pipefail
+          envfile="${RUNNER_TEMP}/opencattus-el9-lab.env"
+          cat > "${envfile}" <<EOF
+          LAB_NAME=${LAB_NAME}
+          DISTRO_ID=rocky
+          DISTRO_VERSION=9.6
+          DISTRO_MAJOR=9
+          BASE_IMAGE=${EL9_BASE_IMAGE}
+          CLUSTER_ISO=${EL9_CLUSTER_ISO}
+          OPENCATTUS_SOURCE_DIR=${GITHUB_WORKSPACE}
+          PROVISIONER=xcat
+          IMAGE_ROOT=/var/lib/libvirt/images/opencattus-gha
+          EOF
+          echo "OPENCATTUS_LAB_ENV=${envfile}" >> "${GITHUB_ENV}"
+
+      - name: Run unattended EL9 lab
+        run: testing/libvirt/opencattus-el9-lab.sh -c "${OPENCATTUS_LAB_ENV}" run
+
+      - name: Print collected logs on failure
+        if: failure()
+        run: |
+          set -euo pipefail
+          log_dir="/var/tmp/opencattus-lab/${LAB_NAME}/logs"
+          if [[ -f "${log_dir}/install.log" ]]; then
+            echo "--- install.log (tail) ---"
+            tail -n 200 "${log_dir}/install.log" || true
+          fi
+          if [[ -f "${log_dir}/headnode/journal.txt" ]]; then
+            echo "--- headnode journal (tail) ---"
+            tail -n 200 "${log_dir}/headnode/journal.txt" || true
+          fi
+
+      - name: Report retained lab
+        if: always() && github.event.inputs.keep_lab == 'true'
+        run: |
+          set -euo pipefail
+          echo "Keeping lab ${LAB_NAME} for manual inspection."
+          echo "Artifacts: /var/lib/libvirt/images/opencattus-gha/${LAB_NAME}"
+          echo "Logs: /var/tmp/opencattus-lab/${LAB_NAME}/logs"
+
+      - name: Destroy lab
+        if: always() && github.event.inputs.keep_lab != 'true'
+        run: testing/libvirt/opencattus-el9-lab.sh -c "${OPENCATTUS_LAB_ENV}" destroy || true

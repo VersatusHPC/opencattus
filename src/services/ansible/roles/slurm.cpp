@@ -4,6 +4,8 @@
 #include <opencattus/services/runner.h>
 #include <opencattus/utils/optional.h>
 
+#include <string_view>
+
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
 #else
@@ -12,6 +14,20 @@
 #endif
 
 #include <fmt/core.h>
+
+namespace {
+std::string buildNodeDeclaration(std::string_view nodeName,
+    std::string_view nodeAddress, std::string_view cpusPerNode,
+    std::string_view sockets, std::string_view realMemory,
+    std::string_view coresPerSocket, std::string_view threadsPerCore)
+{
+    return fmt::format(
+        "NodeName={} NodeAddr={} NodeHostName={} CPUs={} Sockets={} "
+        "RealMemory={} CoresPerSocket={} ThreadsPerCore={} State=UNKNOWN",
+        nodeName, nodeAddress, nodeName, cpusPerNode, sockets, realMemory,
+        coresPerSocket, threadsPerCore);
+}
+} // namespace
 
 namespace opencattus::services::ansible::roles::slurm {
 
@@ -44,11 +60,25 @@ void run(const Role& role)
     const auto sockets = optional::unwrap(nodesConfig.sockets,
         "sockets missing in [node] section in the answerfile {}",
         answerfile()->path());
+    std::vector<std::string> nodeDeclarations;
+    nodeDeclarations.reserve(answerfile()->nodes.nodes.size());
+    std::size_t nodeIndex = 0;
+
+    for (const auto& node : answerfile()->nodes.nodes) {
+        nodeIndex++;
+        const auto nodeName = optional::unwrap(
+            node.hostname, "hostname missing for node {}", nodeIndex);
+        const auto nodeAddress = optional::unwrap(
+            node.start_ip, "node_ip missing for node {}", nodeName);
+        nodeDeclarations.emplace_back(buildNodeDeclaration(nodeName,
+            nodeAddress.to_string(), cpusPerNode, sockets, realMemory,
+            coresPerSocket, threadsPerCore));
+    }
 
     runner::shell::fmt(R"del(
 # SLURM configuration
 dnf -y install ohpc-slurm-server mariadb-server mariadb
-systemctl enable --now munge slurmctld munge slurmdbd mariadb
+systemctl enable --now munge slurmctld slurmdbd mariadb
 
 # Secure the installation, `mysql -u root` will exit with
 # non-zero exit code if this already run before, use `mysql -u root -p`
@@ -63,26 +93,38 @@ systemctl enable --now munge slurmctld munge slurmdbd mariadb
 # rm -f /etc/my.cnf
 # rm -rf /etc/my.cnf.d
 set +e
-mysql -u root --password='' -e "SELECT 1;" >/dev/null 2>&1
-if [ $? -eq 0 ]; then
-    mysql -u root 2> /dev/null <<EOF
-    ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '{mariadb_root_pass}';
-
-    DELETE FROM mysql.user WHERE User='';
-    DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
-
-    DROP DATABASE IF EXISTS test;
-    DELETE FROM mysql.db WHERE Db='test' OR Db='test_%';
-
-    CREATE DATABASE IF NOT EXISTS slurm_acct_db;
-
-    CREATE USER IF NOT EXISTS 'slurm'@'localhost' IDENTIFIED BY '{slurmdb_pass}';
-    GRANT ALL PRIVILEGES ON slurm_acct_db.* TO 'slurm'@'localhost';
-
-    FLUSH PRIVILEGES;
-EOF
+MYSQL_ROOT_ARGS=(-u root)
+mysql "${{MYSQL_ROOT_ARGS[@]}}" --password='' -e "SELECT 1;" >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+    MYSQL_ROOT_ARGS=(-u root -p{mariadb_root_pass})
+    mysql "${{MYSQL_ROOT_ARGS[@]}}" -e "SELECT 1;" >/dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        echo "Unable to authenticate to MariaDB as root" >&2
+        exit 1
+    fi
 fi
 set -e
+
+mysql "${{MYSQL_ROOT_ARGS[@]}}" 2> /dev/null <<EOF
+ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '{mariadb_root_pass}';
+
+DELETE FROM mysql.user WHERE User='';
+DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+
+DROP DATABASE IF EXISTS test;
+DELETE FROM mysql.db WHERE Db='test' OR Db='test_%';
+
+CREATE DATABASE IF NOT EXISTS slurm_acct_db;
+
+CREATE USER IF NOT EXISTS 'slurm'@'localhost' IDENTIFIED BY '{slurmdb_pass}';
+ALTER USER 'slurm'@'localhost' IDENTIFIED BY '{slurmdb_pass}';
+GRANT ALL PRIVILEGES ON slurm_acct_db.* TO 'slurm'@'localhost';
+
+FLUSH PRIVILEGES;
+EOF
+
+install -d -m 0755 -o slurm -g slurm /var/log/slurm
+install -m 0640 -o slurm -g slurm /dev/null /var/log/slurm/slurmdbd.log
 
 cat <<EOF > /etc/slurm/slurmdbd.conf
 # Authentication
@@ -97,22 +139,21 @@ SlurmUser=slurm
 StorageType=accounting_storage/mysql
 StorageHost=localhost
 StorageUser=slurm
-StoragePass={storage_pass}
+StoragePass={slurmdb_pass}
 StorageLoc=slurm_acct_db
 
 # Logging & PID
-LogFile=/var/log/slurmdbd.log
-PidFile=/var/run/slurmdbd.pid
+LogFile=/var/log/slurm/slurmdbd.log
+PidFile=/run/slurmdbd/slurmdbd.pid
 EOF
 chown slurm:slurm /etc/slurm/slurmdbd.conf
 chmod 600 /etc/slurm/slurmdbd.conf
 
-)del",
+    )del",
         fmt::arg("hostname", answerfile()->hostname.hostname),
         fmt::arg(
             "mariadb_root_pass", answerfile()->slurm.mariadb_root_password),
-        fmt::arg("slurmdb_pass", answerfile()->slurm.slurmdb_password),
-        fmt::arg("storage_pass", answerfile()->slurm.storage_password));
+        fmt::arg("slurmdb_pass", answerfile()->slurm.slurmdb_password));
 
     runner::shell::fmt(R"del(
 # Minimal /etc/slurm/slurm.conf
@@ -148,10 +189,8 @@ AccountingStorageType=accounting_storage/slurmdbd
 AccountingStorageHost={hostname}
 AccountingStoragePort=6819
 JobAcctGatherType=jobacct_gather/cgroup
+{node_declarations}
 EOF
-    for nodename in {node_names}; do
-        echo "NodeName=$nodename CPUs={cpus_per_node} Sockets={sockets} RealMemory={real_memory} CoresPerSocket={cores_per_socket} ThreadsPerCore={threads_per_core} State=UNKNOWN"
-    done
     echo "PartitionName={partition_name} Nodes={node_prefix}[01-{last_node_num:02d}] Default=YES MaxTime=INFINITE State=UP"
     echo "# END AUTO-GENERATED NODE CONFIG"
 }} >> $slurm_conf
@@ -163,21 +202,30 @@ systemctl restart slurmctld slurmdbd
 echo "slurmctld is $(systemctl is-active slurmctld)"
 echo "slurmdbd is $(systemctl is-active slurmdbd)"
 
-# Give some time for mariadb to start
-sleep 3
+# Wait for slurmdbd to accept accounting requests
+for attempt in $(seq 1 20); do
+    if sacct >/dev/null 2>&1; then
+        break
+    fi
+    sleep 2
+done
 
-# Check that sacct works
 sacct
 )del",
         fmt::arg("hostname", answerfile()->hostname.hostname),
-        fmt::arg("node_names", fmt::join(nodesNames, " ")),
+        fmt::arg("node_declarations", fmt::join(nodeDeclarations, "\n")),
         fmt::arg("node_prefix", nodesPrefix),
-        fmt::arg("cpus_per_node", cpusPerNode), fmt::arg("sockets", sockets),
-        fmt::arg("real_memory", realMemory),
-        fmt::arg("cores_per_socket", coresPerSocket),
-        fmt::arg("threads_per_core", threadsPerCore),
         fmt::arg("last_node_num", nodesNames.size()),
         fmt::arg("partition_name", answerfile()->slurm.partition_name));
 }
 
+}
+
+TEST_CASE("buildNodeDeclaration pins the management address")
+{
+    CHECK(buildNodeDeclaration("n01", "192.168.30.1", "1", "1", "4096", "1",
+              "1")
+        == "NodeName=n01 NodeAddr=192.168.30.1 NodeHostName=n01 CPUs=1 "
+           "Sockets=1 RealMemory=4096 CoresPerSocket=1 ThreadsPerCore=1 "
+           "State=UNKNOWN");
 }

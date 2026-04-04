@@ -1,23 +1,71 @@
-name: clang-format check
-on: [push, pull_request]
+name: Clang Format Check
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: opencattus-format-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
-  formatting-check-src:
-    name: Formatting check (src)
-    runs-on: ubuntu-latest
+  formatting-check:
+    name: Formatting check
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+    timeout-minutes: 15
+
     steps:
-    - uses: actions/checkout@v4
-    - name: Run clang-format style check for C/C++ programs.
-      uses: jidicula/clang-format-action@v4.16.0
-      with:
-        clang-format-version: '19'
-        check-path: 'src'
-  formatting-check-include:
-    name: Formatting check (include)
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Run clang-format style check for C/C++ programs.
-      uses: jidicula/clang-format-action@v4.16.0
-      with:
-        clang-format-version: '19'
-        check-path: 'include'
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify runner prerequisites
+        run: |
+          set -euo pipefail
+          CLANG_FORMAT_BIN=$(command -v clang-format-19 || command -v clang-format || true)
+          [[ -n "${CLANG_FORMAT_BIN}" ]] || {
+            echo "clang-format is not installed on the self-hosted runner" >&2
+            exit 1
+          }
+          echo "CLANG_FORMAT_BIN=${CLANG_FORMAT_BIN}" >> "${GITHUB_ENV}"
+
+      - name: Collect changed source files
+        run: |
+          set -euo pipefail
+          base_ref=""
+
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            base_ref="${{ github.event.pull_request.base.sha }}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+            base_ref="${{ github.event.before }}"
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            base_ref="HEAD^"
+          fi
+
+          if [[ -n "${base_ref}" ]]; then
+            git diff --name-only --diff-filter=ACMR "${base_ref}" HEAD -- include src > changed-files.txt
+          else
+            : > changed-files.txt
+          fi
+
+          grep -E '\.(h|hpp|c|cc|cpp)$' changed-files.txt > changed-cpp-files.txt || true
+
+          if [[ ! -s changed-cpp-files.txt ]]; then
+            echo "No changed C/C++ files to check."
+            echo "HAS_FORMATTED_FILES=false" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+
+          tr '\n' '\0' < changed-cpp-files.txt > changed-cpp-files.nul
+          echo "HAS_FORMATTED_FILES=true" >> "${GITHUB_ENV}"
+
+      - name: Run clang-format style check
+        if: env.HAS_FORMATTED_FILES == 'true'
+        run: xargs -0 "${CLANG_FORMAT_BIN}" --dry-run --Werror < changed-cpp-files.nul

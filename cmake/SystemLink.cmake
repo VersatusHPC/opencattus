@@ -35,6 +35,41 @@ function(target_include_system_directories target)
 
 endfunction()
 
+function(target_resolve_alias outvar lib)
+  set(resolved_target "${lib}")
+
+  get_target_property(aliased_target "${lib}" ALIASED_TARGET)
+  if(aliased_target)
+    set(resolved_target "${aliased_target}")
+  endif()
+
+  set(${outvar} "${resolved_target}" PARENT_SCOPE)
+endfunction()
+
+function(target_get_normalized_interface_include_dirs outvar lib)
+  target_resolve_alias(resolved_target "${lib}")
+
+  get_target_property(raw_include_dirs "${resolved_target}" INTERFACE_INCLUDE_DIRECTORIES)
+  get_target_property(target_source_dir "${resolved_target}" SOURCE_DIR)
+  get_target_property(target_binary_dir "${resolved_target}" BINARY_DIR)
+
+  set(normalized_include_dirs "")
+
+  foreach(include_dir IN LISTS raw_include_dirs)
+    if(IS_ABSOLUTE "${include_dir}" OR include_dir MATCHES "^\\$<")
+      list(APPEND normalized_include_dirs "${include_dir}")
+    elseif(target_source_dir AND EXISTS "${target_source_dir}/${include_dir}")
+      list(APPEND normalized_include_dirs "${target_source_dir}/${include_dir}")
+    elseif(target_binary_dir AND EXISTS "${target_binary_dir}/${include_dir}")
+      list(APPEND normalized_include_dirs "${target_binary_dir}/${include_dir}")
+    else()
+      list(APPEND normalized_include_dirs "${include_dir}")
+    endif()
+  endforeach()
+
+  set(${outvar} "${normalized_include_dirs}" PARENT_SCOPE)
+endfunction()
+
 # Include the directories of a library target as system directories (which suppresses their warnings).
 function(
   target_include_system_library
@@ -43,7 +78,7 @@ function(
   lib)
   # check if this is a target
   if(TARGET ${lib})
-    get_target_property(lib_include_dirs ${lib} INTERFACE_INCLUDE_DIRECTORIES)
+    target_get_normalized_interface_include_dirs(lib_include_dirs "${lib}")
     if(lib_include_dirs)
       target_include_system_directories(${target} ${scope} ${lib_include_dirs})
     else()

@@ -9,10 +9,19 @@
 #include <boost/process/v2.hpp>
 
 #include <fmt/format.h>
+#include <array>
 #include <ranges>
 
 using opencattus::services::CommandProxy;
 using opencattus::services::Stream;
+
+#ifdef BUILD_TESTING
+#include <doctest/doctest.h>
+#include <unistd.h>
+#else
+#define DOCTEST_CONFIG_DISABLE
+#include <doctest/doctest.h>
+#endif
 
 namespace {
 
@@ -37,14 +46,16 @@ CommandProxy runCommandIter(
 
         if (out == Stream::Stderr) {
             boost::process::child child(
-                command, boost::process::std_err > pipe_stream);
+                command, boost::process::std_in < boost::process::null,
+                boost::process::std_err > pipe_stream);
             return CommandProxy { .valid = true,
                 .child = std::move(child),
                 .pipe_stream = std::move(pipe_stream) };
 
         } else {
             boost::process::child child(
-                command, boost::process::std_out > pipe_stream);
+                command, boost::process::std_in < boost::process::null,
+                boost::process::std_out > pipe_stream);
             return CommandProxy { .valid = true,
                 .child = std::move(child),
                 .pipe_stream = std::move(pipe_stream) };
@@ -62,7 +73,8 @@ int runCommand(const std::string& command, std::list<std::string>& output,
         LOG_DEBUG("Running command: {}", command)
         boost::process::ipstream pipe_stream;
         boost::process::child child(
-            command, boost::process::std_out > pipe_stream);
+            command, boost::process::std_in < boost::process::null,
+            boost::process::std_out > pipe_stream);
 
         std::string line;
 
@@ -104,8 +116,9 @@ int cmd(std::vector<std::string>& output, std::string_view command)
         //  https://www.boost.org/doc/libs/1_80_0/doc/html/boost_process/v2.html
         boost::process::ipstream pipe_stream;
         // -l for loading /etc/profile.d/* files
-        boost::process::child child(
-            "/bin/bash", "-lc", script, boost::process::std_out > pipe_stream);
+        boost::process::child child("/bin/bash", "-lc", script,
+            boost::process::std_in < boost::process::null,
+            boost::process::std_out > pipe_stream);
 
         std::string line;
         while (pipe_stream && std::getline(pipe_stream, line)) {
@@ -134,8 +147,9 @@ int cmd(std::string_view command)
         LOG_DEBUG("Running shell command: {}", command);
         boost::process::ipstream pipe_stream;
         // -l for loading /etc/profile.d/* files
-        boost::process::child child(
-            "/bin/bash", "-lc", script, boost::process::std_out > pipe_stream);
+        boost::process::child child("/bin/bash", "-lc", script,
+            boost::process::std_in < boost::process::null,
+            boost::process::std_out > pipe_stream);
 
         std::string line;
         while (pipe_stream && std::getline(pipe_stream, line)) {
@@ -345,3 +359,48 @@ int MockRunner::downloadFile(const std::string& url, const std::string& file)
 int MockRunner::run(const ScriptBuilder& script) { return 0; }
 
 } // namespace opencattus::services
+
+namespace {
+
+class ScopedPipeStdin {
+public:
+    ScopedPipeStdin()
+    {
+        REQUIRE(pipe(m_pipe.data()) == 0);
+        m_savedStdin = dup(STDIN_FILENO);
+        REQUIRE(m_savedStdin >= 0);
+        REQUIRE(dup2(m_pipe[0], STDIN_FILENO) >= 0);
+    }
+
+    ~ScopedPipeStdin()
+    {
+        if (m_savedStdin >= 0) {
+            dup2(m_savedStdin, STDIN_FILENO);
+            close(m_savedStdin);
+        }
+
+        if (m_pipe[0] >= 0) {
+            close(m_pipe[0]);
+        }
+
+        if (m_pipe[1] >= 0) {
+            close(m_pipe[1]);
+        }
+    }
+
+private:
+    std::array<int, 2> m_pipe { -1, -1 };
+    int m_savedStdin = -1;
+};
+
+}
+
+TEST_CASE("Runner executeCommand redirects stdin to null")
+{
+    ScopedPipeStdin stdinPipe;
+    opencattus::services::Runner runner;
+
+    CHECK(runner.executeCommand(
+              R"cmd(timeout 1 python3 -c "import sys; sys.exit(0 if sys.stdin.read()=='' else 1)")cmd")
+        == 0);
+}

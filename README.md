@@ -158,6 +158,8 @@ damage the running OS if they run as **root**. Be advised.
 
 To run tests you need to run `ctest` inside the build directory.
 
+For end-to-end EL9 cluster validation on a real KVM host, use the libvirt harness in `testing/libvirt`.
+
 # Open Source Apache License
 
 OpenCATTUS is made available under

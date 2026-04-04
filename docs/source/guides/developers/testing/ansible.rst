@@ -3,6 +3,10 @@
 Ansible
 =======
 
+.. note::
+
+   This is the older Vagrant-based harness. Prefer the EL9 libvirt/KVM recovery lab in :ref:`libvirt-kvm-el9` for current validation work.
+
 Configuration
 -------------
 
