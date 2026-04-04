@@ -49,6 +49,17 @@ The example config deliberately keeps `NODE_REAL_MEMORY_MB` below the VM's assig
 
 The default config also assumes a single active lab on the host. If you want multiple labs at once, override the external and management subnet settings in addition to changing `LAB_NAME`.
 
+## Self-hosted GitHub Actions
+
+This repo's CI is intended to run on your own GitHub Actions runner, not on GitHub-hosted machines.
+
+For the EL9 libvirt workflow, set these repository variables to paths that exist on the self-hosted runner:
+
+- `OPENCATTUS_EL9_BASE_IMAGE`
+- `OPENCATTUS_EL9_CLUSTER_ISO`
+
+The workflow uses the checked-out source tree as `OPENCATTUS_SOURCE_DIR`, creates an isolated lab named from the GitHub run id, prints the tail of the collected logs on failure, and destroys the lab afterwards to avoid leaking VMs and libvirt networks on the runner host.
+
 ## Useful commands
 
 ```bash
