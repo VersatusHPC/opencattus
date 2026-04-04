@@ -72,6 +72,23 @@ short_token() {
     printf '%s' "${sanitized}" | sha256sum | cut -c1-8
 }
 
+token_hex_byte() {
+    local start=$1
+    printf '%s' "${BRIDGE_TOKEN:${start}:2}"
+}
+
+default_headnode_ext_mac() {
+    printf '52:54:%s:%s:10:01' \
+        "$(token_hex_byte 0)" \
+        "$(token_hex_byte 2)"
+}
+
+default_headnode_mgmt_mac() {
+    printf '52:54:%s:%s:20:01' \
+        "$(token_hex_byte 0)" \
+        "$(token_hex_byte 2)"
+}
+
 load_defaults() {
     LAB_NAME=${LAB_NAME:-opencattus-el9}
     PROVISIONER=${PROVISIONER:-xcat}
@@ -120,8 +137,8 @@ load_defaults() {
     MANAGEMENT_HOST_IP=${MANAGEMENT_HOST_IP:-192.168.30.253}
 
     HEADNODE_NAME=${HEADNODE_NAME:-${LAB_NAME}-headnode}
-    HEADNODE_EXT_MAC=${HEADNODE_EXT_MAC:-52:54:00:70:10:01}
-    HEADNODE_MGMT_MAC=${HEADNODE_MGMT_MAC:-52:54:00:70:20:01}
+    HEADNODE_EXT_MAC=${HEADNODE_EXT_MAC:-$(default_headnode_ext_mac)}
+    HEADNODE_MGMT_MAC=${HEADNODE_MGMT_MAC:-$(default_headnode_mgmt_mac)}
     HEADNODE_MEMORY_MB=${HEADNODE_MEMORY_MB:-16384}
     HEADNODE_VCPUS=${HEADNODE_VCPUS:-4}
     HEADNODE_DISK_GB=${HEADNODE_DISK_GB:-220}
@@ -236,7 +253,10 @@ node_bmc_ip() {
 
 node_mac() {
     local index=$1
-    printf '52:54:00:70:20:%02x' $((0x10 + index))
+    printf '52:54:%s:%s:20:%02x' \
+        "$(token_hex_byte 0)" \
+        "$(token_hex_byte 2)" \
+        $((0x10 + index))
 }
 
 headnode_user_data_path() {

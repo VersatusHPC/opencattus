@@ -184,7 +184,8 @@ bool RockyLinux::shouldUseVault(const OS& osinfo)
     auto output = opencattus::functions::getHttpStatus(
         fmt::format("https://dl.rockylinux.org/vault/rocky/{}/BaseOS/x86_64/os/"
                     "repodata/repomd.xml",
-            lastVersion));
+            lastVersion),
+        1);
     const auto should = output == "200";
     LOG_INFO("{}", should ? "Yes, use vault" : "No, don't use vault");
     // Cache it
