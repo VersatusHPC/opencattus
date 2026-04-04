@@ -70,10 +70,10 @@ opencattus::services::ScriptBuilder NFS::installScript(const OS& osinfo)
         .addCommand("exportfs -a > /dev/null 2>&1 || :")
         .addNewLine()
         .addCommand(R"(# Update firewall rules
-if systemctl is-enabled --quiet firewalld.service; then
-    firewall-cmd --permanent --add-service={{nfs,mountd,rpc-bind}}
-    firewall-cmd --reload
-fi)");
+	if systemctl is-active --quiet firewalld.service; then
+	    firewall-cmd --permanent --add-service={{nfs,mountd,rpc-bind}}
+	    firewall-cmd --reload
+	fi)");
     return builder;
 }
 
@@ -141,6 +141,7 @@ TEST_CASE("installScript")
     CHECK(script.contains("dnf install -y nfs-utils\n"));
     CHECK(script.contains("systemctl enable --now rpcbind nfs-server"));
     CHECK(script.contains("exportfs -a"));
+    CHECK(script.contains("systemctl is-active --quiet firewalld.service"));
     CHECK(
         script.contains("/home *(rw,no_subtree_check,fsid=10,no_root_squash)"));
     CHECK(script.contains("/opt/ohpc/pub *(ro,no_subtree_check,fsid=11)"));

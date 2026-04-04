@@ -40,15 +40,17 @@ Required host packages:
 
 .. code-block:: bash
 
-   sudo dnf install -y cloud-utils libvirt-client libvirt-daemon-driver-network libvirt-daemon-kvm qemu-img qemu-kvm rsync virt-install
+   sudo dnf install -y genisoimage ipmitool libvirt-client libvirt-daemon-driver-network libvirt-daemon-kvm qemu-img qemu-kvm rsync virt-install
    sudo systemctl enable --now libvirtd
+   sudo python3 -m pip install virtualbmc pyghmi
 
 You also need:
 
 * An EL9 qcow2 cloud image for the headnode VM.
 * An EL9 DVD ISO for the compute-image creation step.
-* A locally built ``opencattus`` binary produced on EL9.
+* Either a locally built EL9 ``opencattus`` binary or the full source tree so the harness can build inside the headnode.
 * The qcow2 image and ISO stored under ``/var/lib/libvirt/images`` or another path already labeled for libvirt access.
+* Compute VMs with enough RAM for xCAT stateless boot. The current tested floor is ``8192`` MiB per compute node; ``4096`` MiB failed while unpacking ``rootimg.cpio.gz`` in initramfs.
 
 Quick start
 -----------
@@ -59,6 +61,8 @@ Quick start
 
       cp testing/libvirt/config/rocky9-xcat.env.example /root/opencattus-rocky9.env
       vim /root/opencattus-rocky9.env
+
+   Set ``BASE_IMAGE``, ``CLUSTER_ISO``, and either ``OPENCATTUS_BINARY`` or ``OPENCATTUS_SOURCE_DIR``.
 
 2. Run the full unattended lab:
 
@@ -71,6 +75,18 @@ Quick start
    .. code-block:: bash
 
       ls -R /var/tmp/opencattus-lab
+
+   ``run`` collects logs even if install or verification fails, so you still
+   get the failed lab state to inspect.
+
+   The reference config intentionally sets ``NODE_REAL_MEMORY_MB`` lower than
+   ``COMPUTE_MEMORY_MB``. xCAT unpacks the stateless root image in memory
+   during PXE boot, so the guest needs RAM headroom beyond the SLURM memory
+   you advertise to jobs.
+
+   The reference address plan also assumes one active lab at a time. If you
+   want concurrent labs on the same host, change the subnet-related variables
+   in addition to ``LAB_NAME``.
 
 Lifecycle commands
 ------------------
@@ -92,6 +108,7 @@ What the harness checks
 Headnode verification:
 
 * The headnode updates and reboots into the latest available kernel before OpenCATTUS runs, so the installer does not fail the built-in kernel preflight.
+* The harness can build ``opencattus`` inside the headnode when you provide ``OPENCATTUS_SOURCE_DIR`` instead of a prebuilt binary.
 * ``chronyd``, ``mariadb``, ``munge``, ``nfs-server``, ``rpcbind``, ``slurmctld``, and ``slurmdbd`` are active.
 * xCAT services are active.
 * ``showmount -e localhost``, ``sacct``, and ``sinfo -N`` succeed.
@@ -101,7 +118,9 @@ Cluster verification:
 * Each compute VM is reachable on the management network.
 * Each compute node appears in ``sinfo -N``.
 * Each node reaches a usable SLURM state instead of remaining down.
-* The lab uses loopback BMC addresses and host-side ``virsh`` starts instead of emulating real IPMI hardware.
+* VirtualBMC exposes each compute node as an IPMI endpoint on the management subnet, and the harness opens the minimal host-side firewalld rule needed for UDP ``623`` from the headnode.
+* The harness restarts compute VMs with ``virsh`` so PXE reboots stay deterministic during unattended runs.
+* The default compute VM topology is kept consistent with the answerfile values that feed ``slurm.conf``: ``2`` vCPUs exposed as ``1`` socket, ``2`` cores, ``1`` thread.
 
 Why this replaces the older Vagrant path
 ----------------------------------------

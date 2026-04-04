@@ -308,17 +308,78 @@ std::string getHttpStatus(const auto& url, const std::size_t maxRetries = 3)
         LOG_DEBUG("HTTP status of {}: {}", url, header);
         if (header.starts_with("2")) {
             return header;
-        } else if (header.starts_with("5")) {
-            LOG_DEBUG("HTTP INTERNAL SERVER ERROR {} error, retring ...{}",
-                header, i);
-            return header;
+        }
+        if (i + 1 >= maxRetries) {
+            break;
+        }
+        if (header.starts_with("5")) {
+            LOG_DEBUG("HTTP internal server error {}, retrying {}/{}", header,
+                i + 1, maxRetries);
         } else {
-            LOG_DEBUG("HTTP {} error, retrying ...{}", header, i);
-            return header;
+            LOG_DEBUG("HTTP {} error, retrying {}/{}", header, i + 1,
+                maxRetries);
         }
     }
     return header;
 };
+
+TEST_CASE("getHttpStatus retries until success")
+{
+    class SequencedRunner final : public IRunner {
+    public:
+        explicit SequencedRunner(std::vector<std::string> responses)
+            : m_responses(std::move(responses))
+        {
+        }
+
+        int executeCommand(const std::string&) override { return 0; }
+        int executeCommand(const std::string&, std::list<std::string>&) override
+        {
+            return 0;
+        }
+        services::CommandProxy executeCommandIter(
+            const std::string&, services::Stream) override
+        {
+            return {};
+        }
+        void checkCommand(const std::string&) override { }
+        std::vector<std::string> checkOutput(const std::string& cmd) override
+        {
+            m_commands.emplace_back(cmd);
+            if (m_index >= m_responses.size()) {
+                return {};
+            }
+            return { m_responses[m_index++] };
+        }
+        int downloadFile(const std::string&, const std::string&) override
+        {
+            return 0;
+        }
+        int run(const services::ScriptBuilder&) override { return 0; }
+
+        [[nodiscard]] const std::vector<std::string>& commands() const
+        {
+            return m_commands;
+        }
+
+    private:
+        std::size_t m_index = 0;
+        std::vector<std::string> m_responses;
+        std::vector<std::string> m_commands;
+    };
+
+    Singleton<const services::Options>::init(
+        std::make_unique<const services::Options>(services::Options {}));
+
+    auto runner
+        = std::make_unique<SequencedRunner>(std::vector<std::string> { "404",
+            "200" });
+    auto* runnerPtr = runner.get();
+    Singleton<IRunner>::init(std::move(runner));
+
+    CHECK(getHttpStatus("https://example.com/repo", 3) == "200");
+    CHECK(runnerPtr->commands().size() == 2);
+}
 
 [[noreturn]]
 void abort(const fmt::string_view& fmt, auto&&... args)

@@ -21,37 +21,176 @@
 #include <opencattus/services/xcat.h>
 #include <opencattus/utils/singleton.h>
 
+#ifdef BUILD_TESTING
+#include <doctest/doctest.h>
+#else
+#define DOCTEST_CONFIG_DISABLE
+#include <doctest/doctest.h>
+#endif
+
 namespace {
 using opencattus::models::Cluster;
+using opencattus::models::OS;
 
 using namespace opencattus::utils::singleton;
 
 // Returns the distribution name with the version, e.g., rocky9.5
-std::string getOSImageDistroVersion()
+std::string getOSImageDistroVersion(const OS& nodeOS)
 {
-    using opencattus::models::OS;
     std::string osimage;
 
-    switch (cluster()->getDiskImage().getDistro()) {
+    switch (nodeOS.getDistro()) {
         case OS::Distro::RHEL:
             osimage += "rhels";
-            osimage += cluster()->getNodes()[0].getOS().getVersion();
+            osimage += nodeOS.getVersion();
             break;
         case OS::Distro::OL:
             osimage += "ol";
-            osimage += cluster()->getNodes()[0].getOS().getVersion();
+            osimage += nodeOS.getVersion();
             osimage += ".0";
             break;
         case OS::Distro::Rocky:
             osimage += "rocky";
-            osimage += cluster()->getNodes()[0].getOS().getVersion();
+            osimage += nodeOS.getVersion();
             break;
         case OS::Distro::AlmaLinux:
             osimage += "alma";
-            osimage += cluster()->getNodes()[0].getOS().getVersion();
+            osimage += nodeOS.getVersion();
             break;
     }
     return osimage;
+}
+
+std::filesystem::path getLocalOtherPkgRepoPath(const OS& nodeOS)
+{
+    return std::filesystem::path("/install/post/otherpkgs")
+        / getOSImageDistroVersion(nodeOS)
+        / opencattus::utils::enums::toString(nodeOS.getArch());
+}
+
+std::string formatDHCPInterfaces(std::string_view interface)
+{
+    // xCAT expects either a plain interface list or a real hostname selector
+    // in the form "<hostname>|<iface>". Using the literal "xcatmn" does not
+    // match this management node, so makedhcp emits no subnet declarations.
+    return std::string(interface);
+}
+
+std::string buildDHCPInterfacesCommand(std::string_view interface)
+{
+    // `chdef` expects a raw key=value token here. Wrapping the whole
+    // assignment in quotes makes xCAT store the literal key `'dhcpinterfaces`
+    // and value `oc-mgmt0'`, which breaks `makedhcp -n`.
+    return fmt::format(
+        "chdef -t site dhcpinterfaces={}", formatDHCPInterfaces(interface));
+}
+
+std::string buildPrecreateMyPostscriptsCommand(bool enabled)
+{
+    return fmt::format("chdef -t site precreatemypostscripts={}",
+        enabled ? "YES" : "NO");
+}
+
+std::string shellSingleQuote(std::string_view value)
+{
+    std::string quoted = "'";
+    for (const char chr : value) {
+        if (chr == '\'') {
+            quoted += "'\"'\"'";
+            continue;
+        }
+        if (chr == '\n' || chr == '\r') {
+            throw std::invalid_argument(
+                "Shell-quoted strings cannot contain newlines");
+        }
+        quoted += chr;
+    }
+    quoted += "'";
+    return quoted;
+}
+
+std::string getStatelessNodeRootPassword()
+{
+    const auto& nodes = cluster()->getNodes();
+    LOG_ASSERT(!nodes.empty(), "xCAT image generation requires compute nodes");
+
+    const auto& firstNode = nodes.front();
+    const auto firstPassword = firstNode.getNodeRootPassword();
+    opencattus::functions::abortif(!firstPassword.has_value(),
+        "Node {} is missing a root password", firstNode.getHostname());
+
+    for (const auto& node : nodes) {
+        const auto nodePassword = node.getNodeRootPassword();
+        opencattus::functions::abortif(!nodePassword.has_value(),
+            "Node {} is missing a root password", node.getHostname());
+        opencattus::functions::abortif(nodePassword.value()
+                != firstPassword.value(),
+            "xCAT stateless images require the same node_root_password for "
+            "all compute nodes; {} differs",
+            node.getHostname());
+    }
+
+    return firstPassword.value();
+}
+
+std::string buildIpmitoolCommand(std::string_view address,
+    std::string_view username, std::string_view password,
+    std::string_view subcommand)
+{
+    return fmt::format("ipmitool -I lanplus -H {} -U {} -P {} {}",
+        shellSingleQuote(address), shellSingleQuote(username),
+        shellSingleQuote(password), subcommand);
+}
+
+int runDirectIpmiCommand(std::string_view description,
+    std::string_view subcommand)
+{
+    std::string script = "rc=0\n";
+    bool hasBMC = false;
+
+    for (const auto& node : cluster()->getNodes()) {
+        const auto& bmc = node.getBMC();
+        if (!bmc.has_value()) {
+            continue;
+        }
+
+        hasBMC = true;
+        script += fmt::format("echo {}\n",
+            shellSingleQuote(fmt::format(
+                "Trying direct IPMI fallback for {} on {}",
+                description, node.getHostname())));
+        script += fmt::format("{} || rc=$?\n",
+            buildIpmitoolCommand(bmc->getAddress(), bmc->getUsername(),
+                bmc->getPassword(), subcommand));
+    }
+
+    if (!hasBMC) {
+        return 1;
+    }
+
+    script += "exit $rc\n";
+    return opencattus::services::runner::shell::unsafe::cmd(script);
+}
+
+void runIpmiCommandWithFallback(
+    std::string_view xcatCommand, std::string_view subcommand,
+    std::string_view description)
+{
+    auto runner = opencattus::utils::singleton::runner();
+    const auto exitCode = runner->executeCommand(std::string(xcatCommand));
+    if (exitCode == 0) {
+        return;
+    }
+
+    LOG_WARN("xCAT command `{}` failed with exit code {}, retrying via direct "
+             "IPMI for {}",
+        xcatCommand, exitCode, description);
+
+    const auto directExitCode = runDirectIpmiCommand(description, subcommand);
+    if (directExitCode != 0) {
+        LOG_WARN("Direct IPMI fallback for {} failed with exit code {}",
+            description, directExitCode);
+    }
 }
 }; // namespace{}
 
@@ -86,6 +225,12 @@ void XCAT::installPackages()
 {
     auto osservice = opencattus::utils::singleton::osservice();
     osservice->install("xCAT");
+    // xCAT's embedded Perl IPMI stack does not interoperate cleanly with
+    // VirtualBMC on EL9, so keep ipmitool available as a fallback path.
+    osservice->install("ipmitool");
+    // xCAT always prepends a local file:// otherpkgdir for osimages; ensure we
+    // can publish metadata there even when we do not ship custom RPMs.
+    osservice->install("createrepo_c");
 }
 
 void XCAT::patchInstall()
@@ -126,7 +271,15 @@ void XCAT::patchInstall()
 EOF
 ))del");
         opts->maybeStopAfterStep("xcat-patch");
-        runner->executeCommand("xcatconfig -f");
+
+        // `dnf install xCAT` already runs `xcatconfig -i` from the RPM
+        // scriptlets. Re-running the full interactive reconfiguration here is
+        // not idempotent and can stall unattended EL9 installs after the
+        // certificate prompts. Restart the provisioner services instead so the
+        // patched helpers and plugin code are picked up without replaying the
+        // full bootstrap workflow.
+        runner->executeCommand("systemctl enable --now xcatd httpd");
+        runner->executeCommand("systemctl restart xcatd httpd");
     } else {
         LOG_WARN("xCAT Already patched, skipping");
     }
@@ -139,6 +292,7 @@ void XCAT::setup() const
             .getConnection(Network::Profile::Management)
             .getInterface()
             .value());
+    setPrecreateMyPostscripts(true);
     setDomain(cluster()->getDomainName());
 }
 
@@ -146,8 +300,13 @@ void XCAT::setup() const
 void XCAT::setDHCPInterfaces(std::string_view interface)
 {
     auto runner = opencattus::utils::singleton::runner();
-    runner->checkCommand(
-        fmt::format("chdef -t site dhcpinterfaces=\"xcatmn|{}\"", interface));
+    runner->checkCommand(buildDHCPInterfacesCommand(interface));
+}
+
+void XCAT::setPrecreateMyPostscripts(bool enabled)
+{
+    auto runner = opencattus::utils::singleton::runner();
+    runner->checkCommand(buildPrecreateMyPostscriptsCommand(enabled));
 }
 
 void XCAT::setDomain(std::string_view domain)
@@ -238,12 +397,14 @@ void XCAT::packimage() const
 void XCAT::nodeset(std::string_view nodes) const
 {
     opencattus::utils::singleton::runner()->checkCommand(
-        fmt::format("nodeset {} osimage={}", nodes, m_stateless.osimage));
+        fmt::format("nodeset {} osimage={} -g", nodes, m_stateless.osimage));
 }
 
 void XCAT::createDirectoryTree()
 {
     functions::createDirectory(CHROOT "/install/custom/netboot");
+    functions::createDirectory(
+        getLocalOtherPkgRepoPath(cluster()->getNodes().front().getOS()));
 }
 
 void XCAT::configureSELinux()
@@ -265,8 +426,7 @@ void XCAT::configureOpenHPC()
     // We always sync local Unix files to keep services consistent, even with
     // external directory services
     m_stateless.synclists.emplace_back("/etc/passwd -> /etc/passwd\n"
-                                       "/etc/group -> /etc/group\n"
-                                       "/etc/shadow -> /etc/shadow\n");
+                                       "/etc/group -> /etc/group\n");
 }
 
 void XCAT::configureTimeService()
@@ -280,6 +440,44 @@ void XCAT::configureTimeService()
             .getConnection(Network::Profile::Management)
             .getAddress()
             .to_string()));
+}
+
+void XCAT::configureRemoteAccess()
+{
+    const auto nodeRootPassword
+        = shellSingleQuote(getStatelessNodeRootPassword());
+
+    // EL9 diskless nodes can reach `multi-user.target` before xCAT's
+    // postbootscripts populate SSH material. Seed the authorized key and host
+    // keys into the image so sshd can come up on the first boot.
+    m_stateless.postinstall.emplace_back(
+        fmt::format("printf 'root:%s\\n' {} | chroot $IMG_ROOTIMGDIR chpasswd\n",
+            nodeRootPassword)
+        +
+        "install -d -m 0700 $IMG_ROOTIMGDIR/root/.ssh\n"
+        "if [ -f /install/postscripts/_ssh/authorized_keys ]; then\n"
+        "  install -m 0600 /install/postscripts/_ssh/authorized_keys "
+        "$IMG_ROOTIMGDIR/root/.ssh/authorized_keys\n"
+        "fi\n"
+        "ssh_group=root\n"
+        "if getent group ssh_keys >/dev/null 2>&1; then\n"
+        "  ssh_group=ssh_keys\n"
+        "fi\n"
+        "for key_type in rsa ecdsa ed25519; do\n"
+        "  key_path=$IMG_ROOTIMGDIR/etc/ssh/ssh_host_${key_type}_key\n"
+        "  if [ ! -s $key_path ]; then\n"
+        "    ssh-keygen -q -t ${key_type} -N '' -f $key_path\n"
+        "  fi\n"
+        "  chown root:${ssh_group} $key_path $key_path.pub\n"
+        "  chmod 0640 $key_path\n"
+        "  chmod 0644 $key_path.pub\n"
+        "done\n"
+        "install -d $IMG_ROOTIMGDIR/usr/lib/tmpfiles.d\n"
+        "cat > $IMG_ROOTIMGDIR/usr/lib/tmpfiles.d/opencattus-sshd.conf "
+        "<<'EOF'\n"
+        "d /run/sshd 0755 root root -\n"
+        "EOF\n"
+        "\n");
 }
 
 void XCAT::configureInfiniband()
@@ -372,26 +570,32 @@ void XCAT::configureSLURM()
                 .getAddress()
                 .to_string()));
 
-    // TODO: Enable "if" disallow login on compute nodes
-    // TODO: Consider pam_slurm_adopt.so
-    //  * https://github.com/openhpc/ohpc/issues/1022
-    //  * https://slurm.schedmd.com/pam_slurm_adopt.html
-    m_stateless.postinstall.emplace_back(
-        "echo \"# Block queue evasion\" >> "
-        "$IMG_ROOTIMGDIR/etc/pam.d/sshd\n"
-        "echo \"account    required     pam_slurm.so\" >> "
-        "$IMG_ROOTIMGDIR/etc/pam.d/sshd\n"
-        "\n");
+    // Diskless nodes need SSH reachable before they have joined SLURM. A
+    // blanket pam_slurm gate locks xCAT and root out during first boot and
+    // leaves the node impossible to debug or finish configuring.
 
     // Enable services on image
     m_stateless.postinstall.emplace_back(
+        "install -d -m 0755 $IMG_ROOTIMGDIR/usr/lib/tmpfiles.d\n"
+        "cat > $IMG_ROOTIMGDIR/usr/lib/tmpfiles.d/opencattus-slurm.conf "
+        "<<'EOF'\n"
+        "d /run/slurm 0755 slurm slurm -\n"
+        "d /run/slurmd 0755 slurm slurm -\n"
+        "d /var/log/slurm 0755 slurm slurm -\n"
+        "d /var/spool/slurmd 0755 slurm slurm -\n"
+        "f /var/log/slurm/slurmd.log 0640 slurm slurm -\n"
+        "EOF\n"
+        "install -d -o slurm -g slurm -m 0755 "
+        "$IMG_ROOTIMGDIR/var/log/slurm "
+        "$IMG_ROOTIMGDIR/var/spool/slurmd\n"
+        "install -m 0640 -o slurm -g slurm /dev/null "
+        "$IMG_ROOTIMGDIR/var/log/slurm/slurmd.log\n"
         "chroot $IMG_ROOTIMGDIR systemctl enable munge\n"
         "chroot $IMG_ROOTIMGDIR systemctl enable slurmd\n"
         "\n");
 
     m_stateless.synclists.emplace_back(
-        // Stateless config: we don't need slurm.conf to be synced.
-        //"/etc/slurm/slurm.conf -> /etc/slurm/slurm.conf\n"
+        "/etc/slurm/slurm.conf -> /etc/slurm/slurm.conf\n"
         "/etc/munge/munge.key -> /etc/munge/munge.key\n"
         "\n");
 }
@@ -412,6 +616,18 @@ void XCAT::generatePostinstallFile()
         = CHROOT "/install/custom/netboot/compute.postinstall";
 
     functions::removeFile(filename);
+
+    m_stateless.postinstall.emplace_back(
+        "install -d $IMG_ROOTIMGDIR/etc/rc.d/init.d "
+        "$IMG_ROOTIMGDIR/etc/udev/rules.d\n"
+        "if [ ! -e $IMG_ROOTIMGDIR/etc/init.d ]; then\n"
+        "  ln -s rc.d/init.d $IMG_ROOTIMGDIR/etc/init.d\n"
+        "fi\n"
+        "cat > $IMG_ROOTIMGDIR/etc/udev/rules.d/99-opencattus-placeholder.rules "
+        "<<'EOF'\n"
+        "# Placeholder file for xCAT EL9 image generation.\n"
+        "EOF\n"
+        "\n");
 
     m_stateless.postinstall.emplace_back(
         "perl -pi -e 's/# End of file/\\* soft memlock unlimited\\n$&/s' "
@@ -448,8 +664,7 @@ void XCAT::generateSynclistsFile()
     functions::addStringToFile(filename,
         "/etc/passwd -> /etc/passwd\n"
         "/etc/group -> /etc/group\n"
-        "/etc/shadow -> /etc/shadow\n"
-        //"/etc/slurm/slurm.conf -> /etc/slurm/slurm.conf\n"
+        "/etc/slurm/slurm.conf -> /etc/slurm/slurm.conf\n"
         "/etc/munge/munge.key -> /etc/munge/munge.key\n");
 }
 
@@ -457,6 +672,13 @@ void XCAT::configureOSImageDefinition() const
 {
     auto opts = opencattus::utils::singleton::options();
     auto runner = opencattus::utils::singleton::runner();
+    const auto localOtherPkgDir
+        = getLocalOtherPkgRepoPath(cluster()->getNodes().front().getOS());
+    opencattus::services::runner::shell::cmd(fmt::format(
+        "mkdir -p {} && createrepo_c --update {}",
+        shellSingleQuote(localOtherPkgDir.string()),
+        shellSingleQuote(localOtherPkgDir.string())));
+
     runner->executeCommand(
         fmt::format("chdef -t osimage {} --plus otherpkglist="
                     "/install/custom/netboot/compute.otherpkglist",
@@ -619,6 +841,7 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
         configureSELinux();
         configureOpenHPC();
         configureTimeService();
+        configureRemoteAccess();
         configureInfiniband();
         configureSLURM();
 
@@ -681,6 +904,9 @@ void XCAT::addNodes() const
     // TODO: Create separate functions
     runner->executeCommand("makehosts");
     runner->executeCommand("makedhcp -n");
+    // xCAT updates node DHCP state through OMAPI during `nodeset`; that fails
+    // unless dhcpd is already running with the regenerated configuration.
+    runner->checkCommand("systemctl restart dhcpd");
     runner->executeCommand("makedns -n");
     runner->executeCommand("makegocons");
     setNodesImage();
@@ -696,22 +922,23 @@ void XCAT::setNodesBoot()
 {
     // TODO: Do proper checking if a given node have BMC support, and then issue
     //  rsetboot only on the compatible machines instead of running in compute.
-    auto runner = opencattus::utils::singleton::runner();
-    runner->executeCommand("rsetboot compute net");
+    runIpmiCommandWithFallback(
+        "rsetboot compute net", "chassis bootdev pxe", "PXE boot configuration");
 }
 
 void XCAT::resetNodes()
 {
-    auto runner = opencattus::utils::singleton::runner();
-    runner->executeCommand("rpower compute reset");
+    runIpmiCommandWithFallback(
+        "rpower compute reset", "chassis power reset", "node reset");
 }
 
 void XCAT::generateOSImageName(ImageType imageType, NodeType nodeType)
 {
-    std::string osimage = getOSImageDistroVersion();
+    const auto& nodeOS = cluster()->getNodes()[0].getOS();
+    std::string osimage = getOSImageDistroVersion(nodeOS);
     osimage += "-";
 
-    switch (cluster()->getNodes()[0].getOS().getArch()) {
+    switch (nodeOS.getArch()) {
         case OS::Arch::x86_64:
             osimage += "x86_64";
             break;
@@ -752,7 +979,7 @@ void XCAT::generateOSImagePath(ImageType imageType, NodeType nodeType)
     }
 
     std::filesystem::path chroot = "/install/netboot/";
-    chroot += getOSImageDistroVersion();
+    chroot += getOSImageDistroVersion(cluster()->getNodes()[0].getOS());
     chroot += "/";
 
     switch (cluster()->getNodes()[0].getOS().getArch()) {
@@ -873,3 +1100,53 @@ void XCAT::install()
 }
 
 };
+
+TEST_CASE("getOSImageDistroVersion uses node OS metadata")
+{
+    CHECK(getOSImageDistroVersion(OS(OS::Distro::Rocky, OS::Platform::el9, 7))
+        == "rocky9.7");
+    CHECK(getOSImageDistroVersion(OS(OS::Distro::RHEL, OS::Platform::el9, 7))
+        == "rhels9.7");
+    CHECK(getOSImageDistroVersion(OS(OS::Distro::OL, OS::Platform::el9, 7))
+        == "ol9.7.0");
+}
+
+TEST_CASE("formatDHCPInterfaces uses a plain interface selector")
+{
+    CHECK(formatDHCPInterfaces("oc-mgmt0") == "oc-mgmt0");
+}
+
+TEST_CASE("buildDHCPInterfacesCommand passes a raw site assignment")
+{
+    CHECK(buildDHCPInterfacesCommand("oc-mgmt0")
+        == "chdef -t site dhcpinterfaces=oc-mgmt0");
+}
+
+TEST_CASE("buildPrecreateMyPostscriptsCommand enables pre-generated postscripts")
+{
+    CHECK(buildPrecreateMyPostscriptsCommand(true)
+        == "chdef -t site precreatemypostscripts=YES");
+    CHECK(buildPrecreateMyPostscriptsCommand(false)
+        == "chdef -t site precreatemypostscripts=NO");
+}
+
+TEST_CASE("buildIpmitoolCommand quotes BMC credentials")
+{
+    CHECK(buildIpmitoolCommand("192.0.2.10", "admin", "pa'ss",
+              "chassis power reset")
+        == "ipmitool -I lanplus -H '192.0.2.10' -U 'admin' -P "
+           "'pa'\"'\"'ss' chassis power reset");
+}
+
+TEST_CASE("getLocalOtherPkgRepoPath matches xCAT local repo layout")
+{
+    const OS nodeOS(OS::Distro::Rocky, OS::Platform::el9, 7, OS::Arch::x86_64);
+    CHECK(getLocalOtherPkgRepoPath(nodeOS)
+        == "/install/post/otherpkgs/rocky9.7/x86_64");
+}
+
+TEST_CASE("shellSingleQuote escapes single quotes")
+{
+    CHECK(shellSingleQuote("labroot") == "'labroot'");
+    CHECK(shellSingleQuote("O'Hara") == "'O'\"'\"'Hara'");
+}

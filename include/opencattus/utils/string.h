@@ -6,7 +6,13 @@
 
 #include <boost/algorithm/string/classification.hpp> // For boost::is_any_of
 #include <boost/algorithm/string/split.hpp>
+#if __has_include(<magic_enum.hpp>)
+#include <magic_enum.hpp>
+#elif __has_include(<magic_enum/magic_enum.hpp>)
 #include <magic_enum/magic_enum.hpp>
+#else
+#error "magic_enum header not found"
+#endif
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>

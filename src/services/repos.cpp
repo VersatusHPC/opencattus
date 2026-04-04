@@ -701,7 +701,7 @@ public:
         LOG_DEBUG("Loading repo config: {}", path);
         if (!opencattus::functions::exists(path)) {
             opencattus::functions::abort(
-                "Trying to parse {} but it does not exists at {}", path);
+                "Trying to parse missing repo config {}", path);
         }
         auto file = KeyFile(path);
         auto repoNames = file.getGroups();

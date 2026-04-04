@@ -3,6 +3,17 @@
 set -euo pipefail
 
 provisioner=${OPENCATTUS_PROVISIONER:-xcat}
+command_timeout=${OPENCATTUS_VERIFY_COMMAND_TIMEOUT_SECONDS:-60}
+
+run_check() {
+    local description=$1
+    shift
+
+    if ! timeout "${command_timeout}" "$@" >/dev/null; then
+        echo "Verification command failed: ${description}" >&2
+        exit 1
+    fi
+}
 
 common_services=(
     chronyd
@@ -16,9 +27,9 @@ common_services=(
 
 case "${provisioner}" in
     xcat)
+        export PATH="/opt/xcat/bin:/opt/xcat/sbin:${PATH}"
         provisioner_services=(
             dhcpd
-            tftp.socket
             xcatd
         )
         ;;
@@ -27,7 +38,6 @@ case "${provisioner}" in
             confluent
             dnsmasq
             httpd
-            tftp.socket
         )
         ;;
     *)
@@ -43,10 +53,10 @@ for service in "${common_services[@]}" "${provisioner_services[@]}"; do
     fi
 done
 
-showmount -e localhost >/dev/null
-sacct >/dev/null
-sinfo -N -h >/dev/null
+run_check "showmount -e localhost" showmount -e localhost
+run_check "sacct" sacct
+run_check "sinfo -N -h" sinfo -N -h
 
 if [[ "${provisioner}" == "xcat" ]]; then
-    lsdef -t osimage >/dev/null
+    run_check "lsdef -t osimage" lsdef -t osimage
 fi

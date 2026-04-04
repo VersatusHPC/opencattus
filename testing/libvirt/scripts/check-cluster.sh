@@ -35,7 +35,7 @@ while (( SECONDS < deadline )); do
         fi
 
         state=$(awk -v wanted="${node}" '$1 == wanted { print $2 }' <<<"${sinfo_output}" | tail -n1)
-        case "${state}" in
+        case "${state^^}" in
             ALLOCATED|COMPLETING|IDLE|MIXED|POWERING_UP)
                 ;;
             *)
