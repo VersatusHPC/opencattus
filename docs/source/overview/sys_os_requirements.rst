@@ -54,7 +54,8 @@ Current Recovery Status
      - Validated
      - Verified unattended in the EL9 libvirt/KVM lab with two compute nodes,
        external plus management networks, and an OpenHPC MPI hello-world run
-       spanning them.
+       spanning them. The dedicated Confluent service-network topology is also
+       now validated.
    * - Rocky Linux 10.1 + Confluent
      - Initially validated
      - First EL10 bootstrap baseline. Verified unattended in the EL10
@@ -94,8 +95,10 @@ EL10 Bootstrap Matrix
      - Two compute nodes boot, join the cluster, and complete the MPI smoke
        test across nodes.
    * - Dedicated service network
-     - Not yet validated
-     - Still outside the initial EL10 baseline.
+     - Validated
+     - Rocky Linux 10.1 + Confluent now completes the unattended install,
+       verify, and MPI smoke path with a dedicated headnode service NIC and a
+       populated ``[network_service]`` section.
    * - Dedicated application network / OFED path
      - Not yet validated
      - Still outside the initial EL10 baseline.
@@ -141,9 +144,11 @@ Current EL9 Support Matrix
      - This is the currently tested lab topology.
    * - Dedicated service network
      - Not yet validated
-     - Not yet validated
-     - Parser/model handling was repaired, but there is no end-to-end EL9 lab
-       coverage yet.
+     - Validated
+     - Rocky Linux 9.7 + Confluent now completes the unattended install,
+       verify, and MPI smoke path with a dedicated headnode service NIC and a
+       populated ``[network_service]`` section. xCAT service-network coverage
+       is still pending.
    * - Dedicated application network / OFED path
      - Not yet validated
      - Not yet validated

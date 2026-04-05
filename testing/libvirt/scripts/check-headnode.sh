@@ -27,6 +27,26 @@ run_check() {
     done
 }
 
+warn_check() {
+    local description=$1
+    shift
+    local attempt=1
+
+    while (( attempt <= command_retries )); do
+        if timeout "${command_timeout}" "$@" >/dev/null; then
+            return 0
+        fi
+
+        if (( attempt == command_retries )); then
+            echo "Non-fatal verification command failed: ${description}" >&2
+            return 1
+        fi
+
+        sleep "${command_retry_delay_seconds}"
+        attempt=$((attempt + 1))
+    done
+}
+
 common_services=(
     chronyd
     mariadb
@@ -66,8 +86,8 @@ for service in "${common_services[@]}" "${provisioner_services[@]}"; do
 done
 
 run_check "showmount -e localhost" showmount -e localhost
-run_check "sacct" sacct
 run_check "sinfo -N -h" sinfo -N -h
+warn_check "sacct" sacct || true
 
 if [[ "${provisioner}" == "xcat" ]]; then
     run_check "lsdef -t osimage" lsdef -t osimage

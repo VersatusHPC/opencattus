@@ -13,11 +13,13 @@ Recommended starting points:
 - ``testing/libvirt/templates/rocky9-xcat.answerfile.ini`` for the currently
   validated EL9 + xCAT path.
 - ``testing/libvirt/templates/rocky9-confluent.answerfile.ini`` for the
-  validated EL9 + Confluent lab path.
+  validated EL9 + Confluent lab path, including the optional dedicated
+  ``[network_service]`` topology exercised by the libvirt service-network
+  config.
 - ``testing/libvirt/templates/rocky10-confluent.answerfile.ini`` for the
   Rocky Linux 10 + Confluent bootstrap path. The current validated Rocky 10
   baseline covers both the one-node smoke and the two-node MPI layout in the
-  libvirt/KVM lab.
+  libvirt/KVM lab, plus the optional dedicated ``[network_service]`` path.
 - ``test/sample/answerfile/`` for older examples and broader config shapes.
 
 Required sections

@@ -76,6 +76,20 @@ nodeattrib {nodeName} bmcuser={bmcuser} bmcpass={bmcpass} crypted.rootpassword={
     return script;
 }
 
+std::string buildHeadnodeHostsRepairScript(std::string_view managementIp,
+    std::string_view fqdn, std::string_view hostname)
+{
+    return fmt::format(
+        R"(
+# confluent2hosts rewrites /etc/hosts; restore the headnode mapping that
+# Slurm and other local services expect to resolve through the management IP.
+grep -Fqx '{managementIp}	{fqdn} {hostname}' /etc/hosts || \
+    printf '{managementIp}\t{fqdn} {hostname}\n' >> /etc/hosts
+)",
+        fmt::arg("managementIp", managementIp), fmt::arg("fqdn", fqdn),
+        fmt::arg("hostname", hostname));
+}
+
 std::string buildSpackModuleTree(const models::OS& os)
 {
     std::string distro;
@@ -297,6 +311,16 @@ rm -rf /tmp/scratchdir || :
         fmt::arg("ofedEnabled", answerfile()->ofed.enabled));
 
     addNodes(image);
+
+    runner::shell::fmt("{}",
+        buildHeadnodeHostsRepairScript(
+            cluster()
+                ->getHeadnode()
+                .getConnection(Network::Profile::Management)
+                .getAddress()
+                .to_string(),
+            cluster()->getHeadnode().getFQDN(),
+            cluster()->getHeadnode().getHostname()));
 }
 
 }
@@ -365,6 +389,18 @@ TEST_CASE("buildNodeDefinitionScript emits a MAC assignment only when the manage
         CHECK_FALSE(script.contains("net.hwaddr="));
         CHECK(script.contains("bmcpass=pa'ss"));
     }
+}
+
+TEST_CASE("buildHeadnodeHostsRepairScript restores the headnode management mapping")
+{
+    const auto script = buildHeadnodeHostsRepairScript(
+        "192.168.33.1", "opencattus.cluster.example.com", "opencattus");
+
+    CHECK(script.contains("confluent2hosts rewrites /etc/hosts"));
+    CHECK(script.contains(
+        "grep -Fqx '192.168.33.1\topencattus.cluster.example.com opencattus' /etc/hosts"));
+    CHECK(script.contains(
+        "printf '192.168.33.1\\topencattus.cluster.example.com opencattus\\n' >> /etc/hosts"));
 }
 
 TEST_CASE("buildSpackModuleTree matches Spack's Enterprise Linux module naming")

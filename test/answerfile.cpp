@@ -488,4 +488,69 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(outputPath);
         std::filesystem::remove(diskImagePath);
     }
+
+    TEST_CASE("dumpData round-trips service and application network sections")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE(interfaces.size() >= 2);
+
+        const auto sourcePath
+            = tempAnswerfilePath("opencattus-cluster-roundtrip-source");
+        const auto outputPath
+            = tempAnswerfilePath("opencattus-cluster-roundtrip-output");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-roundtrip");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(sourcePath, diskImagePath, interfaces.front(),
+            interfaces.front(), interfaces.back(), true, "confluent",
+            "1.1.1.1, 8.8.8.8 9.9.9.9", "rocky", "10.1");
+
+        try {
+            AnswerFile sourceAnswerfile(sourcePath);
+            Cluster cluster;
+            cluster.fillData(sourceAnswerfile);
+
+            std::filesystem::remove(outputPath);
+            cluster.dumpData(outputPath);
+
+            AnswerFile dumpedAnswerfile(outputPath);
+
+            CHECK(dumpedAnswerfile.system.provisioner == "confluent");
+            CHECK(dumpedAnswerfile.system.version == "10.1");
+
+            REQUIRE(dumpedAnswerfile.service.con_interface.has_value());
+            CHECK(dumpedAnswerfile.service.con_interface.value()
+                == interfaces.front());
+            REQUIRE(dumpedAnswerfile.service.con_ip_addr.has_value());
+            CHECK(dumpedAnswerfile.service.con_ip_addr->to_string()
+                == "192.168.31.254");
+            REQUIRE(dumpedAnswerfile.service.domain_name.has_value());
+            CHECK(dumpedAnswerfile.service.domain_name.value()
+                == "cluster.service.example.com");
+            REQUIRE(dumpedAnswerfile.service.nameservers.has_value());
+            CHECK(dumpedAnswerfile.service.nameservers.value()
+                == std::vector<std::string> {
+                    "1.1.1.1", "8.8.8.8", "9.9.9.9" });
+
+            REQUIRE(dumpedAnswerfile.application.con_interface.has_value());
+            CHECK(dumpedAnswerfile.application.con_interface.value()
+                == interfaces.back());
+            REQUIRE(dumpedAnswerfile.application.con_ip_addr.has_value());
+            CHECK(dumpedAnswerfile.application.con_ip_addr->to_string()
+                == "172.16.0.254");
+            REQUIRE(dumpedAnswerfile.application.domain_name.has_value());
+            CHECK(dumpedAnswerfile.application.domain_name.value()
+                == "cluster.application.example.com");
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while round-tripping cluster answerfile data");
+        }
+
+        std::filesystem::remove(sourcePath);
+        std::filesystem::remove(outputPath);
+        std::filesystem::remove(diskImagePath);
+    }
 }

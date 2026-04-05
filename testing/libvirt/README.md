@@ -48,7 +48,9 @@ Keep the cloud image and ISO under `/var/lib/libvirt/images`, ideally in a dedic
 
    - `testing/libvirt/config/rocky9-xcat.env.example`
    - `testing/libvirt/config/rocky9-confluent.env.example`
+   - `testing/libvirt/config/rocky9-confluent-service.env.example`
    - `testing/libvirt/config/rocky10-confluent.env.example`
+   - `testing/libvirt/config/rocky10-confluent-service.env.example`
 2. The Rocky 10 wrapper defaults to a one-node, two-rank MPI smoke. If you
    want the validated two-node MPI path on EL9 or EL10, also set:
 
@@ -88,7 +90,7 @@ The default config also assumes a single active lab on the host. If you want mul
 | Single compute node boot and join | Validated | Validated | `sinfo -N` reaches a usable node state. |
 | OpenHPC MPI hello world | Validated | Validated | Run through Slurm on the recovered EL9 cluster in both single-node and two-node MPI layouts. |
 | External + management network topology | Validated | Validated | This is the currently tested lab topology. |
-| Dedicated service network | Not yet validated | Not yet validated | Parser/model handling was repaired, but there is no end-to-end EL9 lab coverage yet. |
+| Dedicated service network | Not yet validated | Validated | Rocky Linux 9.7 + Confluent now completes the unattended install, verify, and MPI smoke path with a dedicated `oc-svc0` headnode NIC and a populated `[network_service]` section. xCAT service-network coverage is still pending. |
 | Dedicated application network / OFED path | Not yet validated | Not yet validated | Still outside the recovered EL9 baseline. |
 | Multi-node cluster | Validated | Validated | Two compute nodes boot, join the cluster, and complete the MPI smoke test. |
 | TUI-driven install | Not yet validated | Not yet validated | Recovery work has focused on unattended answerfile installs first. |
@@ -114,7 +116,7 @@ The default config also assumes a single active lab on the host. If you want mul
 | OpenHPC MPI hello world | Validated | Two MPI ranks run on the deployed Rocky 10 compute node through Slurm. |
 | External + management network topology | Validated | This is the current EL10 lab topology. |
 | Multi-node cluster | Validated | Two compute nodes boot, join the cluster, and complete the MPI smoke test across nodes. |
-| Dedicated service network | Not yet validated | Still outside the initial EL10 baseline. |
+| Dedicated service network | Validated | Rocky 10.1 + Confluent now completes the unattended install, verify, and MPI smoke path with a dedicated `oc-svc0` headnode NIC and a populated `[network_service]` section. |
 | Dedicated application network / OFED path | Not yet validated | Still outside the initial EL10 baseline. |
 | TUI-driven install | Not yet validated | EL10 work has focused on unattended answerfile installs first. |
 | `--dump-answerfile` round-trip | Not yet validated | Do not treat dumped answerfiles as an EL10 recovery baseline yet. |
@@ -170,6 +172,10 @@ testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env destroy
   branch can reuse the same host-side lab orchestration while the product port
   is still underway.
 - The currently validated multi-node EL9 topology is two compute nodes on
-  external plus management networks. Service/application network variants
-  still need broader coverage.
+  external plus management networks. EL9 Confluent service-network coverage is
+  now also validated, but the xCAT service-network and broader application
+  network variants still need coverage.
+- The currently validated EL10 service-network topology adds a dedicated
+  headnode `oc-svc0` interface and `[network_service]`, but the application
+  network / OFED path is still outside the EL10 baseline.
 - Nested virtualization CI is out of scope for GitHub Actions; this is intended for a real Enterprise Linux KVM host.

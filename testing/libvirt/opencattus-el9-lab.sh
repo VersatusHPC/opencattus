@@ -91,6 +91,12 @@ default_headnode_mgmt_mac() {
         "$(token_hex_byte 2)"
 }
 
+default_headnode_service_mac() {
+    printf '52:54:%s:%s:30:01' \
+        "$(token_hex_byte 0)" \
+        "$(token_hex_byte 2)"
+}
+
 default_remote_build_preset() {
     if (( DISTRO_MAJOR >= 10 )); then
         printf 'el10-gcc-release'
@@ -181,9 +187,18 @@ load_defaults() {
     MANAGEMENT_PREFIX=${MANAGEMENT_PREFIX:-24}
     MANAGEMENT_HOST_IP=${MANAGEMENT_HOST_IP:-192.168.30.253}
 
+    SERVICE_NETWORK_ENABLED=${SERVICE_NETWORK_ENABLED:-0}
+    SERVICE_NETWORK_NAME=${SERVICE_NETWORK_NAME:-${LAB_NAME}-svc}
+    SERVICE_BRIDGE=${SERVICE_BRIDGE:-oc${BRIDGE_TOKEN}s0}
+    SERVICE_GATEWAY_IP=${SERVICE_GATEWAY_IP:-192.168.40.254}
+    SERVICE_NETMASK=${SERVICE_NETMASK:-255.255.255.0}
+    SERVICE_PREFIX=${SERVICE_PREFIX:-24}
+    SERVICE_HOST_IP=${SERVICE_HOST_IP:-192.168.40.253}
+
     HEADNODE_NAME=${HEADNODE_NAME:-${LAB_NAME}-headnode}
     HEADNODE_EXT_MAC=${HEADNODE_EXT_MAC:-$(default_headnode_ext_mac)}
     HEADNODE_MGMT_MAC=${HEADNODE_MGMT_MAC:-$(default_headnode_mgmt_mac)}
+    HEADNODE_SERVICE_MAC=${HEADNODE_SERVICE_MAC:-$(default_headnode_service_mac)}
     HEADNODE_MEMORY_MB=${HEADNODE_MEMORY_MB:-16384}
     HEADNODE_VCPUS=${HEADNODE_VCPUS:-4}
     HEADNODE_DISK_GB=${HEADNODE_DISK_GB:-220}
@@ -203,6 +218,7 @@ load_defaults() {
     CLUSTER_DOMAIN=${CLUSTER_DOMAIN:-cluster.example.com}
     EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN:-cluster.external.example.com}
     MANAGEMENT_DOMAIN=${MANAGEMENT_DOMAIN:-cluster.management.example.com}
+    SERVICE_DOMAIN=${SERVICE_DOMAIN:-cluster.service.example.com}
 
     TIMEZONE=${TIMEZONE:-UTC}
     TIMESERVER=${TIMESERVER:-pool.ntp.org}
@@ -297,9 +313,22 @@ node_ip() {
         $((NODE_IP_BASE_OCTET + index - 1))
 }
 
+service_subnet_prefix() {
+    local octet1 octet2 octet3 octet4
+    IFS=. read -r octet1 octet2 octet3 octet4 <<<"${SERVICE_GATEWAY_IP}"
+    printf '%s.%s.%s' "${octet1}" "${octet2}" "${octet3}"
+}
+
 node_bmc_ip() {
     local index=$1
-    printf '%s.%d' "$(management_subnet_prefix)" \
+    local subnet_prefix
+    if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
+        subnet_prefix=$(service_subnet_prefix)
+    else
+        subnet_prefix=$(management_subnet_prefix)
+    fi
+
+    printf '%s.%d' "${subnet_prefix}" \
         $((NODE_BMC_IP_BASE_OCTET + index - 1))
 }
 
@@ -538,12 +567,24 @@ ethernets:
     dhcp6: false
   management:
     match:
-      macaddress: "${HEADNODE_MGMT_MAC}"
+        macaddress: "${HEADNODE_MGMT_MAC}"
     set-name: "oc-mgmt0"
     dhcp4: false
     dhcp6: false
     optional: true
 EOF
+
+    if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
+        cat >>"$(headnode_network_config_path)" <<EOF
+  service:
+    match:
+      macaddress: "${HEADNODE_SERVICE_MAC}"
+    set-name: "oc-svc0"
+    dhcp4: false
+    dhcp6: false
+    optional: true
+EOF
+    fi
 }
 
 ensure_ssh_key() {
@@ -584,9 +625,14 @@ check_host_prereqs() {
 
 check_config() {
     local topology_vcpus
+    local index
+    local compute_ip
+    local bmc_ip
 
     [[ "${PROVISIONER}" == "xcat" || "${PROVISIONER}" == "confluent" ]] || die \
         "Unsupported provisioner ${PROVISIONER}; expected xcat or confluent"
+    [[ "${SERVICE_NETWORK_ENABLED}" == "0" || "${SERVICE_NETWORK_ENABLED}" == "1" ]] || die \
+        "SERVICE_NETWORK_ENABLED must be 0 or 1"
     if (( DISTRO_MAJOR >= 10 )); then
         [[ "${DISTRO_ID}" == "rocky" ]] || die \
             "The current EL10 bootstrap lab only targets Rocky Linux 10"
@@ -621,6 +667,30 @@ check_config() {
         "MPI_SMOKE_NODES (${MPI_SMOKE_NODES}) cannot exceed COMPUTE_COUNT (${COMPUTE_COUNT})"
     (( MPI_SMOKE_TASKS >= MPI_SMOKE_NODES )) || die \
         "MPI_SMOKE_TASKS (${MPI_SMOKE_TASKS}) must be at least MPI_SMOKE_NODES (${MPI_SMOKE_NODES})"
+
+    [[ "${MANAGEMENT_GATEWAY_IP}" != "${MANAGEMENT_HOST_IP}" ]] || die \
+        "MANAGEMENT_GATEWAY_IP (${MANAGEMENT_GATEWAY_IP}) must differ from MANAGEMENT_HOST_IP (${MANAGEMENT_HOST_IP})"
+
+    if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
+        [[ "${SERVICE_GATEWAY_IP}" != "${SERVICE_HOST_IP}" ]] || die \
+            "SERVICE_GATEWAY_IP (${SERVICE_GATEWAY_IP}) must differ from SERVICE_HOST_IP (${SERVICE_HOST_IP})"
+    fi
+
+    for (( index = 1; index <= COMPUTE_COUNT; index++ )); do
+        compute_ip=$(node_ip "${index}")
+        [[ "${MANAGEMENT_GATEWAY_IP}" != "${compute_ip}" ]] || die \
+            "MANAGEMENT_GATEWAY_IP (${MANAGEMENT_GATEWAY_IP}) collides with compute node ${index} IP (${compute_ip})"
+        [[ "${MANAGEMENT_HOST_IP}" != "${compute_ip}" ]] || die \
+            "MANAGEMENT_HOST_IP (${MANAGEMENT_HOST_IP}) collides with compute node ${index} IP (${compute_ip})"
+
+        if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
+            bmc_ip=$(node_bmc_ip "${index}")
+            [[ "${SERVICE_GATEWAY_IP}" != "${bmc_ip}" ]] || die \
+                "SERVICE_GATEWAY_IP (${SERVICE_GATEWAY_IP}) collides with compute node ${index} BMC IP (${bmc_ip})"
+            [[ "${SERVICE_HOST_IP}" != "${bmc_ip}" ]] || die \
+                "SERVICE_HOST_IP (${SERVICE_HOST_IP}) collides with compute node ${index} BMC IP (${bmc_ip})"
+        fi
+    done
 }
 
 answerfile_template_path() {
@@ -740,22 +810,45 @@ write_management_network_xml() {
 EOF
 }
 
+write_service_network_xml() {
+    cat >"${LAB_DIR}/service-network.xml" <<EOF
+<network>
+  <name>${SERVICE_NETWORK_NAME}</name>
+  <bridge name='${SERVICE_BRIDGE}' stp='on' delay='0'/>
+</network>
+EOF
+}
+
 create_networks() {
     ensure_lab_dirs
 
     write_external_network_xml
     write_management_network_xml
+    if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
+        write_service_network_xml
+    fi
 
     destroy_network_if_exists "${EXTERNAL_NETWORK_NAME}"
     destroy_network_if_exists "${MANAGEMENT_NETWORK_NAME}"
+    if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
+        destroy_network_if_exists "${SERVICE_NETWORK_NAME}"
+    fi
     destroy_bridge_if_exists "${EXTERNAL_BRIDGE}"
     destroy_bridge_if_exists "${MANAGEMENT_BRIDGE}"
+    if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
+        destroy_bridge_if_exists "${SERVICE_BRIDGE}"
+    fi
 
     as_root virsh net-define "${LAB_DIR}/external-network.xml"
     start_network_with_recovery "${EXTERNAL_NETWORK_NAME}" "${EXTERNAL_BRIDGE}"
 
     as_root virsh net-define "${LAB_DIR}/management-network.xml"
     start_network_with_recovery "${MANAGEMENT_NETWORK_NAME}" "${MANAGEMENT_BRIDGE}"
+
+    if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
+        as_root virsh net-define "${LAB_DIR}/service-network.xml"
+        start_network_with_recovery "${SERVICE_NETWORK_NAME}" "${SERVICE_BRIDGE}"
+    fi
 }
 
 create_headnode_disk() {
@@ -773,6 +866,15 @@ create_headnode_disk() {
 }
 
 create_headnode() {
+    local -a network_args=(
+        --network "network=${EXTERNAL_NETWORK_NAME},model=virtio,mac=${HEADNODE_EXT_MAC}"
+        --network "network=${MANAGEMENT_NETWORK_NAME},model=virtio,mac=${HEADNODE_MGMT_MAC}"
+    )
+
+    if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
+        network_args+=(--network "network=${SERVICE_NETWORK_NAME},model=virtio,mac=${HEADNODE_SERVICE_MAC}")
+    fi
+
     destroy_domain_if_exists "${HEADNODE_NAME}"
     create_headnode_disk
 
@@ -786,8 +888,7 @@ create_headnode() {
         --import \
         --disk "path=${HEADNODE_DISK},format=qcow2,bus=virtio" \
         --disk "path=${HEADNODE_SEED_ISO},device=cdrom" \
-        --network "network=${EXTERNAL_NETWORK_NAME},model=virtio,mac=${HEADNODE_EXT_MAC}" \
-        --network "network=${MANAGEMENT_NETWORK_NAME},model=virtio,mac=${HEADNODE_MGMT_MAC}" \
+        "${network_args[@]}" \
         --channel "unix,target_type=virtio,name=org.qemu.guest_agent.0" \
         --graphics vnc,listen=127.0.0.1 \
         --console pty,target_type=serial \
@@ -974,6 +1075,17 @@ render_answerfile() {
         -e "s|__NODE_BMC_SERIALPORT__|${NODE_BMC_SERIALPORT}|g" \
         -e "s|__NODE_BMC_SERIALSPEED__|${NODE_BMC_SERIALSPEED}|g" \
         "${template}" >"${workfile}"
+
+    if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
+        cat >>"${workfile}" <<EOF
+
+[network_service]
+interface=oc-svc0
+ip_address=${SERVICE_GATEWAY_IP}
+subnet_mask=${SERVICE_NETMASK}
+domain_name=${SERVICE_DOMAIN}
+EOF
+    fi
 
     for (( index = 1; index <= COMPUTE_COUNT; index++ )); do
         cat >>"${workfile}" <<EOF
@@ -1223,6 +1335,10 @@ collect_logs() {
         as_root virsh net-dumpxml "${MANAGEMENT_NETWORK_NAME}" >"${LOG_DIR}/${MANAGEMENT_NETWORK_NAME}.xml"
     fi
 
+    if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]] && network_exists "${SERVICE_NETWORK_NAME}"; then
+        as_root virsh net-dumpxml "${SERVICE_NETWORK_NAME}" >"${LOG_DIR}/${SERVICE_NETWORK_NAME}.xml"
+    fi
+
     if ssh "${SSH_OPTIONS[@]}" "$(remote_host)" 'true' >/dev/null 2>&1; then
         ssh_remote "sudo journalctl -b --no-pager" >"${headnode_log_dir}/journal.txt" || true
         ssh_remote "sudo systemctl --failed --no-pager" >"${headnode_log_dir}/failed-units.txt" || true
@@ -1246,8 +1362,14 @@ destroy_lab() {
 
     destroy_network_if_exists "${EXTERNAL_NETWORK_NAME}"
     destroy_network_if_exists "${MANAGEMENT_NETWORK_NAME}"
+    if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
+        destroy_network_if_exists "${SERVICE_NETWORK_NAME}"
+    fi
     destroy_bridge_if_exists "${EXTERNAL_BRIDGE}"
     destroy_bridge_if_exists "${MANAGEMENT_BRIDGE}"
+    if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
+        destroy_bridge_if_exists "${SERVICE_BRIDGE}"
+    fi
 
     as_root rm -rf "${LAB_DIR}"
     as_root rm -rf "${IMAGE_DIR}"

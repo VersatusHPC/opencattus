@@ -252,6 +252,18 @@ public:
     std::size_t nodePadding = 0;
     address nodeStartIP;
     std::string nodeRootPassword;
+    std::size_t nodeSockets = 0;
+    std::size_t nodeCoresPerSocket = 0;
+    std::size_t nodeThreadsPerCore = 0;
+    std::size_t nodeCPUsPerNode = 0;
+    std::size_t nodeRealMemory = 0;
+    std::string nodeBMCUsername;
+    std::string nodeBMCPassword;
+    std::size_t nodeBMCSerialPort = 0;
+    std::size_t nodeBMCSerialSpeed = 0;
+    std::string slurmMariaDBRootPassword;
+    std::string slurmDBPassword;
+    std::string slurmStoragePassword;
 };
 
 }; // namespace opencattus::models

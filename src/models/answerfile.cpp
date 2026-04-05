@@ -153,12 +153,74 @@ void AnswerFile::dumpSystemSettings()
 
 void AnswerFile::dumpNodes()
 {
+    if (nodes.generic.has_value()) {
+        const auto& generic = nodes.generic.value();
+
+        if (generic.prefix) {
+            m_keyfile.setString("node", "prefix", *generic.prefix);
+        }
+        if (generic.padding) {
+            m_keyfile.setString("node", "padding", *generic.padding);
+        }
+        if (generic.start_ip) {
+            m_keyfile.setString(
+                "node", "node_ip", generic.start_ip->to_string());
+        }
+        if (generic.root_password) {
+            m_keyfile.setString(
+                "node", "node_root_password", *generic.root_password);
+        }
+        if (generic.sockets) {
+            m_keyfile.setString("node", "sockets", *generic.sockets);
+        }
+        if (generic.cores_per_socket) {
+            m_keyfile.setString(
+                "node", "cores_per_socket", *generic.cores_per_socket);
+        }
+        if (generic.cpus_per_node) {
+            m_keyfile.setString(
+                "node", "cpus_per_node", *generic.cpus_per_node);
+        }
+        if (generic.threads_per_core) {
+            m_keyfile.setString(
+                "node", "threads_per_core", *generic.threads_per_core);
+        }
+        if (generic.real_memory) {
+            m_keyfile.setString("node", "real_memory", *generic.real_memory);
+        }
+        if (generic.bmc_username) {
+            m_keyfile.setString(
+                "node", "bmc_username", *generic.bmc_username);
+        }
+        if (generic.bmc_password) {
+            m_keyfile.setString(
+                "node", "bmc_password", *generic.bmc_password);
+        }
+        if (generic.bmc_serialport) {
+            m_keyfile.setString(
+                "node", "bmc_serialport", *generic.bmc_serialport);
+        }
+        if (generic.bmc_serialspeed) {
+            m_keyfile.setString(
+                "node", "bmc_serialspeed", *generic.bmc_serialspeed);
+        }
+    }
+
     size_t counter = 1;
     for (const auto& node : nodes.nodes) {
         std::string sectionName = fmt::format("node.{}", counter);
 
         if (node.hostname) {
             m_keyfile.setString(sectionName, "hostname", *node.hostname);
+        }
+
+        if (node.mac_address) {
+            m_keyfile.setString(sectionName, "mac_address", *node.mac_address);
+        }
+
+        if (node.start_ip) {
+            m_keyfile.setString(
+                sectionName, "node_ip", node.start_ip->to_string());
         }
 
         if (node.root_password) {
@@ -178,6 +240,16 @@ void AnswerFile::dumpNodes()
         if (node.threads_per_core) {
             m_keyfile.setString(
                 sectionName, "threads_per_core", *node.threads_per_core);
+        }
+
+        if (node.cpus_per_node) {
+            m_keyfile.setString(
+                sectionName, "cpus_per_node", *node.cpus_per_node);
+        }
+
+        if (node.real_memory) {
+            m_keyfile.setString(
+                sectionName, "real_memory", *node.real_memory);
         }
 
         if (node.bmc_address) {
@@ -251,6 +323,7 @@ void AnswerFile::dumpOptions()
     dumpTimeSettings();
     dumpHostnameSettings();
     dumpSystemSettings();
+    dumpSlurm();
 
     dumpNodes();
     dumpPostfix();
@@ -706,6 +779,15 @@ void AnswerFile::loadSlurm()
     slurm.partition_name
         = optional::unwrap(m_keyfile.getStringOpt("slurm", "partition_name"),
             "partition_name missing in the answerfile {}", path());
+}
+
+void AnswerFile::dumpSlurm()
+{
+    m_keyfile.setString(
+        "slurm", "mariadb_root_password", slurm.mariadb_root_password);
+    m_keyfile.setString("slurm", "slurmdb_password", slurm.slurmdb_password);
+    m_keyfile.setString("slurm", "storage_password", slurm.storage_password);
+    m_keyfile.setString("slurm", "partition_name", slurm.partition_name);
 }
 
 };
