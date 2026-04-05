@@ -333,4 +333,89 @@ TEST_SUITE("opencattus::models::answerfile")
 
         std::filesystem::remove(diskImagePath);
     }
+
+    TEST_CASE("dumpFile writes corrected metadata to the requested output path")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto sourcePath
+            = tempAnswerfilePath("opencattus-answerfile-dump-source");
+        const auto outputPath
+            = tempAnswerfilePath("opencattus-answerfile-dump-output");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-dump-source");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(sourcePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "xcat");
+
+        try {
+            AnswerFile answerfile(sourcePath);
+            std::filesystem::remove(outputPath);
+
+            answerfile.dumpFile(outputPath);
+
+            REQUIRE(std::filesystem::exists(outputPath));
+            const auto dumped
+                = opencattus::services::files::read(outputPath);
+            CHECK(dumped.contains("administrator_email=foo@example.com"));
+            CHECK_FALSE(
+                dumped.contains("admm_keyfilestrator_email=foo@example.com"));
+            CHECK(dumped.contains("provisioner=xcat"));
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while dumping answerfile metadata");
+        }
+
+        std::filesystem::remove(sourcePath);
+        std::filesystem::remove(outputPath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("dumpData preserves headnode connection addresses instead of network base addresses")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto sourcePath
+            = tempAnswerfilePath("opencattus-cluster-dump-source");
+        const auto outputPath
+            = tempAnswerfilePath("opencattus-cluster-dump-output");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-dump-source");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(sourcePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "confluent");
+
+        try {
+            AnswerFile answerfile(sourcePath);
+            Cluster cluster;
+            cluster.fillData(answerfile);
+
+            std::filesystem::remove(outputPath);
+            cluster.dumpData(outputPath);
+
+            REQUIRE(std::filesystem::exists(outputPath));
+            const auto dumped
+                = opencattus::services::files::read(outputPath);
+            CHECK(dumped.contains("ip_address=192.168.30.254"));
+            CHECK(dumped.contains("ip_address=192.168.124.10"));
+            CHECK_FALSE(dumped.contains("ip_address=192.168.30.0"));
+            CHECK_FALSE(dumped.contains("ip_address=192.168.124.0"));
+            CHECK(dumped.contains("provisioner=confluent"));
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while dumping cluster data");
+        }
+
+        std::filesystem::remove(sourcePath);
+        std::filesystem::remove(outputPath);
+        std::filesystem::remove(diskImagePath);
+    }
 }

@@ -387,7 +387,8 @@ public:
 
     [[nodiscard]] auto path() const -> const std::filesystem::path&;
 
-    explicit AnswerFile(const std::filesystem::path& path);
+    explicit AnswerFile(
+        const std::filesystem::path& path, bool loadFromDisk = true);
 };
 
 class AnswerfileValidationException : public std::exception {

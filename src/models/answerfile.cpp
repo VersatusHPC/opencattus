@@ -24,11 +24,13 @@ using opencattus::services::Postfix;
 
 namespace opencattus::models {
 
-AnswerFile::AnswerFile(const std::filesystem::path& path)
+AnswerFile::AnswerFile(const std::filesystem::path& path, bool loadFromDisk)
     : m_path(path)
     , m_keyfile(path)
 {
-    loadFile(m_path);
+    if (loadFromDisk) {
+        loadFile(m_path);
+    }
 }
 
 void AnswerFile::loadFile(const std::filesystem::path& path)
@@ -121,7 +123,7 @@ void AnswerFile::dumpInformation()
         "information", "cluster_name", information.cluster_name);
     m_keyfile.setString(
         "information", "company_name", information.company_name);
-    m_keyfile.setString("information", "admm_keyfilestrator_email",
+    m_keyfile.setString("information", "administrator_email",
         information.administrator_email);
 }
 
@@ -146,6 +148,7 @@ void AnswerFile::dumpSystemSettings()
     m_keyfile.setString("system", "distro", std::string { distroName });
     m_keyfile.setString("system", "version", system.version);
     m_keyfile.setString("system", "kernel", system.kernel);
+    m_keyfile.setString("system", "provisioner", system.provisioner);
 }
 
 void AnswerFile::dumpNodes()
@@ -255,8 +258,9 @@ void AnswerFile::dumpOptions()
 
 void AnswerFile::dumpFile(const std::filesystem::path& path)
 {
+    m_path = path;
     dumpOptions();
-    m_keyfile.save();
+    opencattus::services::files::write(path, m_keyfile.toData());
 };
 
 address AnswerFile::convertStringToAddress(const std::string& addr)
