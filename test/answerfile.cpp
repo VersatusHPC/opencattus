@@ -46,7 +46,10 @@ auto firstHostInterfaces() -> std::vector<std::string>
 void writeAnswerfile(const std::filesystem::path& path,
     const std::filesystem::path& diskImagePath,
     std::string_view managementInterface, std::string_view serviceInterface,
-    std::optional<std::string_view> applicationInterface = std::nullopt)
+    std::optional<std::string_view> applicationInterface = std::nullopt,
+    bool includeServiceNetwork = true,
+    std::string_view provisioner = "confluent",
+    std::optional<std::string_view> serviceNameservers = std::nullopt)
 {
     std::ofstream out(path);
     REQUIRE(out.is_open());
@@ -71,12 +74,19 @@ void writeAnswerfile(const std::filesystem::path& path,
         << "interface=" << managementInterface << '\n'
         << "ip_address=192.168.30.254\n"
         << "subnet_mask=255.255.255.0\n"
-        << "domain_name=cluster.management.example.com\n\n"
-        << "[network_service]\n"
-        << "interface=" << serviceInterface << '\n'
-        << "ip_address=192.168.31.254\n"
-        << "subnet_mask=255.255.255.0\n"
-        << "domain_name=cluster.service.example.com\n";
+        << "domain_name=cluster.management.example.com\n";
+
+    if (includeServiceNetwork) {
+        out << "\n[network_service]\n"
+            << "interface=" << serviceInterface << '\n'
+            << "ip_address=192.168.31.254\n"
+            << "subnet_mask=255.255.255.0\n"
+            << "domain_name=cluster.service.example.com\n";
+
+        if (serviceNameservers.has_value()) {
+            out << "nameservers=" << serviceNameservers.value() << '\n';
+        }
+    }
 
     if (applicationInterface.has_value()) {
         out << "\n[network_application]\n"
@@ -95,7 +105,7 @@ void writeAnswerfile(const std::filesystem::path& path,
         << "disk_image=" << diskImagePath.string() << '\n'
         << "distro=rocky\n"
         << "version=9.7\n"
-        << "provisioner=confluent\n\n"
+        << "provisioner=" << provisioner << "\n\n"
         << "[node]\n"
         << "prefix=n\n"
         << "padding=2\n"
@@ -156,6 +166,71 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(diskImagePath);
     }
 
+    TEST_CASE("loadOptions leaves the service network unset when the section is absent")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-no-service-network");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-no-service-network");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, false);
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+
+            CHECK_FALSE(answerfile.service.con_interface.has_value());
+            CHECK_FALSE(answerfile.service.con_ip_addr.has_value());
+            CHECK_FALSE(answerfile.service.domain_name.has_value());
+            CHECK_FALSE(answerfile.service.nameservers.has_value());
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while loading answerfile without service network");
+        }
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("loadOptions splits nameservers for the service network")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-service-nameservers");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-service-nameservers");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "confluent",
+            "1.1.1.1, 8.8.8.8 9.9.9.9");
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+
+            REQUIRE(answerfile.service.nameservers.has_value());
+            CHECK(answerfile.service.nameservers.value()
+                == std::vector<std::string> {
+                    "1.1.1.1", "8.8.8.8", "9.9.9.9" });
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while parsing service nameservers");
+        }
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
     TEST_CASE("fillData keeps the service connection bound to the service interface")
     {
         initializeOptionsSingleton();
@@ -195,6 +270,67 @@ TEST_SUITE("opencattus::models::answerfile")
         }
 
         std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("fillData maps the answerfile provisioner into the cluster model")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-provisioner-mapping");
+        std::ofstream(diskImagePath).close();
+
+        SUBCASE("xcat")
+        {
+            const auto answerfilePath
+                = tempAnswerfilePath("opencattus-cluster-provisioner-xcat");
+            writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+                interfaces.front(), std::nullopt, true, "xcat");
+
+            try {
+                AnswerFile answerfile(answerfilePath);
+                Cluster cluster;
+                cluster.fillData(answerfile);
+
+                CHECK(cluster.getProvisioner()
+                    == Cluster::Provisioner::xCAT);
+            } catch (const std::exception& e) {
+                FAIL(std::string(e.what()));
+            } catch (...) {
+                FAIL("non-std exception while filling cluster for xCAT provisioner");
+            }
+
+            std::filesystem::remove(answerfilePath);
+        }
+
+        SUBCASE("confluent")
+        {
+            const auto answerfilePath = tempAnswerfilePath(
+                "opencattus-cluster-provisioner-confluent");
+            writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+                interfaces.front(), std::nullopt, true, "confluent");
+
+            try {
+                AnswerFile answerfile(answerfilePath);
+                Cluster cluster;
+                cluster.fillData(answerfile);
+
+                CHECK(cluster.getProvisioner()
+                    == Cluster::Provisioner::Confluent);
+            } catch (const std::exception& e) {
+                FAIL(std::string(e.what()));
+            } catch (...) {
+                FAIL(
+                    "non-std exception while filling cluster for Confluent provisioner");
+            }
+
+            std::filesystem::remove(answerfilePath);
+        }
+
         std::filesystem::remove(diskImagePath);
     }
 }

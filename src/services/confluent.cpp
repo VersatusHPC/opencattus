@@ -1,25 +1,50 @@
 #include <fmt/core.h>
 #include <opencattus/functions.h>
+#include <opencattus/models/cpu.h>
+#include <opencattus/models/node.h>
+#include <opencattus/models/os.h>
 #include <opencattus/services/confluent.h>
 #include <opencattus/services/runner.h>
 #include <opencattus/utils/network.h>
 #include <opencattus/utils/optional.h>
 #include <opencattus/utils/singleton.h>
 
+#ifdef BUILD_TESTING
+#include <doctest/doctest.h>
+#else
+#define DOCTEST_CONFIG_DISABLE
+#include <doctest/doctest.h>
+#endif
+
 namespace {
 using namespace opencattus;
 using namespace opencattus::utils;
 
-void addNode(const models::Node& node, std::string_view image)
+std::string buildFirewalldTrustedInterfaceCommands(
+    std::string_view internalNic)
+{
+    return fmt::format(R"(
+# Configure the internal network interfaces as trusted on FirewallD
+if systemctl is-active --quiet firewalld.service; then
+    firewall-cmd --zone=trusted --change-interface={internalNic} --permanent
+    firewall-cmd --reload
+fi
+)",
+        fmt::arg("internalNic", internalNic));
+}
+
+std::string buildNodeDefinitionScript(
+    const models::Node& node, std::string_view image)
 {
     const auto rootpwd = optional::unwrap(node.getNodeRootPassword(),
         "No root password configured for node {}", node.getHostname());
-    services::runner::shell::fmt(
+
+    std::string script = fmt::format(
         R"(
 nodedefine {nodeName}
 nodeattrib {nodeName} net.ipv4_address={nodeIp}/{nodeCIDR}
 nodeattrib {nodeName} bmcuser={bmcuser} bmcpass={bmcpass} crypted.rootpassword={rootpwd} crypted.grubpassword={grubpwd}
-    )",
+)",
         fmt::arg("nodeName", node.getHostname()),
         fmt::arg("nodeIp",
             node.getConnection(Network::Profile::Management)
@@ -37,16 +62,23 @@ nodeattrib {nodeName} bmcuser={bmcuser} bmcpass={bmcpass} crypted.rootpassword={
     if (const auto& macOpt
         = node.getConnection(Network::Profile::Management).getMAC();
         macOpt) {
-        services::runner::shell::fmt(
-            "nodeattrib {nodeName} net.hwaddr={nodeMac}",
+        script += fmt::format(
+            "nodeattrib {nodeName} net.hwaddr={nodeMac}\n",
             fmt::arg("nodeName", node.getHostname()),
             fmt::arg("nodeMac", macOpt.value()));
     }
 
-    services::runner::shell::fmt("nodedeploy -p {nodeName} -n {image}-diskless",
+    script += fmt::format(
+        "nodedeploy -p {nodeName} -n {image}-diskless\n",
         fmt::arg("nodeName", node.getHostname()), fmt::arg("image", image));
+    script += "confluent2hosts -a everything\n";
 
-    services::runner::shell::cmd("confluent2hosts -a everything");
+    return script;
+}
+
+void addNode(const models::Node& node, std::string_view image)
+{
+    services::runner::shell::cmd(buildNodeDefinitionScript(node, image));
 }
 
 void addNodes(std::string_view image)
@@ -86,11 +118,7 @@ set -xeu
 # Configure SELinux to allow httpd to make connections
 setsebool -P httpd_can_network_connect=on
 
-# Configure the internal network interfaces as trusted on FirewallD
-if systemctl is-active --quiet firewalld.service; then
-    firewall-cmd --zone=trusted --change-interface={internalNic} --permanent
-    firewall-cmd --reload
-fi
+{trustedNetworkCommands}
 
 # Add basic settings to allow a minimalist boot environment
 nodegroupattrib everything \
@@ -229,10 +257,82 @@ rm -rf /tmp/scratchdir || :
         fmt::arg("internalNic",
             utils::optional::unwrap(answerfile()->management.con_interface,
                 "Internal interface not found in [network_management]")),
+        fmt::arg("trustedNetworkCommands",
+            buildFirewalldTrustedInterfaceCommands(
+                utils::optional::unwrap(answerfile()->management.con_interface,
+                    "Internal interface not found in [network_management]"))),
         fmt::arg("image", image),
         fmt::arg("ofedEnabled", answerfile()->ofed.enabled));
 
     addNodes(image);
 }
 
+}
+
+namespace {
+#ifdef BUILD_TESTING
+auto makeConfluentTestNode(std::optional<std::string_view> mac = std::nullopt)
+    -> opencattus::models::Node
+{
+    using opencattus::models::CPU;
+    using opencattus::models::Node;
+    using opencattus::models::OS;
+
+    auto* managementNetwork
+        = new Network(Network::Profile::Management, Network::Type::Ethernet);
+    managementNetwork->setSubnetMask("255.255.255.0");
+
+    Connection managementConnection(managementNetwork);
+    managementConnection.setAddress("192.168.30.11");
+    if (mac.has_value()) {
+        managementConnection.setMAC(mac.value());
+    }
+
+    std::list<Connection> connections;
+    connections.emplace_back(std::move(managementConnection));
+
+    OS os(OS::Distro::Rocky, OS::Platform::el9, 7);
+    CPU cpu(1, 2, 1);
+    BMC bmc("192.168.30.101", "admin", "pa'ss", 0, 9600, BMC::kind::IPMI);
+
+    Node node("n01", os, cpu, std::move(connections), bmc);
+    node.setNodeRootPassword(std::string("labroot"));
+    return node;
+}
+#endif
+}
+
+TEST_CASE("buildFirewalldTrustedInterfaceCommands checks firewalld activity before firewall-cmd")
+{
+    const auto script = buildFirewalldTrustedInterfaceCommands("mgmt0");
+
+    CHECK(script.contains("systemctl is-active --quiet firewalld.service"));
+    CHECK(script.contains(
+        "firewall-cmd --zone=trusted --change-interface=mgmt0 --permanent"));
+    CHECK(script.contains("firewall-cmd --reload"));
+    CHECK_FALSE(script.contains("systemctl is-enabled --quiet firewalld.service"));
+}
+
+TEST_CASE("buildNodeDefinitionScript emits a MAC assignment only when the management MAC is known")
+{
+    SUBCASE("with mac")
+    {
+        const auto script
+            = buildNodeDefinitionScript(makeConfluentTestNode("52:54:00:00:20:11"),
+                "rocky-9.7-x86_64");
+
+        CHECK(script.contains("nodeattrib n01 net.ipv4_address=192.168.30.11/24"));
+        CHECK(script.contains("nodeattrib n01 net.hwaddr=52:54:00:00:20:11"));
+        CHECK(script.contains("nodedeploy -p n01 -n rocky-9.7-x86_64-diskless"));
+        CHECK(script.contains("confluent2hosts -a everything"));
+    }
+
+    SUBCASE("without mac")
+    {
+        const auto script
+            = buildNodeDefinitionScript(makeConfluentTestNode(), "rocky-9.7-x86_64");
+
+        CHECK_FALSE(script.contains("net.hwaddr="));
+        CHECK(script.contains("bmcpass=pa'ss"));
+    }
 }
