@@ -97,35 +97,61 @@ default_headnode_service_mac() {
         "$(token_hex_byte 2)"
 }
 
+is_distro_major_el9() {
+    [[ "${DISTRO_MAJOR}" == "9" ]]
+}
+
+is_distro_major_el10() {
+    [[ "${DISTRO_MAJOR}" == "10" ]]
+}
+
+require_supported_distro_major() {
+    case "${DISTRO_MAJOR}" in
+        9|10)
+            ;;
+        *)
+            die "Unsupported DISTRO_MAJOR ${DISTRO_MAJOR}; the shared lab supports explicit EL9 and EL10 paths only"
+            ;;
+    esac
+}
+
 default_remote_build_preset() {
-    if (( DISTRO_MAJOR >= 10 )); then
+    if is_distro_major_el10; then
         printf 'el10-gcc-release'
-    else
+    elif is_distro_major_el9; then
         printf 'rhel9-gcc-toolset-14-release'
+    else
+        require_supported_distro_major
     fi
 }
 
 default_remote_build_preset_build() {
-    if (( DISTRO_MAJOR >= 10 )); then
+    if is_distro_major_el10; then
         printf 'el10-gcc-release-build'
-    else
+    elif is_distro_major_el9; then
         printf 'rhel9-gcc-toolset-14-release-build'
+    else
+        require_supported_distro_major
     fi
 }
 
 headnode_glibmm_package() {
-    if (( DISTRO_MAJOR >= 10 )); then
+    if is_distro_major_el10; then
         printf 'glibmm2.68'
-    else
+    elif is_distro_major_el9; then
         printf 'glibmm24'
+    else
+        require_supported_distro_major
     fi
 }
 
 virt_install_osinfo_name() {
-    if (( DISTRO_MAJOR >= 10 )); then
+    if is_distro_major_el10; then
         printf 'generic'
-    else
+    elif is_distro_major_el9; then
         printf 'rocky9'
+    else
+        require_supported_distro_major
     fi
 }
 
@@ -139,9 +165,10 @@ load_defaults() {
     DISTRO_ID=${DISTRO_ID:-rocky}
     DISTRO_VERSION=${DISTRO_VERSION:-9.6}
     DISTRO_MAJOR=${DISTRO_MAJOR:-${DISTRO_VERSION%%.*}}
+    require_supported_distro_major
 
     if [[ -z "${PROVISIONER+x}" ]]; then
-        if (( DISTRO_MAJOR >= 10 )); then
+        if is_distro_major_el10; then
             PROVISIONER=confluent
         else
             PROVISIONER=xcat
@@ -633,7 +660,7 @@ check_config() {
         "Unsupported provisioner ${PROVISIONER}; expected xcat or confluent"
     [[ "${SERVICE_NETWORK_ENABLED}" == "0" || "${SERVICE_NETWORK_ENABLED}" == "1" ]] || die \
         "SERVICE_NETWORK_ENABLED must be 0 or 1"
-    if (( DISTRO_MAJOR >= 10 )); then
+    if is_distro_major_el10; then
         [[ "${DISTRO_ID}" == "rocky" ]] || die \
             "The current EL10 bootstrap lab only targets Rocky Linux 10"
         [[ "${PROVISIONER}" == "confluent" ]] || die \
@@ -1149,7 +1176,7 @@ build_binary_in_guest() {
 
     sync_repo_to_remote
 
-    if (( DISTRO_MAJOR >= 10 )); then
+    if is_distro_major_el10; then
         compiler_setup_cmd=$(cat <<'EOF'
 chmod +x setupDevEnvironment.sh &&
 ./setupDevEnvironment.sh &&

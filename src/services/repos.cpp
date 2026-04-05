@@ -890,12 +890,12 @@ public:
 
 std::string defaultOpenHPCVersionFor(const OS& osinfo)
 {
-    switch (osinfo.getMajorVersion()) {
-        case 8:
+    switch (osinfo.getPlatform()) {
+        case OS::Platform::el8:
             return "2";
-        case 9:
+        case OS::Platform::el9:
             return "3";
-        case 10:
+        case OS::Platform::el10:
             return "4";
         default:
             throw std::runtime_error(fmt::format(
@@ -1278,8 +1278,15 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
         addToOutput("OpenHPC-Updates");
         addToOutput("rpmfusion");
         addToOutput("elrepo");
-        if (osinfo.getMajorVersion() < 10) {
-            addToOutput("beegfs");
+        switch (osinfo.getPlatform()) {
+            case OS::Platform::el8:
+            case OS::Platform::el9:
+                addToOutput("beegfs");
+                break;
+            case OS::Platform::el10:
+                break;
+            default:
+                throw std::runtime_error("Unsupported platform");
         }
         return output;
     }
@@ -1305,6 +1312,15 @@ TEST_CASE("RepoNames")
         .ohpcVersion = "3",
         .osversion = "9.4",
         .releasever = "9",
+        .xcatVersion = "latest",
+        .zabbixVersion = "6.4",
+    };
+    const RepoConfigVars& varsEl8 = RepoConfigVars {
+        .arch = "x86_64",
+        .beegfsVersion = "beegfs_7.3.3",
+        .ohpcVersion = "2",
+        .osversion = "8.10",
+        .releasever = "8",
         .xcatVersion = "latest",
         .zabbixVersion = "6.4",
     };
@@ -1374,6 +1390,26 @@ TEST_CASE("RepoNames")
                 "OpenHPC-Updates",
                 "rpmfusion",
                 "elrepo",
+            });
+    }
+
+    // Rocky EL8
+    {
+        const auto osinfo = OS(models::OS::Distro::Rocky, OS::Platform::el8, 10);
+        const auto conffiles = RepoConfigParser::load<ShouldUseVaultService>(
+            "repos/", osinfo, varsEl8);
+        const auto enabledRepos = enabler.resolveReposNames(osinfo, conffiles);
+        CHECK(enabledRepos
+            == std::vector<std::string> {
+                "appstream",
+                "baseos",
+                "crb",
+                "epel",
+                "OpenHPC",
+                "OpenHPC-Updates",
+                "rpmfusion",
+                "elrepo",
+                "beegfs",
             });
     }
 

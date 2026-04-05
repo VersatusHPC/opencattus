@@ -11,6 +11,7 @@
 
 #include <fmt/core.h>
 #include <set>
+#include <utility>
 
 namespace opencattus::services::ansible::roles::ohpc {
 
@@ -18,18 +19,22 @@ namespace {
 
 std::set<std::string> defaultPackagesFor(const models::OS& os)
 {
-    if (os.getMajorVersion() >= 10) {
-        return { "gnu15-compilers-ohpc", "openmpi5-pmix-gnu15-ohpc",
-            "mpich-ofi-gnu15-ohpc", "mpich-ucx-gnu15-ohpc",
-            "mvapich2-gnu15-ohpc", "lmod-ohpc",
-            "lmod-defaults-gnu15-openmpi5-ohpc", "ohpc-autotools",
-            "hwloc-ohpc", "spack-ohpc", "valgrind-ohpc" };
+    switch (os.getPlatform()) {
+        case models::OS::Platform::el10:
+            return { "gnu15-compilers-ohpc", "openmpi5-pmix-gnu15-ohpc",
+                "mpich-ofi-gnu15-ohpc", "mpich-ucx-gnu15-ohpc",
+                "mvapich2-gnu15-ohpc", "lmod-ohpc",
+                "lmod-defaults-gnu15-openmpi5-ohpc", "ohpc-autotools",
+                "hwloc-ohpc", "spack-ohpc", "valgrind-ohpc" };
+        case models::OS::Platform::el8:
+        case models::OS::Platform::el9:
+            return { "openmpi4-gnu12-ohpc", "mpich-ofi-gnu12-ohpc",
+                "mpich-ucx-gnu12-ohpc", "mvapich2-gnu12-ohpc",
+                "lmod-defaults-gnu12-openmpi4-ohpc", "ohpc-autotools",
+                "hwloc-ohpc", "spack-ohpc", "valgrind-ohpc" };
+        default:
+            std::unreachable();
     }
-
-    return { "openmpi4-gnu12-ohpc", "mpich-ofi-gnu12-ohpc",
-        "mpich-ucx-gnu12-ohpc", "mvapich2-gnu12-ohpc",
-        "lmod-defaults-gnu12-openmpi4-ohpc", "ohpc-autotools",
-        "hwloc-ohpc", "spack-ohpc", "valgrind-ohpc" };
 }
 
 std::set<std::string> resolvePackages(
@@ -71,6 +76,21 @@ TEST_CASE("resolvePackages keeps EL9 defaults unchanged")
     CHECK(packages.contains("hwloc-ohpc"));
     CHECK_FALSE(packages.contains("gnu15-compilers-ohpc"));
     CHECK_FALSE(packages.contains("openmpi5-gnu15-ohpc"));
+}
+
+TEST_CASE("resolvePackages keeps EL8 defaults explicit")
+{
+    const auto packages = resolvePackages(
+        models::OS(models::OS::Distro::Rocky, models::OS::Platform::el8, 10),
+        {});
+
+    CHECK(packages.contains("openmpi4-gnu12-ohpc"));
+    CHECK(packages.contains("mpich-ofi-gnu12-ohpc"));
+    CHECK(packages.contains("mpich-ucx-gnu12-ohpc"));
+    CHECK(packages.contains("mvapich2-gnu12-ohpc"));
+    CHECK(packages.contains("lmod-defaults-gnu12-openmpi4-ohpc"));
+    CHECK_FALSE(packages.contains("gnu15-compilers-ohpc"));
+    CHECK_FALSE(packages.contains("openmpi5-pmix-gnu15-ohpc"));
 }
 
 TEST_CASE("resolvePackages switches EL10 defaults to OpenHPC 4 toolchains")

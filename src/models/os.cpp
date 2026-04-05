@@ -245,9 +245,19 @@ unsigned int OS::getMajorVersion() const { return m_majorVersion; }
 
 void OS::setMajorVersion(unsigned int majorVersion)
 {
-    if (majorVersion < 8) {
-        throw std::runtime_error(
-            "Unsupported release: Major version must be 8 or greater.");
+    switch (majorVersion) {
+        case 8:
+            m_platform = OS::Platform::el8;
+            break;
+        case 9:
+            m_platform = OS::Platform::el9;
+            break;
+        case 10:
+            m_platform = OS::Platform::el10;
+            break;
+        default:
+            throw std::runtime_error(fmt::format(
+                "Unsupported release: EL{} is not supported.", majorVersion));
     }
 
     m_majorVersion = majorVersion;

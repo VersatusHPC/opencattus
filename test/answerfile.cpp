@@ -368,6 +368,40 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(diskImagePath);
     }
 
+    TEST_CASE("fillData still accepts xcat on Rocky Linux 8")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-cluster-provisioner-xcat-el8");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-provisioner-xcat-el8");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "xcat", std::nullopt,
+            "rocky", "8.10");
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            Cluster cluster;
+            cluster.fillData(answerfile);
+
+            CHECK(cluster.getProvisioner() == Cluster::Provisioner::xCAT);
+            CHECK(cluster.getHeadnode().getOS().getPlatform()
+                == opencattus::models::OS::Platform::el8);
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while filling cluster for Rocky Linux 8 xCAT");
+        }
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
     TEST_CASE("fillData accepts confluent on Rocky Linux 10")
     {
         initializeOptionsSingleton();
@@ -393,7 +427,8 @@ TEST_SUITE("opencattus::models::answerfile")
                 == Cluster::Provisioner::Confluent);
             CHECK(cluster.getHeadnode().getOS().getDistro()
                 == opencattus::models::OS::Distro::Rocky);
-            CHECK(cluster.getHeadnode().getOS().getMajorVersion() == 10);
+            CHECK(cluster.getHeadnode().getOS().getPlatform()
+                == opencattus::models::OS::Platform::el10);
         } catch (const std::exception& e) {
             FAIL(std::string(e.what()));
         } catch (...) {

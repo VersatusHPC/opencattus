@@ -443,11 +443,19 @@ auto& getNetworkField(AnswerFile& answerfile, Network::Profile profile)
 
 void validateProvisionerSupport(const OS& os, Cluster::Provisioner provisioner)
 {
-    if (os.getMajorVersion() >= 10
-        && provisioner == Cluster::Provisioner::xCAT) {
-        throw std::runtime_error(fmt::format(
-            "xCAT is not supported on EL{}; use confluent instead",
-            os.getMajorVersion()));
+    switch (os.getPlatform()) {
+        case OS::Platform::el10:
+            if (provisioner == Cluster::Provisioner::xCAT) {
+                throw std::runtime_error(fmt::format(
+                    "xCAT is not supported on EL{}; use confluent instead",
+                    os.getMajorVersion()));
+            }
+            return;
+        case OS::Platform::el8:
+        case OS::Platform::el9:
+            return;
+        default:
+            std::unreachable();
     }
 }
 
