@@ -295,7 +295,6 @@ rm -rf /tmp/scratchdir || :
 }
 
 namespace {
-#ifdef BUILD_TESTING
 auto makeConfluentTestNode(std::optional<std::string_view> mac = std::nullopt)
     -> opencattus::models::Node
 {
@@ -324,7 +323,6 @@ auto makeConfluentTestNode(std::optional<std::string_view> mac = std::nullopt)
     node.setNodeRootPassword(std::string("labroot"));
     return node;
 }
-#endif
 }
 
 TEST_CASE("buildFirewalldTrustedInterfaceCommands checks firewalld activity before firewall-cmd")

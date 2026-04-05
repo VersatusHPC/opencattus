@@ -110,10 +110,22 @@ function(opencattus_setup_dependencies)
   if(NOT TARGET glibmm)
     # Using pkg_check_modules to link against the host glibmm
     # instead of using conan
-    pkg_check_modules(GLIBMM REQUIRED glibmm-2.4)
+    set(GLIBMM_PKG_NAMES glibmm-2.68 glibmm-2.4)
+    unset(GLIBMM_FOUND)
+    foreach(GLIBMM_PKG_NAME IN LISTS GLIBMM_PKG_NAMES)
+      pkg_check_modules(GLIBMM QUIET ${GLIBMM_PKG_NAME})
+      if(GLIBMM_FOUND)
+        break()
+      endif()
+    endforeach()
+
+    if(NOT GLIBMM_FOUND)
+      message(FATAL_ERROR "Could not find a supported glibmm pkg-config package")
+    endif()
 
     message(STATUS "GLIBMM_LIBRARIES=${GLIBMM_LIBRARIES}")
     message(STATUS "GLIBMM_INCLUDE_DIRS=${GLIBMM_INCLUDE_DIRS}")
+    message(STATUS "GLIBMM_PKG_NAME=${GLIBMM_PKG_NAME}")
     find_package_handle_standard_args(glibmm
       DEFAULT_MSG
       GLIBMM_LIBRARIES
