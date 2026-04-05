@@ -19,7 +19,7 @@ Commands:
   create    Define libvirt networks, create the headnode VM, and define compute VMs.
   install   Copy the binary, ISO, and answerfile to the headnode and run OpenCATTUS.
   boot      Start or restart the compute VMs so they PXE-boot from the headnode.
-  verify    Run guest-side verification for the headnode and the cluster.
+  verify    Run guest-side verification for the headnode, cluster, and MPI smoke test.
   collect   Gather host-side and guest-side logs into the lab state directory.
   destroy   Destroy the lab VMs, undefine the networks, and remove the state directory.
   status    Show the current libvirt state for the lab.
@@ -204,11 +204,18 @@ load_defaults() {
     REMOTE_ANSWERFILE_PATH=${REMOTE_ANSWERFILE_PATH:-${HEADNODE_DATA_DIR}/answerfile.ini}
     REMOTE_CHECK_HEADNODE=${REMOTE_CHECK_HEADNODE:-${HEADNODE_DATA_DIR}/check-headnode.sh}
     REMOTE_CHECK_CLUSTER=${REMOTE_CHECK_CLUSTER:-${HEADNODE_DATA_DIR}/check-cluster.sh}
+    REMOTE_CHECK_MPI=${REMOTE_CHECK_MPI:-${HEADNODE_DATA_DIR}/check-mpi.sh}
     LOCAL_REPO_CONFIG_DIR=${LOCAL_REPO_CONFIG_DIR:-${REPO_ROOT}/repos}
     REMOTE_REPO_CONFIG_STAGING=${REMOTE_REPO_CONFIG_STAGING:-${HEADNODE_DATA_DIR}/repos}
     REMOTE_INSTALL_ROOT=${REMOTE_INSTALL_ROOT:-/opt/opencattus}
     REMOTE_INSTALL_CONF_DIR=${REMOTE_INSTALL_CONF_DIR:-${REMOTE_INSTALL_ROOT}/conf}
     REMOTE_INSTALL_REPO_DIR=${REMOTE_INSTALL_REPO_DIR:-${REMOTE_INSTALL_CONF_DIR}/repos}
+
+    MPI_SMOKE_TEST=${MPI_SMOKE_TEST:-1}
+    MPI_SMOKE_NODES=${MPI_SMOKE_NODES:-${COMPUTE_COUNT}}
+    MPI_SMOKE_TASKS=${MPI_SMOKE_TASKS:-${COMPUTE_COUNT}}
+    MPI_SMOKE_WORKDIR=${MPI_SMOKE_WORKDIR:-/home/${SSH_USER}/opencattus-mpi-smoke}
+    MPI_SMOKE_OUTPUT=${MPI_SMOKE_OUTPUT:-${MPI_SMOKE_WORKDIR}/mpi-hello.out}
 
     VBMC_BIN=${VBMC_BIN:-/usr/local/bin/vbmc}
     VBMCD_BIN=${VBMCD_BIN:-/usr/local/bin/vbmcd}
@@ -550,6 +557,15 @@ check_config() {
         "COMPUTE_VCPUS (${COMPUTE_VCPUS}) must match NODE_SOCKETS * NODE_CORES_PER_SOCKET * NODE_THREADS_PER_CORE (${topology_vcpus})"
     (( NODE_CPUS_PER_NODE == topology_vcpus )) || die \
         "NODE_CPUS_PER_NODE (${NODE_CPUS_PER_NODE}) must match the compute VM CPU topology (${topology_vcpus})"
+
+    [[ "${MPI_SMOKE_TEST}" == "0" || "${MPI_SMOKE_TEST}" == "1" ]] || die \
+        "MPI_SMOKE_TEST must be 0 or 1"
+    (( MPI_SMOKE_NODES > 0 )) || die "MPI_SMOKE_NODES must be greater than zero"
+    (( MPI_SMOKE_TASKS > 0 )) || die "MPI_SMOKE_TASKS must be greater than zero"
+    (( MPI_SMOKE_NODES <= COMPUTE_COUNT )) || die \
+        "MPI_SMOKE_NODES (${MPI_SMOKE_NODES}) cannot exceed COMPUTE_COUNT (${COMPUTE_COUNT})"
+    (( MPI_SMOKE_TASKS >= MPI_SMOKE_NODES )) || die \
+        "MPI_SMOKE_TASKS (${MPI_SMOKE_TASKS}) must be at least MPI_SMOKE_NODES (${MPI_SMOKE_NODES})"
 }
 
 network_exists() {
@@ -558,6 +574,10 @@ network_exists() {
 
 bridge_exists() {
     ip link show dev "$1" >/dev/null 2>&1
+}
+
+network_is_active() {
+    as_root virsh net-info "$1" 2>/dev/null | awk '$1 == "Active:" { print $2 }' | grep -qx yes
 }
 
 domain_exists() {
@@ -574,11 +594,51 @@ destroy_network_if_exists() {
 
 destroy_bridge_if_exists() {
     local bridge=$1
+    local -a members=()
+    local member
 
     if bridge_exists "${bridge}"; then
+        mapfile -t members < <(ip -o link show master "${bridge}" | awk -F': ' '{print $2}' | cut -d'@' -f1 || true)
+
+        for member in "${members[@]}"; do
+            [[ -n "${member}" ]] || continue
+            as_root ip link set dev "${member}" nomaster >/dev/null 2>&1 || true
+            if [[ "${member}" == vnet* || "${member}" == tap* ]]; then
+                as_root ip link delete dev "${member}" >/dev/null 2>&1 || true
+            fi
+        done
+
         as_root ip link set dev "${bridge}" down >/dev/null 2>&1 || true
         as_root ip link delete dev "${bridge}" type bridge >/dev/null 2>&1 || true
     fi
+}
+
+wait_for_bridge_absent() {
+    local bridge=$1
+    local deadline=$((SECONDS + 10))
+
+    while (( SECONDS < deadline )); do
+        if ! bridge_exists "${bridge}"; then
+            return 0
+        fi
+        sleep 1
+    done
+
+    die "Timed out waiting for stale bridge ${bridge} to disappear"
+}
+
+start_network_with_recovery() {
+    local network=$1
+    local bridge=$2
+
+    if ! as_root virsh net-start "${network}"; then
+        destroy_bridge_if_exists "${bridge}"
+        wait_for_bridge_absent "${bridge}"
+        as_root virsh net-start "${network}"
+    fi
+
+    network_is_active "${network}" || die "Failed to activate libvirt network ${network}"
+    as_root virsh net-autostart "${network}"
 }
 
 destroy_domain_if_exists() {
@@ -626,12 +686,10 @@ create_networks() {
     destroy_bridge_if_exists "${MANAGEMENT_BRIDGE}"
 
     as_root virsh net-define "${LAB_DIR}/external-network.xml"
-    as_root virsh net-start "${EXTERNAL_NETWORK_NAME}"
-    as_root virsh net-autostart "${EXTERNAL_NETWORK_NAME}"
+    start_network_with_recovery "${EXTERNAL_NETWORK_NAME}" "${EXTERNAL_BRIDGE}"
 
     as_root virsh net-define "${LAB_DIR}/management-network.xml"
-    as_root virsh net-start "${MANAGEMENT_NETWORK_NAME}"
-    as_root virsh net-autostart "${MANAGEMENT_NETWORK_NAME}"
+    start_network_with_recovery "${MANAGEMENT_NETWORK_NAME}" "${MANAGEMENT_BRIDGE}"
 }
 
 create_headnode_disk() {
@@ -942,9 +1000,10 @@ copy_lab_assets() {
     scp_to_remote "${ANSWERFILE_PATH}" "${REMOTE_ANSWERFILE_PATH}"
     scp_to_remote "${SCRIPT_DIR}/scripts/check-headnode.sh" "${REMOTE_CHECK_HEADNODE}"
     scp_to_remote "${SCRIPT_DIR}/scripts/check-cluster.sh" "${REMOTE_CHECK_CLUSTER}"
+    scp_to_remote "${SCRIPT_DIR}/scripts/check-mpi.sh" "${REMOTE_CHECK_MPI}"
     sync_to_remote "${LOCAL_REPO_CONFIG_DIR}/" "${REMOTE_REPO_CONFIG_STAGING}/"
 
-    ssh_remote "chmod +x '${REMOTE_CHECK_HEADNODE}' '${REMOTE_CHECK_CLUSTER}' &&
+    ssh_remote "chmod +x '${REMOTE_CHECK_HEADNODE}' '${REMOTE_CHECK_CLUSTER}' '${REMOTE_CHECK_MPI}' &&
         sudo mkdir -p '${REMOTE_INSTALL_REPO_DIR}' &&
         sudo rsync -a --delete '${REMOTE_REPO_CONFIG_STAGING}/' '${REMOTE_INSTALL_REPO_DIR}/'"
 }
@@ -1010,6 +1069,20 @@ verify_cluster() {
         "sudo env OPENCATTUS_NODE_LIST='$(join_by_space "${node_names[@]}")' OPENCATTUS_NODE_IP_LIST='$(join_by_space "${node_ips[@]}")' OPENCATTUS_VERIFY_TIMEOUT_SECONDS='${VERIFY_TIMEOUT_SECONDS}' '${REMOTE_CHECK_CLUSTER}'"
 }
 
+verify_mpi() {
+    local node_names=()
+    local index
+
+    [[ "${MPI_SMOKE_TEST}" == "1" ]] || return 0
+
+    for (( index = 1; index <= MPI_SMOKE_NODES; index++ )); do
+        node_names+=("$(node_name "${index}")")
+    done
+
+    ssh_remote \
+        "env OPENCATTUS_NODE_LIST='$(join_by_space "${node_names[@]}")' OPENCATTUS_MPI_SMOKE_NODES='${MPI_SMOKE_NODES}' OPENCATTUS_MPI_SMOKE_TASKS='${MPI_SMOKE_TASKS}' OPENCATTUS_MPI_SMOKE_WORKDIR='${MPI_SMOKE_WORKDIR}' OPENCATTUS_MPI_SMOKE_OUTPUT='${MPI_SMOKE_OUTPUT}' '${REMOTE_CHECK_MPI}'"
+}
+
 collect_logs() {
     local headnode_log_dir="${LOG_DIR}/headnode"
     local index
@@ -1052,6 +1125,7 @@ collect_logs() {
         ssh_remote "sudo systemctl --failed --no-pager" >"${headnode_log_dir}/failed-units.txt" || true
         ssh_remote "sudo sinfo -N -h -o '%N %T'" >"${headnode_log_dir}/sinfo.txt" || true
         ssh_remote "sudo showmount -e localhost" >"${headnode_log_dir}/showmount.txt" || true
+        ssh_remote "test -f '${MPI_SMOKE_OUTPUT}' && cat '${MPI_SMOKE_OUTPUT}'" >"${headnode_log_dir}/mpi-smoke.txt" || true
         ssh_remote "sudo tar -C /var/log -czf - messages secure dnf.log slurm 2>/dev/null" >"${headnode_log_dir}/var-log.tar.gz" || true
     fi
 }
@@ -1113,6 +1187,7 @@ verify_lab() {
     check_host_prereqs
     verify_headnode
     verify_cluster
+    verify_mpi
 }
 
 run_lab() {
