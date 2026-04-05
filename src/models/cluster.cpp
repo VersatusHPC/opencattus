@@ -685,7 +685,8 @@ void Cluster::fillData(const AnswerFile& answerfil)
                 answerfil.service.con_interface.value()));
         }
 
-        if (!answerfil.service.domain_name->empty()) {
+        if (answerfil.service.domain_name.has_value()
+            && !answerfil.service.domain_name->empty()) {
             serviceNetwork->setDomainName(
                 answerfil.service.domain_name.value());
         } else {
@@ -709,7 +710,7 @@ void Cluster::fillData(const AnswerFile& answerfil)
         }
 
         serviceConnection.setInterface(
-            answerfil.application.con_interface.value());
+            answerfil.service.con_interface.value());
         serviceConnection.setAddress(answerfil.service.con_ip_addr.value());
 
         getNetwork(Network::Profile::Service)

@@ -242,6 +242,8 @@ private:
      */
     void loadServiceNetwork();
 
+    void dumpServiceNetwork();
+
     /**
      * @brief Loads the application network configuration.
      *

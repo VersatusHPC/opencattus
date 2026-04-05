@@ -1,0 +1,200 @@
+/*
+ * Copyright 2026 Vinícius Ferrão <vinicius@ferrao.net.br>
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <doctest/doctest.h>
+
+#include <fstream>
+#include <opencattus/connection.h>
+#include <opencattus/models/answerfile.h>
+#include <opencattus/models/cluster.h>
+#include <opencattus/patterns/singleton.h>
+#include <opencattus/services/options.h>
+#include <string>
+
+namespace {
+using opencattus::models::AnswerFile;
+using opencattus::models::Cluster;
+using opencattus::services::Options;
+
+void initializeOptionsSingleton()
+{
+    const char* argv[] = { "OpenCATTUS-tests", "--dry" };
+    auto options = opencattus::services::options::factory(2, argv);
+    opencattus::Singleton<const Options>::init(
+        std::unique_ptr<const Options>(options.release()));
+}
+
+auto tempAnswerfilePath(std::string_view stem) -> std::filesystem::path
+{
+    return std::filesystem::temp_directory_path()
+        / fmt::format("{}.ini", stem);
+}
+
+auto tempIsoPath(std::string_view stem) -> std::filesystem::path
+{
+    return std::filesystem::temp_directory_path()
+        / fmt::format("{}.iso", stem);
+}
+
+auto firstHostInterfaces() -> std::vector<std::string>
+{
+    return Connection::fetchInterfaces();
+}
+
+void writeAnswerfile(const std::filesystem::path& path,
+    const std::filesystem::path& diskImagePath,
+    std::string_view managementInterface, std::string_view serviceInterface,
+    std::optional<std::string_view> applicationInterface = std::nullopt)
+{
+    std::ofstream out(path);
+    REQUIRE(out.is_open());
+
+    out << "[information]\n"
+        << "cluster_name=opencattus\n"
+        << "company_name=opencattus-enterprises\n"
+        << "administrator_email=foo@example.com\n\n"
+        << "[time]\n"
+        << "timezone=UTC\n"
+        << "timeserver=pool.ntp.org\n"
+        << "locale=en_US.utf8\n\n"
+        << "[hostname]\n"
+        << "hostname=opencattus\n"
+        << "domain_name=cluster.example.com\n\n"
+        << "[network_external]\n"
+        << "interface=" << managementInterface << '\n'
+        << "ip_address=192.168.124.10\n"
+        << "subnet_mask=255.255.255.0\n"
+        << "domain_name=cluster.external.example.com\n\n"
+        << "[network_management]\n"
+        << "interface=" << managementInterface << '\n'
+        << "ip_address=192.168.30.254\n"
+        << "subnet_mask=255.255.255.0\n"
+        << "domain_name=cluster.management.example.com\n\n"
+        << "[network_service]\n"
+        << "interface=" << serviceInterface << '\n'
+        << "ip_address=192.168.31.254\n"
+        << "subnet_mask=255.255.255.0\n"
+        << "domain_name=cluster.service.example.com\n";
+
+    if (applicationInterface.has_value()) {
+        out << "\n[network_application]\n"
+            << "interface=" << applicationInterface.value() << '\n'
+            << "ip_address=172.16.0.254\n"
+            << "subnet_mask=255.255.255.0\n"
+            << "domain_name=cluster.application.example.com\n";
+    }
+
+    out << "\n[slurm]\n"
+        << "mariadb_root_password=LabMariadbRoot!23\n"
+        << "slurmdb_password=LabSlurmDb!23\n"
+        << "storage_password=LabStorage!23\n"
+        << "partition_name=batch\n\n"
+        << "[system]\n"
+        << "disk_image=" << diskImagePath.string() << '\n'
+        << "distro=rocky\n"
+        << "version=9.7\n"
+        << "provisioner=confluent\n\n"
+        << "[node]\n"
+        << "prefix=n\n"
+        << "padding=2\n"
+        << "node_ip=192.168.30.1\n"
+        << "node_root_password=labroot\n"
+        << "sockets=1\n"
+        << "cpus_per_node=2\n"
+        << "cores_per_socket=2\n"
+        << "threads_per_core=1\n"
+        << "real_memory=4096\n"
+        << "bmc_username=admin\n"
+        << "bmc_password=admin\n"
+        << "bmc_serialport=0\n"
+        << "bmc_serialspeed=9600\n\n"
+        << "[node.1]\n"
+        << "hostname=n01\n"
+        << "mac_address=52:54:00:00:20:11\n"
+        << "node_ip=192.168.30.1\n"
+        << "bmc_address=192.168.31.101\n";
+}
+}
+
+TEST_SUITE("opencattus::models::answerfile")
+{
+    TEST_CASE("loadOptions loads the service network section")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-service-network");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-service-network");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(
+            answerfilePath, diskImagePath, interfaces.front(), interfaces.front());
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+
+            REQUIRE(answerfile.service.con_interface.has_value());
+            CHECK(answerfile.service.con_interface.value() == interfaces.front());
+            REQUIRE(answerfile.service.con_ip_addr.has_value());
+            CHECK(
+                answerfile.service.con_ip_addr->to_string() == "192.168.31.254");
+            REQUIRE(answerfile.service.domain_name.has_value());
+            CHECK(answerfile.service.domain_name.value()
+                == "cluster.service.example.com");
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while loading answerfile");
+        }
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("fillData keeps the service connection bound to the service interface")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE(interfaces.size() >= 2);
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-cluster-service-connection");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-service-connection");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), interfaces.back());
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            Cluster cluster;
+            cluster.fillData(answerfile);
+
+            const auto serviceInterface
+                = cluster.getHeadnode().getConnection(Network::Profile::Service)
+                      .getInterface();
+            const auto applicationInterface = cluster.getHeadnode()
+                                                  .getConnection(
+                                                      Network::Profile::Application)
+                                                  .getInterface();
+
+            REQUIRE(serviceInterface.has_value());
+            REQUIRE(applicationInterface.has_value());
+            CHECK(serviceInterface.value() == interfaces.front());
+            CHECK(applicationInterface.value() == interfaces.back());
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while filling cluster from answerfile");
+        }
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+}

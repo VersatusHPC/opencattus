@@ -1,6 +1,7 @@
 # EL9 libvirt/KVM recovery harness
 
-This directory contains the recommended end-to-end validation path for OpenCATTUS on Enterprise Linux 9.
+This directory contains the recommended end-to-end validation path for
+OpenCATTUS on Enterprise Linux 9.
 
 Scope:
 
@@ -10,7 +11,8 @@ Scope:
 - Headnode and cluster verification after provisioning.
 - Host-side log collection for failed runs.
 
-The first supported target is `Rocky Linux 9 + xCAT`. That is intentional. The current codebase is not in a state where it makes sense to pretend EL10 or the Confluent path are already covered.
+The currently validated targets are `Rocky Linux 9.7 + xCAT` and
+`Rocky Linux 9.7 + Confluent`. EL10 is still out of scope.
 
 ## Host requirements
 
@@ -19,6 +21,12 @@ Install the libvirt/KVM toolchain on the EL9 host:
 ```bash
 sudo dnf install -y genisoimage ipmitool libvirt-client libvirt-daemon-driver-network libvirt-daemon-kvm qemu-img qemu-kvm rsync virt-install
 sudo systemctl enable --now libvirtd
+```
+
+If you are validating the xCAT path, also install the VirtualBMC tooling used
+by that lab topology:
+
+```bash
 sudo python3 -m pip install virtualbmc pyghmi
 ```
 
@@ -33,7 +41,10 @@ Keep the cloud image and ISO under `/var/lib/libvirt/images` unless you have alr
 
 ## Quick start
 
-1. Copy `testing/libvirt/config/rocky9-xcat.env.example` and set `BASE_IMAGE`, `CLUSTER_ISO`, and either `OPENCATTUS_BINARY` or `OPENCATTUS_SOURCE_DIR`.
+1. Copy either `testing/libvirt/config/rocky9-xcat.env.example` or
+   `testing/libvirt/config/rocky9-confluent.env.example`, then set
+   `BASE_IMAGE`, `CLUSTER_ISO`, and either `OPENCATTUS_BINARY` or
+   `OPENCATTUS_SOURCE_DIR`.
 2. Run the full lab:
 
 ```bash
@@ -48,6 +59,21 @@ The `run` command collects logs even when install or verification fails so the f
 The example config deliberately keeps `NODE_REAL_MEMORY_MB` below the VM's assigned RAM. That is not a typo. xCAT unpacks the stateless image in memory during PXE boot, so the guest needs headroom beyond the SLURM `RealMemory` value you advertise to jobs.
 
 The default config also assumes a single active lab on the host. If you want multiple labs at once, override the external and management subnet settings in addition to changing `LAB_NAME`.
+
+## EL9 support matrix
+
+| Capability | xCAT | Confluent | Notes |
+| --- | --- | --- | --- |
+| Answerfile-driven unattended install | Validated | Validated | Verified in the EL9 libvirt/KVM recovery lab. |
+| Headnode verification | Validated | Validated | `chronyd`, NFS, MariaDB, Munge, SLURM, and provisioner services checked after install. |
+| Single compute node boot and join | Validated | Validated | `sinfo -N` reaches a usable node state. |
+| OpenHPC MPI hello world | Validated | Validated | Run through Slurm on the recovered EL9 cluster. |
+| External + management network topology | Validated | Validated | This is the currently tested lab topology. |
+| Dedicated service network | Not yet validated | Not yet validated | Parser/model handling was repaired, but there is no end-to-end EL9 lab coverage yet. |
+| Dedicated application network / OFED path | Not yet validated | Not yet validated | Still outside the recovered EL9 baseline. |
+| Multi-node cluster | Not yet validated | Not yet validated | Only one compute node is covered so far. |
+| TUI-driven install | Not yet validated | Not yet validated | Recovery work has focused on unattended answerfile installs first. |
+| `--dump-answerfile` round-trip | Not yet validated | Not yet validated | Do not treat dumped answerfiles as a recovery baseline yet. |
 
 ## Self-hosted GitHub Actions
 
@@ -79,15 +105,23 @@ testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env destroy
 - The headnode is normalized before install, including a kernel update and reboot when the cloud image lags the configured repos.
 - The harness can build `opencattus` inside the headnode when you provide `OPENCATTUS_SOURCE_DIR` instead of a prebuilt binary.
 - OpenCATTUS can run unattended from an answerfile on EL9.
-- xCAT, SLURM, NFS, and the core headnode services are active afterwards.
-- VirtualBMC exposes simulated BMC endpoints on the management network and the harness opens the minimal host-side firewalld rule needed for UDP `623`.
-- The harness restarts compute VMs with `virsh` for deterministic PXE reboots during lab runs.
+- xCAT or Confluent, plus SLURM, NFS, and the core headnode services, are
+  active afterwards depending on the selected provisioner.
+- The Confluent path can build a diskless image, deploy a node, and reach a
+  usable SLURM state.
+- The xCAT path can expose simulated BMC endpoints through VirtualBMC, and the
+  harness opens the minimal host-side firewalld rule needed for UDP `623`.
+- The harness restarts compute VMs with `virsh` for deterministic PXE reboots
+  during lab runs.
 - The compute VMs can PXE boot on the management network.
 - The compute nodes become reachable on the management network and appear in `sinfo`.
 - The default compute VM topology now matches the answerfile's SLURM declaration: `2` vCPUs presented as `1` socket, `2` cores, `1` thread.
+- The validated EL9 paths can run an OpenHPC MPI hello-world smoke test.
 
 ## Current limits
 
 - This harness does not claim EL10 readiness.
-- This harness does not validate the Confluent path yet.
+- The currently validated Confluent topology is one compute node on external
+  plus management networks. Service/application network variants still need
+  broader coverage.
 - Nested virtualization CI is out of scope for GitHub Actions; this is intended for a real EL9 KVM host.

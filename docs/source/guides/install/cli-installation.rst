@@ -4,18 +4,44 @@
 Installation Guide for Command Line Interface
 =============================================
 
-To set up OpenCATTUS in your environment, you must first download the project in the head node.
+Use the CLI mode when you already know the target network layout and want an
+unattended install driven by an answerfile.
 
-For the current list of operating systems supported and minimum requirements, read section ":doc:`System Requirements <../../overview/sys_os_requirements>`"
+Before you run the installer:
 
-Read section ":ref:`Assembling an answerfile <assembling-an-answerfile>`" before running.
+1. Read :doc:`System Requirements <../../overview/sys_os_requirements>`.
+2. Prepare the answerfile described in :ref:`assembling-an-answerfile`.
+3. Copy the ISO and the ``opencattus`` binary to the head node.
 
-You can read a full commands list by running on your terminal the command:
+The current validated recovery baseline is EL9, with the Rocky Linux 9.7 +
+xCAT and Rocky Linux 9.7 + Confluent paths tested end-to-end. Treat other
+combinations as unvalidated until they are explicitly covered by the recovery
+lab or release notes.
 
-``./opencattus -h``
+Show the full CLI help with:
 
-To run OpenCATTUS with an answerfile you must use the command:
+.. code-block:: bash
 
-``./opencattus -a /path/to/answerfile.ini``
+   ./opencattus -h
 
+Run an unattended install from an answerfile with:
 
+.. code-block:: bash
+
+   sudo ./opencattus -u -a /path/to/answerfile.ini
+
+Useful options during recovery work:
+
+.. code-block:: bash
+
+   sudo ./opencattus -d -u -a /path/to/answerfile.ini
+   sudo ./opencattus --dump-answerfile /path/to/output.ini
+
+``-d`` performs a dry run and is useful for parser and workflow validation
+without modifying the node.
+
+If you are validating the project itself rather than operating a real cluster,
+prefer the EL9 libvirt/KVM harness documented in
+``testing/libvirt/README.md``. It creates the headnode and compute VMs,
+generates a lab-specific answerfile, runs OpenCATTUS unattended, and verifies
+the resulting cluster state.

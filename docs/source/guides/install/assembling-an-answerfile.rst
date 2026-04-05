@@ -4,12 +4,50 @@
 Assembling an answerfile
 ========================
 
-OpenCATTUS' CLI answerfile (used only in Command Line Interface) is a INI-based file that contains settings definitions and values used during OpenCATTUS execution. In the following example answerfile, you specify various options (some options are obligatory and some optional). These options include the cluster information, time values, networking (external, management and application networks}, desired system iso file and the nodes to be used within the cluster.
+OpenCATTUS uses an INI-based answerfile for unattended CLI installs. The
+current parser is stricter than the older documentation implied, so it is best
+to start from a known template and then adjust it for your environment.
+
+Recommended starting points:
+
+- ``testing/libvirt/templates/rocky9-xcat.answerfile.ini`` for the currently
+  validated EL9 + xCAT path.
+- ``testing/libvirt/templates/rocky9-confluent.answerfile.ini`` for the
+  validated EL9 + Confluent lab path.
+- ``test/sample/answerfile/`` for older examples and broader config shapes.
+
+Required sections
+~~~~~~~~~~~~~~~~~
+
+The current unattended path expects all of these sections:
+
+- ``[information]``
+- ``[time]``
+- ``[hostname]``
+- ``[network_external]``
+- ``[network_management]``
+- ``[slurm]``
+- ``[system]``
+- ``[node]``
+- one or more ``[node.N]`` sections
+
+The ``[system]`` section must include ``provisioner=``.
+
+Optional sections
+~~~~~~~~~~~~~~~~~
+
+These sections are optional and should only be added when you actually need
+them:
+
+- ``[network_service]`` for a dedicated service or BMC network
+- ``[network_application]`` for an application fabric such as InfiniBand
+- ``[ofed]`` to enable non-inbox OFED handling
+- ``[postfix]`` and related subsections for mail relay configuration
 
 Information
 ~~~~~~~~~~~
 
-This section requires information about your cluster and your company.
+This section identifies the cluster and the administrator contact.
 
 .. code-block:: ini
 
@@ -21,7 +59,7 @@ This section requires information about your cluster and your company.
 Time
 ~~~~
 
-This section requires the cluster timezone, timeserver and locale.
+This section defines the cluster timezone, timeserver, and locale.
 
 .. code-block:: ini
 
@@ -33,7 +71,7 @@ This section requires the cluster timezone, timeserver and locale.
 Hostname
 ~~~~~~~~
 
-This section requires your machine hostname and domain name.
+This section defines the headnode hostname and the cluster domain.
 
 .. code-block:: ini
 
@@ -44,99 +82,81 @@ This section requires your machine hostname and domain name.
 Networks
 ~~~~~~~~
 
-This section requires information about the cluster networks.
+At minimum you need external and management networks. Service and application
+networks are optional.
 
 External
 ~~~~~~~~
 
-This network is used by the management node to control the nodes out of band via the SP like BMC, FSP. If the BMCs are configured in shared mode, then this network can be combined with the management network.
+This network is the headnode's outside-facing interface.
 
 .. code-block:: ini
 
-    # OpenCATTUS must have an external network
     [network_external]
     interface=enp1s0
-    #ip_address=172.16.144.0
-    #subnet_mask=255.255.255.0
-    #network_address=172.16.144.1
-    #gateway=192.168.122.1
-    #domain_name=example.com
-    #nameservers=146.164.36.7,146.164.36.15
-    #mac_address=de:ad:be:ff:00:00
+    domain_name=cluster.external.example.com
+    # ip_address, subnet_mask, gateway, nameservers, and mac_address are
+    # optional if they can be discovered from the live host interface.
 
 Management
 ~~~~~~~~~~
 
-This network is used by the management node to install and manage the OS of the nodes. The MN and in-band NIC of the nodes are connected to this network. If you have a large cluster with service nodes, sometimes this network is segregated into separate VLANs for each service node.
+This network installs and manages the compute nodes. It is required.
 
 .. code-block:: ini
 
-    # OpenCATTUS must have an management network
     [network_management]
     interface=enp8s0
     ip_address=172.26.255.254
     subnet_mask=255.255.0.0
-    network_address=172.26.0.0
-    #gateway=172.26.0.1
     domain_name=cluster.example.com
-    #nameservers=172.26.0.1
-    #mac_address=de:ad:be:ff:00:01
+    # gateway, nameservers, and mac_address are optional
 
 Application
 ~~~~~~~~~~~
 
-This network is used by the applications on the compute nodes. Usually an IB network for HPC cluster.
+Use this only when you need a dedicated application fabric.
 
 .. code-block:: ini
 
-    # Use the network_application if using a Infiniband
-    # Must inform all options if enabled
-    #[network_application]
-    #interface=ib0
-    #ip_address=172.26.0.0
-    #subnet_mask=255.255.0.0
-    #network_address=172.26.0.1
-    #gateway=0.0.0.0
-    #domain_name=opencattus.example
-    #nameservers=0.0.0.0,0.0.0.0
-    #mac_address=de:ad:be:ff:00:01
+    [network_application]
+    interface=ib0
+    ip_address=172.26.0.254
+    subnet_mask=255.255.0.0
+    domain_name=cluster.application.example.com
 
 Service
-~~~~~~~~~~~
+~~~~~~~
 
-This network is used for internal services that support cluster operation but are separate from application traffic.
+Use this when your service or BMC traffic is on a dedicated network.
 
 .. code-block:: ini
 
-    # Double-commented options are optional
-    #[network_service]
-    #interface=enp2s0
-    #ip_address=172.26.255.256
-    #subnet_mask=255.255.0.0
-    ##gateway=172.26.0.1
-    #domain_name=cluster.example.com
-    ##nameservers=172.26.0.1
-    ##mac_address=de:ad:be:ff:00:01
+    [network_service]
+    interface=enp2s0
+    ip_address=172.25.0.254
+    subnet_mask=255.255.255.0
+    domain_name=cluster.service.example.com
 
 System
 ~~~~~~
 
-This section requires information about the path to an iso disk image with your desired OS.
+This section defines the installation ISO, distro, version, and provisioner.
 
 .. code-block:: ini
 
     [system]
-    # Full path to the disk image
-    disk_image=/root/OracleLinux-R8-U7-x86_64-dvd.iso
-    # Supported distros: rhel, ol, rocky, almalinux
-    distro=ol
-    version=8.7
-    kernel=5.4.17-2136.302.6.1.el8uek.x86_64
+    disk_image=/root/Rocky-9.7-x86_64-dvd.iso
+    distro=rocky
+    version=9.7
+    provisioner=xcat  # use confluent for the validated EL9 Confluent path
+    # kernel is optional and mainly used for specialized flows
 
 Nodes
 ~~~~~
 
-This section requires information about your nodes. If you need to add more than one MAC address, use a comma to separate.
+``[node]`` contains the generic defaults for all nodes. Each ``[node.N]``
+section provides the per-node data that cannot be derived generically.
 
 .. code-block:: ini
 
@@ -148,13 +168,19 @@ This section requires information about your nodes. If you need to add more than
     sockets=1
     cores_per_socket=1
     threads_per_core=1
+    real_memory=4096
     bmc_username=admin
     bmc_password=admin
     bmc_serialport=0
     bmc_serialspeed=9600
 
-Example of an answerfile
-~~~~~~~~~~~~~~~~~~~~~~~~
+Each concrete node still needs its own section with a hostname or an implied
+name, a MAC address, and a BMC address:
 
-.. literalinclude:: ../../files/answerfile.ini.example
-   :language: ini
+.. code-block:: ini
+
+    [node.1]
+    hostname=n01
+    mac_address=52:54:00:00:20:11
+    node_ip=172.26.0.1
+    bmc_address=172.25.0.101

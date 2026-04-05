@@ -29,7 +29,8 @@ Options:
   -c FILE   Source configuration values from FILE before applying defaults.
   -h        Show this help text.
 
-The harness currently targets EL9 cloud images plus the xCAT provisioner path.
+The harness currently targets EL9 cloud images plus the xCAT and Confluent
+provisioner paths.
 EOF
 }
 
@@ -70,6 +71,23 @@ short_token() {
     # still deriving it from the full lab name to avoid collisions between
     # similarly prefixed labs (for example "...97" vs "...97b").
     printf '%s' "${sanitized}" | sha256sum | cut -c1-8
+}
+
+token_hex_byte() {
+    local start=$1
+    printf '%s' "${BRIDGE_TOKEN:${start}:2}"
+}
+
+default_headnode_ext_mac() {
+    printf '52:54:%s:%s:10:01' \
+        "$(token_hex_byte 0)" \
+        "$(token_hex_byte 2)"
+}
+
+default_headnode_mgmt_mac() {
+    printf '52:54:%s:%s:20:01' \
+        "$(token_hex_byte 0)" \
+        "$(token_hex_byte 2)"
 }
 
 load_defaults() {
@@ -120,8 +138,8 @@ load_defaults() {
     MANAGEMENT_HOST_IP=${MANAGEMENT_HOST_IP:-192.168.30.253}
 
     HEADNODE_NAME=${HEADNODE_NAME:-${LAB_NAME}-headnode}
-    HEADNODE_EXT_MAC=${HEADNODE_EXT_MAC:-52:54:00:70:10:01}
-    HEADNODE_MGMT_MAC=${HEADNODE_MGMT_MAC:-52:54:00:70:20:01}
+    HEADNODE_EXT_MAC=${HEADNODE_EXT_MAC:-$(default_headnode_ext_mac)}
+    HEADNODE_MGMT_MAC=${HEADNODE_MGMT_MAC:-$(default_headnode_mgmt_mac)}
     HEADNODE_MEMORY_MB=${HEADNODE_MEMORY_MB:-16384}
     HEADNODE_VCPUS=${HEADNODE_VCPUS:-4}
     HEADNODE_DISK_GB=${HEADNODE_DISK_GB:-220}
@@ -236,7 +254,10 @@ node_bmc_ip() {
 
 node_mac() {
     local index=$1
-    printf '52:54:00:70:20:%02x' $((0x10 + index))
+    printf '52:54:%s:%s:20:%02x' \
+        "$(token_hex_byte 0)" \
+        "$(token_hex_byte 2)" \
+        $((0x10 + index))
 }
 
 headnode_user_data_path() {
@@ -508,7 +529,8 @@ check_host_prereqs() {
 check_config() {
     local topology_vcpus
 
-    [[ "${PROVISIONER}" == "xcat" ]] || die "Only the xCAT path is supported by this harness today"
+    [[ "${PROVISIONER}" == "xcat" || "${PROVISIONER}" == "confluent" ]] || die \
+        "Unsupported provisioner ${PROVISIONER}; expected xcat or confluent"
     [[ -n "${BASE_IMAGE}" ]] || die "BASE_IMAGE is required"
     [[ -n "${CLUSTER_ISO}" ]] || die "CLUSTER_ISO is required"
     [[ -f "${BASE_IMAGE}" ]] || die "Base image not found: ${BASE_IMAGE}"
@@ -779,9 +801,12 @@ render_answerfile() {
     local workfile
     local index
 
-    template="${SCRIPT_DIR}/templates/rocky9-xcat.answerfile.ini"
+    template="${SCRIPT_DIR}/templates/rocky9-${PROVISIONER}.answerfile.ini"
     workfile="${ANSWERFILE_PATH}"
     mkdir -p "${LAB_DIR}"
+
+    [[ -f "${template}" ]] || die \
+        "Answerfile template not found for provisioner ${PROVISIONER}: ${template}"
 
     sed \
         -e "s|__CLUSTER_NAME__|${CLUSTER_NAME}|g" \
@@ -801,6 +826,7 @@ render_answerfile() {
         -e "s|__REMOTE_ISO_PATH__|${REMOTE_ISO_PATH}|g" \
         -e "s|__DISTRO_ID__|${DISTRO_ID}|g" \
         -e "s|__DISTRO_VERSION__|${DISTRO_VERSION}|g" \
+        -e "s|__PROVISIONER__|${PROVISIONER}|g" \
         -e "s|__PARTITION_NAME__|${PARTITION_NAME}|g" \
         -e "s|__MARIADB_ROOT_PASSWORD__|${MARIADB_ROOT_PASSWORD}|g" \
         -e "s|__SLURMDB_PASSWORD__|${SLURMDB_PASSWORD}|g" \

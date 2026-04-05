@@ -44,6 +44,7 @@ void AnswerFile::loadOptions()
 
     loadExternalNetwork();
     loadManagementNetwork();
+    loadServiceNetwork();
     loadApplicationNetwork();
     loadInformation();
     loadTimeSettings();
@@ -102,6 +103,11 @@ void AnswerFile::dumpExternalNetwork()
 void AnswerFile::dumpManagementNetwork()
 {
     dumpNetwork(management, "network_management");
+}
+
+void AnswerFile::dumpServiceNetwork()
+{
+    dumpNetwork(service, "network_service");
 }
 
 void AnswerFile::dumpApplicationNetwork()
@@ -236,6 +242,7 @@ void AnswerFile::dumpOptions()
 
     dumpExternalNetwork();
     dumpManagementNetwork();
+    dumpServiceNetwork();
     dumpApplicationNetwork();
     dumpInformation();
     dumpTimeSettings();

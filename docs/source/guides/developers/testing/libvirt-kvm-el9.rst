@@ -15,7 +15,7 @@ The harness currently targets:
 
 * EL9 cloud image as the headnode base image.
 * EL9 DVD ISO for compute image creation.
-* The xCAT provisioner path.
+* The xCAT and Confluent provisioner paths.
 * One or more network-booted compute nodes.
 
 This is intentionally narrower than the full product matrix. The current recovery priority is to make one EL9 path trustworthy before attempting EL10 porting work.
@@ -26,8 +26,8 @@ Files
 The harness lives in ``testing/libvirt``:
 
 * ``testing/libvirt/opencattus-el9-lab.sh`` orchestrates the full libvirt lifecycle.
-* ``testing/libvirt/config/rocky9-xcat.env.example`` is the reference configuration.
-* ``testing/libvirt/templates/rocky9-xcat.answerfile.ini`` is the answerfile template.
+* ``testing/libvirt/config/rocky9-xcat.env.example`` and ``testing/libvirt/config/rocky9-confluent.env.example`` are the reference configurations.
+* ``testing/libvirt/templates/rocky9-xcat.answerfile.ini`` and ``testing/libvirt/templates/rocky9-confluent.answerfile.ini`` are the answerfile templates.
 * ``testing/libvirt/scripts/check-headnode.sh`` validates the headnode services after installation.
 * ``testing/libvirt/scripts/check-cluster.sh`` waits for the compute nodes to join the cluster.
 
@@ -42,6 +42,11 @@ Required host packages:
 
    sudo dnf install -y genisoimage ipmitool libvirt-client libvirt-daemon-driver-network libvirt-daemon-kvm qemu-img qemu-kvm rsync virt-install
    sudo systemctl enable --now libvirtd
+
+If you are validating the xCAT path, also install:
+
+.. code-block:: bash
+
    sudo python3 -m pip install virtualbmc pyghmi
 
 You also need:
@@ -62,7 +67,11 @@ Quick start
       cp testing/libvirt/config/rocky9-xcat.env.example /root/opencattus-rocky9.env
       vim /root/opencattus-rocky9.env
 
-   Set ``BASE_IMAGE``, ``CLUSTER_ISO``, and either ``OPENCATTUS_BINARY`` or ``OPENCATTUS_SOURCE_DIR``.
+   Or use ``testing/libvirt/config/rocky9-confluent.env.example`` if you are
+   validating the Confluent path.
+
+   Set ``BASE_IMAGE``, ``CLUSTER_ISO``, and either ``OPENCATTUS_BINARY`` or
+   ``OPENCATTUS_SOURCE_DIR``.
 
 2. Run the full unattended lab:
 
@@ -110,7 +119,7 @@ Headnode verification:
 * The headnode updates and reboots into the latest available kernel before OpenCATTUS runs, so the installer does not fail the built-in kernel preflight.
 * The harness can build ``opencattus`` inside the headnode when you provide ``OPENCATTUS_SOURCE_DIR`` instead of a prebuilt binary.
 * ``chronyd``, ``mariadb``, ``munge``, ``nfs-server``, ``rpcbind``, ``slurmctld``, and ``slurmdbd`` are active.
-* xCAT services are active.
+* xCAT or Confluent services are active, depending on the selected provisioner.
 * ``showmount -e localhost``, ``sacct``, and ``sinfo -N`` succeed.
 
 Cluster verification:
@@ -118,9 +127,10 @@ Cluster verification:
 * Each compute VM is reachable on the management network.
 * Each compute node appears in ``sinfo -N``.
 * Each node reaches a usable SLURM state instead of remaining down.
-* VirtualBMC exposes each compute node as an IPMI endpoint on the management subnet, and the harness opens the minimal host-side firewalld rule needed for UDP ``623`` from the headnode.
+* On the xCAT path, VirtualBMC exposes each compute node as an IPMI endpoint on the management subnet, and the harness opens the minimal host-side firewalld rule needed for UDP ``623`` from the headnode.
 * The harness restarts compute VMs with ``virsh`` so PXE reboots stay deterministic during unattended runs.
 * The default compute VM topology is kept consistent with the answerfile values that feed ``slurm.conf``: ``2`` vCPUs exposed as ``1`` socket, ``2`` cores, ``1`` thread.
+* The validated EL9 xCAT and Confluent runs can execute an OpenHPC MPI hello-world smoke test.
 
 Why this replaces the older Vagrant path
 ----------------------------------------
@@ -138,5 +148,5 @@ Known limits
 ------------
 
 * EL10 is out of scope for this harness. Get the EL9 path stable first.
-* Confluent is not yet covered here.
+* The currently validated Confluent topology is one compute node on external plus management networks.
 * Nested-virtualization CI is not realistic in the current GitHub workflow; this lab is meant for a real EL9 KVM host.
