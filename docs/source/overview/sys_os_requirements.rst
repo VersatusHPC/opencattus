@@ -57,7 +57,8 @@ Current Recovery Status
        spanning them.
    * - EL10
      - Not validated
-     - Porting work starts only after the EL9 baseline is stable.
+     - The first EL10 bootstrap target is Rocky Linux 10 + Confluent. xCAT is
+       intentionally out of scope until upstream EL10 support exists.
 
 Current EL9 Support Matrix
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

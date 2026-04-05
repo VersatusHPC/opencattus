@@ -101,6 +101,24 @@
       }
     },
     {
+      "name": "el10-gcc-release",
+      "displayName": "EL10 GCC Release",
+      "description": "Target Enterprise Linux 10 with the system gcc compiler, release build type",
+      "inherits": "conf-linux-gcc-common",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "el10-gcc-debug",
+      "displayName": "EL10 GCC Debug",
+      "description": "Target Enterprise Linux 10 with the system gcc compiler, debug build type",
+      "inherits": "conf-linux-gcc-common",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
       "name": "conf-linux-clang-common",
       "description": "Target Linux OS with the clang compiler",
       "hidden": true,
@@ -149,6 +167,16 @@
       "name": "rhel9-gcc-toolset-14-debug-build",
       "displayName": "gcc toolset 14 build debug",
       "configurePreset": "rhel9-gcc-toolset-14-debug"
+    },
+    {
+      "name": "el10-gcc-release-build",
+      "displayName": "EL10 gcc build release",
+      "configurePreset": "el10-gcc-release"
+    },
+    {
+      "name": "el10-gcc-debug-build",
+      "displayName": "EL10 gcc build debug",
+      "configurePreset": "el10-gcc-debug"
     },
     {
       "name": "rhel9-clang-release-build",
@@ -201,6 +229,20 @@
       "description": "Enable output and stop on failure",
       "inherits": "test-common",
       "configurePreset": "rhel9-gcc-toolset-14-debug"
+    },
+    {
+      "name": "test-el10-gcc-release",
+      "displayName": "Strict",
+      "description": "Enable output and stop on failure",
+      "inherits": "test-common",
+      "configurePreset": "el10-gcc-release"
+    },
+    {
+      "name": "test-el10-gcc-debug",
+      "displayName": "Strict",
+      "description": "Enable output and stop on failure",
+      "inherits": "test-common",
+      "configurePreset": "el10-gcc-debug"
     },
     {
       "name": "test-rhel9-clang-release",

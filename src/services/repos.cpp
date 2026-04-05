@@ -860,6 +860,22 @@ public:
     }
 };
 
+std::string defaultOpenHPCVersionFor(const OS& osinfo)
+{
+    switch (osinfo.getMajorVersion()) {
+        case 8:
+            return "2";
+        case 9:
+            return "3";
+        case 10:
+            return "4";
+        default:
+            throw std::runtime_error(fmt::format(
+                "Unsupported OpenHPC repository baseline for EL{}",
+                osinfo.getMajorVersion()));
+    }
+}
+
 TEST_CASE("RepoConfigParser")
 {
 #ifdef BUILD_TESTING
@@ -875,7 +891,36 @@ TEST_CASE("RepoConfigParser")
     CHECK(epel.upstream.repo
         == "https://download.fedoraproject.org/pub/epel/9/Everything/"
            "x86_64/");
+
+    const auto el10Conf = RepoConfigParser::parseTest("repos/repos.conf",
+        RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.4.0",
+            .ohpcVersion = "4",
+            .osversion = "10.0",
+            .releasever = "10",
+            .xcatVersion = "latest",
+            .zabbixVersion = "7.0",
+            .ofedVersion = "latest-2.9-LTS",
+        });
+    const auto ohpcOpt = el10Conf.find("OpenHPC");
+    REQUIRE(ohpcOpt.has_value() == true);
+    CHECK(ohpcOpt->upstream.repo
+        == "https://repos.openhpc.community/OpenHPC/4/EL_10/");
 #endif
+}
+
+TEST_CASE("defaultOpenHPCVersionFor maps the supported EL releases")
+{
+    CHECK(defaultOpenHPCVersionFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el8, 10))
+        == "2");
+    CHECK(defaultOpenHPCVersionFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el9, 7))
+        == "3");
+    CHECK(defaultOpenHPCVersionFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el10, 0))
+        == "4");
 }
 
 // Installs and enable/disable RPM repositories
@@ -1250,6 +1295,35 @@ TEST_CASE("RepoNames")
             });
     }
 
+    // Rocky EL10
+    {
+        const auto osinfo = OS(models::OS::Distro::Rocky, OS::Platform::el10, 0);
+        const auto el10Vars = RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.4.0",
+            .ohpcVersion = "4",
+            .osversion = "10.0",
+            .releasever = "10",
+            .xcatVersion = "latest",
+            .zabbixVersion = "7.0",
+        };
+        const auto conffiles = RepoConfigParser::load<ShouldUseVaultService>(
+            "repos/", osinfo, el10Vars);
+        const auto enabledRepos = enabler.resolveReposNames(osinfo, conffiles);
+        CHECK(enabledRepos
+            == std::vector<std::string> {
+                "appstream",
+                "baseos",
+                "crb",
+                "epel",
+                "OpenHPC",
+                "OpenHPC-Updates",
+                "rpmfusion",
+                "elrepo",
+                "beegfs",
+            });
+    }
+
     // Rocky
     {
         const auto osinfo = OS(models::OS::Distro::Rocky, OS::Platform::el9, 5);
@@ -1548,7 +1622,7 @@ void RepoManager::initializeDefaultRepositories()
     const auto vars = RepoConfigVars {
         .arch = opencattus::utils::enums::toString(osinfo.getArch()),
         .beegfsVersion = opts->beegfsVersion,
-        .ohpcVersion = osinfo.getMajorVersion() == 8 ? "2" : "3",
+        .ohpcVersion = defaultOpenHPCVersionFor(osinfo),
         .osversion = osinfo.getVersion(),
         .releasever = fmt::format("{}", osinfo.getMajorVersion()),
         .xcatVersion = opts->xcatVersion,

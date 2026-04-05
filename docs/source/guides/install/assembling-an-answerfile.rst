@@ -14,6 +14,8 @@ Recommended starting points:
   validated EL9 + xCAT path.
 - ``testing/libvirt/templates/rocky9-confluent.answerfile.ini`` for the
   validated EL9 + Confluent lab path.
+- ``testing/libvirt/templates/rocky10-confluent.answerfile.ini`` for the
+  Rocky Linux 10 + Confluent bootstrap path.
 - ``test/sample/answerfile/`` for older examples and broader config shapes.
 
 Required sections
@@ -32,6 +34,10 @@ The current unattended path expects all of these sections:
 - one or more ``[node.N]`` sections
 
 The ``[system]`` section must include ``provisioner=``.
+
+For the current EL10 bootstrap path, use ``distro=rocky`` with the exact
+EL10 minor version you are targeting and set ``provisioner=confluent``. The
+product now rejects ``provisioner=xcat`` on EL10 explicitly.
 
 Optional sections
 ~~~~~~~~~~~~~~~~~

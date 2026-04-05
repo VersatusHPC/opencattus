@@ -29,8 +29,9 @@ Options:
   -c FILE   Source configuration values from FILE before applying defaults.
   -h        Show this help text.
 
-The harness currently targets EL9 cloud images plus the xCAT and Confluent
-provisioner paths.
+The harness currently serves two purposes:
+  * the validated EL9 recovery paths for xCAT and Confluent
+  * the Rocky Linux 10 + Confluent bootstrap path for EL10 porting work
 EOF
 }
 
@@ -90,13 +91,56 @@ default_headnode_mgmt_mac() {
         "$(token_hex_byte 2)"
 }
 
+default_remote_build_preset() {
+    if (( DISTRO_MAJOR >= 10 )); then
+        printf 'el10-gcc-release'
+    else
+        printf 'rhel9-gcc-toolset-14-release'
+    fi
+}
+
+default_remote_build_preset_build() {
+    if (( DISTRO_MAJOR >= 10 )); then
+        printf 'el10-gcc-release-build'
+    else
+        printf 'rhel9-gcc-toolset-14-release-build'
+    fi
+}
+
+headnode_glibmm_package() {
+    if (( DISTRO_MAJOR >= 10 )); then
+        printf 'glibmm-2.68'
+    else
+        printf 'glibmm24'
+    fi
+}
+
+virt_install_osinfo_name() {
+    if (( DISTRO_MAJOR >= 10 )); then
+        printf 'generic'
+    else
+        printf 'rocky9'
+    fi
+}
+
+vbmc_required() {
+    [[ "${PROVISIONER}" == "xcat" ]]
+}
+
 load_defaults() {
     LAB_NAME=${LAB_NAME:-opencattus-el9}
-    PROVISIONER=${PROVISIONER:-xcat}
 
     DISTRO_ID=${DISTRO_ID:-rocky}
     DISTRO_VERSION=${DISTRO_VERSION:-9.6}
     DISTRO_MAJOR=${DISTRO_MAJOR:-${DISTRO_VERSION%%.*}}
+
+    if [[ -z "${PROVISIONER+x}" ]]; then
+        if (( DISTRO_MAJOR >= 10 )); then
+            PROVISIONER=confluent
+        else
+            PROVISIONER=xcat
+        fi
+    fi
 
     BASE_IMAGE=${BASE_IMAGE:-}
     CLUSTER_ISO=${CLUSTER_ISO:-}
@@ -190,8 +234,8 @@ load_defaults() {
 
     ANSWERFILE_PATH=${ANSWERFILE_PATH:-${LAB_DIR}/answerfile.ini}
     REMOTE_BINARY_PATH=${REMOTE_BINARY_PATH:-${HEADNODE_DATA_DIR}/opencattus}
-    REMOTE_BUILD_PRESET=${REMOTE_BUILD_PRESET:-rhel9-gcc-toolset-14-release}
-    REMOTE_BUILD_PRESET_BUILD=${REMOTE_BUILD_PRESET_BUILD:-rhel9-gcc-toolset-14-release-build}
+    REMOTE_BUILD_PRESET=${REMOTE_BUILD_PRESET:-$(default_remote_build_preset)}
+    REMOTE_BUILD_PRESET_BUILD=${REMOTE_BUILD_PRESET_BUILD:-$(default_remote_build_preset_build)}
     if [[ -z "${REMOTE_BUILD_JOBS:-}" ]]; then
         if (( HEADNODE_VCPUS > 4 )); then
             REMOTE_BUILD_JOBS=4
@@ -405,6 +449,8 @@ configure_vbmc() {
     local index
     local domain
 
+    vbmc_required || return 0
+
     ensure_bridge_ip "${MANAGEMENT_HOST_IP}" "${MANAGEMENT_PREFIX}"
     allow_vbmc_firewall
     start_vbmcd
@@ -428,6 +474,7 @@ destroy_vbmc() {
     local index
     local domain
 
+    vbmc_required || return 0
     [[ -f "${VBMC_CONFIG_FILE}" ]] || return 0
 
     for (( index = 1; index <= COMPUTE_COUNT; index++ )); do
@@ -455,7 +502,7 @@ manage_etc_hosts: true
 package_update: true
 packages:
   - dnf-plugins-core
-  - glibmm24
+  - $(headnode_glibmm_package)
   - newt
   - qemu-guest-agent
   - rsync
@@ -527,8 +574,10 @@ check_host_prereqs() {
         need_cmd "${cmd}"
     done
 
-    need_exec "${VBMC_BIN}"
-    need_exec "${VBMCD_BIN}"
+    if vbmc_required; then
+        need_exec "${VBMC_BIN}"
+        need_exec "${VBMCD_BIN}"
+    fi
 
     as_root virsh uri >/dev/null
 }
@@ -538,6 +587,12 @@ check_config() {
 
     [[ "${PROVISIONER}" == "xcat" || "${PROVISIONER}" == "confluent" ]] || die \
         "Unsupported provisioner ${PROVISIONER}; expected xcat or confluent"
+    if (( DISTRO_MAJOR >= 10 )); then
+        [[ "${DISTRO_ID}" == "rocky" ]] || die \
+            "The current EL10 bootstrap lab only targets Rocky Linux 10"
+        [[ "${PROVISIONER}" == "confluent" ]] || die \
+            "EL10 bootstrap is Confluent-only; xCAT remains out of scope for this lab"
+    fi
     [[ -n "${BASE_IMAGE}" ]] || die "BASE_IMAGE is required"
     [[ -n "${CLUSTER_ISO}" ]] || die "CLUSTER_ISO is required"
     [[ -f "${BASE_IMAGE}" ]] || die "Base image not found: ${BASE_IMAGE}"
@@ -566,6 +621,17 @@ check_config() {
         "MPI_SMOKE_NODES (${MPI_SMOKE_NODES}) cannot exceed COMPUTE_COUNT (${COMPUTE_COUNT})"
     (( MPI_SMOKE_TASKS >= MPI_SMOKE_NODES )) || die \
         "MPI_SMOKE_TASKS (${MPI_SMOKE_TASKS}) must be at least MPI_SMOKE_NODES (${MPI_SMOKE_NODES})"
+}
+
+answerfile_template_path() {
+    local distro_template="${SCRIPT_DIR}/templates/${DISTRO_ID}${DISTRO_MAJOR}-${PROVISIONER}.answerfile.ini"
+
+    if [[ -f "${distro_template}" ]]; then
+        printf '%s' "${distro_template}"
+        return 0
+    fi
+
+    printf '%s' "${SCRIPT_DIR}/templates/rocky9-${PROVISIONER}.answerfile.ini"
 }
 
 network_exists() {
@@ -716,7 +782,7 @@ create_headnode() {
         --vcpus "${HEADNODE_VCPUS}" \
         --cpu host-passthrough \
         --machine q35 \
-        --osinfo detect=on,require=off,name=rocky9 \
+        --osinfo "detect=on,require=off,name=$(virt_install_osinfo_name)" \
         --import \
         --disk "path=${HEADNODE_DISK},format=qcow2,bus=virtio" \
         --disk "path=${HEADNODE_SEED_ISO},device=cdrom" \
@@ -833,7 +899,7 @@ prepare_headnode() {
         sudo dnf clean all >/dev/null 2>&1 || true;
         sudo rm -rf /var/cache/dnf/*;
         sudo dnf makecache --refresh &&
-        sudo dnf install --refresh --setopt=keepcache=0 -y dnf-plugins-core glibmm24 newt qemu-guest-agent rsync tar wget"
+        sudo dnf install --refresh --setopt=keepcache=0 -y dnf-plugins-core $(headnode_glibmm_package) newt qemu-guest-agent rsync tar wget"
     ssh_remote "sudo systemctl enable --now qemu-guest-agent" >/dev/null 2>&1 || true
 
     running_kernel=$(remote_running_kernel)
@@ -859,7 +925,7 @@ render_answerfile() {
     local workfile
     local index
 
-    template="${SCRIPT_DIR}/templates/rocky9-${PROVISIONER}.answerfile.ini"
+    template=$(answerfile_template_path)
     workfile="${ANSWERFILE_PATH}"
     mkdir -p "${LAB_DIR}"
 
@@ -953,18 +1019,32 @@ sync_repo_to_remote() {
 
 build_binary_in_guest() {
     local build_log="${LOG_DIR}/build.log"
+    local compiler_setup_cmd
     local remote_cmd
 
     sync_repo_to_remote
 
-    remote_cmd=$(cat <<EOF
-export PATH="\$HOME/.local/bin:\$PATH" &&
-cd '${REMOTE_SOURCE_DIR}' &&
+    if (( DISTRO_MAJOR >= 10 )); then
+        compiler_setup_cmd=$(cat <<'EOF'
+chmod +x setupDevEnvironment.sh &&
+./setupDevEnvironment.sh &&
+EOF
+)
+    else
+        compiler_setup_cmd=$(cat <<'EOF'
 chmod +x setupDevEnvironment.sh rhel-gcc-toolset-14.sh &&
 ./setupDevEnvironment.sh &&
 set +u &&
 source ./rhel-gcc-toolset-14.sh &&
 set -u &&
+EOF
+)
+    fi
+
+    remote_cmd=$(cat <<EOF
+export PATH="\$HOME/.local/bin:\$PATH" &&
+cd '${REMOTE_SOURCE_DIR}' &&
+${compiler_setup_cmd}
 conan profile detect --force &&
 cmake --preset '${REMOTE_BUILD_PRESET}' &&
 cmake --build --preset '${REMOTE_BUILD_PRESET_BUILD}' --target opencattus -j '${REMOTE_BUILD_JOBS}' &&

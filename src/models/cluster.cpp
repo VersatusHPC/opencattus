@@ -441,6 +441,16 @@ auto& getNetworkField(AnswerFile& answerfile, Network::Profile profile)
     }
 }
 
+void validateProvisionerSupport(const OS& os, Cluster::Provisioner provisioner)
+{
+    if (os.getMajorVersion() >= 10
+        && provisioner == Cluster::Provisioner::xCAT) {
+        throw std::runtime_error(fmt::format(
+            "xCAT is not supported on EL{}; use confluent instead",
+            os.getMajorVersion()));
+    }
+}
+
 void Cluster::dumpData(const std::filesystem::path& answerfilePath)
 {
     AnswerFile answerfil(answerfilePath, false);
@@ -807,13 +817,20 @@ void Cluster::fillData(const AnswerFile& answerfil)
     setUpdateSystem(true);
 
     const auto provisioner = utils::string::lower(answerfil.system.provisioner);
-    if (provisioner == "xcat") {
-        setProvisioner(Provisioner::xCAT);
-    } else if (provisioner == "confluent") {
-        setProvisioner(Provisioner::Confluent);
-    } else {
+    const auto selectedProvisioner = [&]() {
+        if (provisioner == "xcat") {
+            return Provisioner::xCAT;
+        }
+
+        if (provisioner == "confluent") {
+            return Provisioner::Confluent;
+        }
+
         opencattus::functions::abort("Invalid provisioner {}", provisioner);
-    }
+    }();
+
+    validateProvisionerSupport(nodeOS, selectedProvisioner);
+    setProvisioner(selectedProvisioner);
 
     // FIXME: This should come from /etc/os-release
     m_headnode.setOS(nodeOS);

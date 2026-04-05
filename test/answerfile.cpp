@@ -49,7 +49,9 @@ void writeAnswerfile(const std::filesystem::path& path,
     std::optional<std::string_view> applicationInterface = std::nullopt,
     bool includeServiceNetwork = true,
     std::string_view provisioner = "confluent",
-    std::optional<std::string_view> serviceNameservers = std::nullopt)
+    std::optional<std::string_view> serviceNameservers = std::nullopt,
+    std::string_view distro = "rocky",
+    std::string_view version = "9.7")
 {
     std::ofstream out(path);
     REQUIRE(out.is_open());
@@ -103,8 +105,8 @@ void writeAnswerfile(const std::filesystem::path& path,
         << "partition_name=batch\n\n"
         << "[system]\n"
         << "disk_image=" << diskImagePath.string() << '\n'
-        << "distro=rocky\n"
-        << "version=9.7\n"
+        << "distro=" << distro << '\n'
+        << "version=" << version << '\n'
         << "provisioner=" << provisioner << "\n\n"
         << "[node]\n"
         << "prefix=n\n"
@@ -331,6 +333,74 @@ TEST_SUITE("opencattus::models::answerfile")
             std::filesystem::remove(answerfilePath);
         }
 
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("fillData rejects xcat on EL10")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-cluster-provisioner-xcat-el10");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-provisioner-xcat-el10");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "xcat", std::nullopt,
+            "rocky", "10.0");
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            Cluster cluster;
+
+            CHECK_THROWS_WITH(cluster.fillData(answerfile),
+                doctest::Contains("xCAT is not supported on EL10"));
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while validating EL10 xCAT rejection");
+        }
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("fillData accepts confluent on Rocky Linux 10")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath = tempAnswerfilePath(
+            "opencattus-cluster-provisioner-confluent-el10");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-provisioner-confluent-el10");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "confluent",
+            std::nullopt, "rocky", "10.0");
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            Cluster cluster;
+            cluster.fillData(answerfile);
+
+            CHECK(cluster.getProvisioner()
+                == Cluster::Provisioner::Confluent);
+            CHECK(cluster.getHeadnode().getOS().getDistro()
+                == opencattus::models::OS::Distro::Rocky);
+            CHECK(cluster.getHeadnode().getOS().getMajorVersion() == 10);
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while filling cluster for Rocky Linux 10 Confluent");
+        }
+
+        std::filesystem::remove(answerfilePath);
         std::filesystem::remove(diskImagePath);
     }
 

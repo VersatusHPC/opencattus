@@ -1,7 +1,7 @@
-# EL9 libvirt/KVM recovery harness
+# Enterprise Linux libvirt/KVM lab harness
 
 This directory contains the recommended end-to-end validation path for
-OpenCATTUS on Enterprise Linux 9.
+OpenCATTUS on Enterprise Linux.
 
 Scope:
 
@@ -12,11 +12,13 @@ Scope:
 - Host-side log collection for failed runs.
 
 The currently validated targets are `Rocky Linux 9.7 + xCAT` and
-`Rocky Linux 9.7 + Confluent`. EL10 is still out of scope.
+`Rocky Linux 9.7 + Confluent`. The current EL10 bootstrap target is
+`Rocky Linux 10 + Confluent`, but that path is still in progress and should not
+be treated as validated yet.
 
 ## Host requirements
 
-Install the libvirt/KVM toolchain on the EL9 host:
+Install the libvirt/KVM toolchain on the host:
 
 ```bash
 sudo dnf install -y genisoimage ipmitool libvirt-client libvirt-daemon-driver-network libvirt-daemon-kvm qemu-img qemu-kvm rsync virt-install
@@ -41,10 +43,12 @@ Keep the cloud image and ISO under `/var/lib/libvirt/images` unless you have alr
 
 ## Quick start
 
-1. Copy either `testing/libvirt/config/rocky9-xcat.env.example` or
-   `testing/libvirt/config/rocky9-confluent.env.example`, then set
-   `BASE_IMAGE`, `CLUSTER_ISO`, and either `OPENCATTUS_BINARY` or
-   `OPENCATTUS_SOURCE_DIR`.
+1. Copy one of these environment templates, then set `BASE_IMAGE`,
+   `CLUSTER_ISO`, and either `OPENCATTUS_BINARY` or `OPENCATTUS_SOURCE_DIR`:
+
+   - `testing/libvirt/config/rocky9-xcat.env.example`
+   - `testing/libvirt/config/rocky9-confluent.env.example`
+   - `testing/libvirt/config/rocky10-confluent.env.example`
 2. If you want the validated two-node MPI path, also set:
 
 ```bash
@@ -57,6 +61,12 @@ MPI_SMOKE_TASKS=2
 
 ```bash
 testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env run
+```
+
+For the EL10 bootstrap path, use:
+
+```bash
+testing/libvirt/opencattus-el10-lab.sh -c /path/to/rocky10-confluent.env run
 ```
 
 4. Inspect logs under `/var/tmp/opencattus-lab/<lab-name>/logs`.
@@ -82,6 +92,15 @@ The default config also assumes a single active lab on the host. If you want mul
 | Multi-node cluster | Validated | Validated | Two compute nodes boot, join the cluster, and complete the MPI smoke test. |
 | TUI-driven install | Not yet validated | Not yet validated | Recovery work has focused on unattended answerfile installs first. |
 | `--dump-answerfile` round-trip | Not yet validated | Not yet validated | Do not treat dumped answerfiles as a recovery baseline yet. |
+
+## EL10 bootstrap target
+
+- First target distro: `Rocky Linux 10`
+- First provisioner: `Confluent`
+- Install model: fresh install only
+- Current success criterion: headnode install, one deployed compute node,
+  healthy `sinfo`, and an MPI smoke test
+- xCAT remains intentionally out of scope for this bootstrap path
 
 ## Self-hosted GitHub Actions
 
@@ -128,8 +147,11 @@ testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env destroy
 
 ## Current limits
 
-- This harness does not claim EL10 readiness.
+- This harness does not yet claim EL10 readiness.
+- The `testing/libvirt/opencattus-el10-lab.sh` wrapper exists so the EL10
+  branch can reuse the same host-side lab orchestration while the product port
+  is still underway.
 - The currently validated multi-node EL9 topology is two compute nodes on
   external plus management networks. Service/application network variants
   still need broader coverage.
-- Nested virtualization CI is out of scope for GitHub Actions; this is intended for a real EL9 KVM host.
+- Nested virtualization CI is out of scope for GitHub Actions; this is intended for a real Enterprise Linux KVM host.
