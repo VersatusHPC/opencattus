@@ -16,8 +16,8 @@ Recommended starting points:
   validated EL9 + Confluent lab path.
 - ``testing/libvirt/templates/rocky10-confluent.answerfile.ini`` for the
   Rocky Linux 10 + Confluent bootstrap path. The current validated Rocky 10
-  baseline is one deployed compute node and a two-rank MPI smoke test on that
-  node.
+  baseline covers both the one-node smoke and the two-node MPI layout in the
+  libvirt/KVM lab.
 - ``test/sample/answerfile/`` for older examples and broader config shapes.
 
 Required sections

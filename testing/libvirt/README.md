@@ -12,10 +12,9 @@ Scope:
 - Host-side log collection for failed runs.
 
 The currently validated targets are `Rocky Linux 9.7 + xCAT`,
-`Rocky Linux 9.7 + Confluent`, and the initial `Rocky Linux 10 + Confluent`
-bootstrap baseline. The EL10 baseline is intentionally smaller than the EL9
-recovery scope: one deployed compute node, healthy `sinfo`, and a two-rank MPI
-smoke test on that node.
+`Rocky Linux 9.7 + Confluent`, and `Rocky Linux 10.1 + Confluent`.
+The current EL10 baseline is still narrower than the full EL9 recovery scope,
+but it now includes both the one-node smoke and a validated two-node MPI run.
 
 ## Host requirements
 
@@ -51,7 +50,7 @@ Keep the cloud image and ISO under `/var/lib/libvirt/images`, ideally in a dedic
    - `testing/libvirt/config/rocky9-confluent.env.example`
    - `testing/libvirt/config/rocky10-confluent.env.example`
 2. The Rocky 10 wrapper defaults to a one-node, two-rank MPI smoke. If you
-   want the validated two-node MPI path on EL9, also set:
+   want the validated two-node MPI path on EL9 or EL10, also set:
 
 ```bash
 COMPUTE_COUNT=2
@@ -100,8 +99,9 @@ The default config also assumes a single active lab on the host. If you want mul
 - First target distro: `Rocky Linux 10`
 - First provisioner: `Confluent`
 - Install model: fresh install only
-- Current validated baseline: headnode install, one deployed compute node,
-  healthy `sinfo`, and a two-rank MPI smoke test on that node
+- Current validated baseline: headnode install, one or two deployed compute
+  nodes, healthy `sinfo`, and MPI smoke tests for both the one-node and
+  two-node layouts
 - xCAT remains intentionally out of scope for this bootstrap path
 
 ## EL10 support matrix
@@ -113,7 +113,7 @@ The default config also assumes a single active lab on the host. If you want mul
 | Single compute node boot and join | Validated | `sinfo -N` reaches `idle` on the deployed node. |
 | OpenHPC MPI hello world | Validated | Two MPI ranks run on the deployed Rocky 10 compute node through Slurm. |
 | External + management network topology | Validated | This is the current EL10 lab topology. |
-| Multi-node cluster | Not yet validated | The EL10 branch has not yet repeated the EL9 two-node recovery milestone. |
+| Multi-node cluster | Validated | Two compute nodes boot, join the cluster, and complete the MPI smoke test across nodes. |
 | Dedicated service network | Not yet validated | Still outside the initial EL10 baseline. |
 | Dedicated application network / OFED path | Not yet validated | Still outside the initial EL10 baseline. |
 | TUI-driven install | Not yet validated | EL10 work has focused on unattended answerfile installs first. |
@@ -164,8 +164,8 @@ testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env destroy
 
 ## Current limits
 
-- This harness now claims an initial Rocky 10 + Confluent baseline, not broad
-  EL10 readiness.
+- This harness now claims an initial Rocky 10.1 + Confluent baseline, not
+  broad EL10 readiness.
 - The `testing/libvirt/opencattus-el10-lab.sh` wrapper exists so the EL10
   branch can reuse the same host-side lab orchestration while the product port
   is still underway.

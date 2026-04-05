@@ -58,8 +58,9 @@ Current Recovery Status
    * - Rocky Linux 10.1 + Confluent
      - Initially validated
      - First EL10 bootstrap baseline. Verified unattended in the EL10
-       libvirt/KVM lab with one deployed compute node, healthy ``sinfo``, and
-       a two-rank OpenHPC MPI hello-world run on that node.
+       libvirt/KVM lab with one and two deployed compute-node layouts, healthy
+       ``sinfo``, and OpenHPC MPI hello-world runs in both the one-node and
+       two-node cases.
 
 EL10 Bootstrap Matrix
 ~~~~~~~~~~~~~~~~~~~~~
@@ -83,15 +84,15 @@ EL10 Bootstrap Matrix
      - ``sinfo -N`` reaches ``idle`` on the deployed node.
    * - OpenHPC MPI hello world
      - Validated
-     - Two MPI ranks run on the deployed Rocky Linux 10.1 compute node
-       through Slurm.
+     - Two MPI ranks run through Slurm in both the one-node layout and the
+       two-node layout.
    * - External + management network topology
      - Validated
      - This is the current EL10 lab topology.
    * - Multi-node cluster
-     - Not yet validated
-     - The EL10 branch has not yet repeated the EL9 two-node recovery
-       milestone.
+     - Validated
+     - Two compute nodes boot, join the cluster, and complete the MPI smoke
+       test across nodes.
    * - Dedicated service network
      - Not yet validated
      - Still outside the initial EL10 baseline.
