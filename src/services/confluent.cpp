@@ -76,6 +76,30 @@ nodeattrib {nodeName} bmcuser={bmcuser} bmcpass={bmcpass} crypted.rootpassword={
     return script;
 }
 
+std::string buildSpackModuleTree(const models::OS& os)
+{
+    std::string distro;
+    switch (os.getDistro()) {
+        case models::OS::Distro::RHEL:
+            distro = "rhel";
+            break;
+        case models::OS::Distro::AlmaLinux:
+            distro = "almalinux";
+            break;
+        case models::OS::Distro::Rocky:
+            distro = "rocky";
+            break;
+        case models::OS::Distro::OL:
+            distro = "ol";
+            break;
+        default:
+            std::unreachable();
+    }
+
+    return fmt::format("linux-{}{}-{}", distro, os.getMajorVersion(),
+        opencattus::utils::enums::toString(os.getArch()));
+}
+
 void addNode(const models::Node& node, std::string_view image)
 {
     services::runner::shell::cmd(buildNodeDefinitionScript(node, image));
@@ -226,7 +250,7 @@ if [ $EUID -eq 0 ] ; then
     source /opt/spack/share/spack/spack-completion.bash
 else
     # Normal users get access to prebuilt Spack modules
-    export MODULEPATH=/opt/spack/share/spack/lmod/linux-{distro}{releasever}-{arch}/Core:$MODULEPATH
+    export MODULEPATH=/opt/spack/share/spack/lmod/{spackModuleTree}/Core:$MODULEPATH
 fi
 
 export LMOD_IGNORE_CACHE=1
@@ -244,6 +268,7 @@ rm -rf /tmp/scratchdir || :
 
         fmt::arg("domain", cluster()->getDomainName()),
         fmt::arg("releasever", os().getMajorVersion()),
+        fmt::arg("spackModuleTree", buildSpackModuleTree(os())),
         fmt::arg("hnIp",
             cluster()
                 ->getHeadnode()
@@ -335,4 +360,16 @@ TEST_CASE("buildNodeDefinitionScript emits a MAC assignment only when the manage
         CHECK_FALSE(script.contains("net.hwaddr="));
         CHECK(script.contains("bmcpass=pa'ss"));
     }
+}
+
+TEST_CASE("buildSpackModuleTree matches Spack's Enterprise Linux module naming")
+{
+    using opencattus::models::OS;
+
+    CHECK(buildSpackModuleTree(
+              OS(OS::Distro::Rocky, OS::Platform::el9, 7))
+        == "linux-rocky9-x86_64");
+    CHECK(buildSpackModuleTree(
+              OS(OS::Distro::Rocky, OS::Platform::el10, 0))
+        == "linux-rocky10-x86_64");
 }
