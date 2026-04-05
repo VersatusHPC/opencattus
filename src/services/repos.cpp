@@ -166,6 +166,33 @@ namespace {
         return ostr;
     };
 
+    auto parseRepoBoolean(const KeyFile& file, const std::string& group,
+        const std::string& key, const bool defaultValue) -> bool
+    {
+        const auto value = file.getStringOpt(group, key);
+        if (!value.has_value()) {
+            return defaultValue;
+        }
+
+        auto normalized = value.value();
+        boost::algorithm::trim(normalized);
+        boost::algorithm::to_lower(normalized);
+
+        if (normalized == "1" || normalized == "true"
+            || normalized == "yes") {
+            return true;
+        }
+
+        if (normalized == "0" || normalized == "false"
+            || normalized == "no") {
+            return false;
+        }
+
+        throw std::runtime_error(fmt::format(
+            "Keyfile Error, invalid boolean [{}].{}={}", group, key,
+            normalized));
+    }
+
     template <typename T> std::string toString(const T& input)
     {
         std::ostringstream strm;
@@ -193,9 +220,10 @@ public:
 
             auto metalink = file.getStringOpt(repogroup, "metalink");
             auto baseurl = file.getStringOpt(repogroup, "baseurl");
-            auto enabled = file.getBoolean(repogroup, "enabled");
-            auto gpgcheck = file.getBoolean(repogroup, "gpgcheck");
             auto gpgkey = file.getStringOpt(repogroup, "gpgkey");
+            auto enabled = parseRepoBoolean(file, repogroup, "enabled", true);
+            auto gpgcheck = parseRepoBoolean(
+                file, repogroup, "gpgcheck", gpgkey.has_value());
 
             RPMRepository repo;
             repo.group(repogroup);
@@ -910,6 +938,30 @@ TEST_CASE("RepoConfigParser")
 #endif
 }
 
+TEST_CASE("RPMRepositoryParser tolerates repo files that omit gpgcheck")
+{
+#ifdef BUILD_TESTING
+    const auto repoPath = std::filesystem::temp_directory_path()
+        / "opencattus-lenovo-hpc-test.repo";
+    opencattus::services::files::write(repoPath,
+        "[lenovo-hpc]\n"
+        "name=Lenovo packages for HPC\n"
+        "baseurl=https://hpc.lenovo.com/yum/latest/el10/x86_64/\n"
+        "enabled=1\n"
+        "gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-LENOVO\n");
+
+    std::map<std::string, std::shared_ptr<RPMRepository>> repos;
+    REQUIRE_NOTHROW(RPMRepositoryParser::parse(repoPath, repos));
+    REQUIRE(repos.contains("lenovo-hpc"));
+    CHECK(repos.at("lenovo-hpc")->enabled() == true);
+    CHECK(repos.at("lenovo-hpc")->gpgcheck() == true);
+    CHECK(repos.at("lenovo-hpc")->gpgkey().value()
+        == "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-LENOVO");
+
+    std::filesystem::remove(repoPath);
+#endif
+}
+
 TEST_CASE("defaultOpenHPCVersionFor maps the supported EL releases")
 {
     CHECK(defaultOpenHPCVersionFor(
@@ -1226,7 +1278,9 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
         addToOutput("OpenHPC-Updates");
         addToOutput("rpmfusion");
         addToOutput("elrepo");
-        addToOutput("beegfs");
+        if (osinfo.getMajorVersion() < 10) {
+            addToOutput("beegfs");
+        }
         return output;
     }
 
@@ -1320,7 +1374,6 @@ TEST_CASE("RepoNames")
                 "OpenHPC-Updates",
                 "rpmfusion",
                 "elrepo",
-                "beegfs",
             });
     }
 

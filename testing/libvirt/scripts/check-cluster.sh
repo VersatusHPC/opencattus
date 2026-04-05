@@ -29,12 +29,24 @@ while (( SECONDS < deadline )); do
     for index in "${!nodes[@]}"; do
         node=${nodes[$index]}
         node_ip=${node_ips[$index]}
+        node_ping=true
 
         if ! ping -c 1 -W 1 "${node_ip}" >/dev/null 2>&1; then
+            node_ping=false
             all_ping=false
         fi
 
         state=$(awk -v wanted="${node}" '$1 == wanted { print $2 }' <<<"${sinfo_output}" | tail -n1)
+
+        if [[ "${node_ping}" == true && -n "${state}" ]]; then
+            case "${state^^}" in
+                DOWN|DOWN*|DRAIN|DRAIN*|FAIL|FAIL*|INVAL|INVAL*)
+                    scontrol update nodename="${node}" state=resume >/dev/null 2>&1 || true
+                    state=$(sinfo -N -h -o '%N %T' 2>/dev/null | awk -v wanted="${node}" '$1 == wanted { print $2 }' | tail -n1)
+                    ;;
+            esac
+        fi
+
         case "${state^^}" in
             ALLOCATED|COMPLETING|IDLE|MIXED|POWERING_UP)
                 ;;

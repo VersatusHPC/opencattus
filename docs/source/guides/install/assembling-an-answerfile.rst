@@ -15,7 +15,9 @@ Recommended starting points:
 - ``testing/libvirt/templates/rocky9-confluent.answerfile.ini`` for the
   validated EL9 + Confluent lab path.
 - ``testing/libvirt/templates/rocky10-confluent.answerfile.ini`` for the
-  Rocky Linux 10 + Confluent bootstrap path.
+  Rocky Linux 10 + Confluent bootstrap path. The current validated Rocky 10
+  baseline is one deployed compute node and a two-rank MPI smoke test on that
+  node.
 - ``test/sample/answerfile/`` for older examples and broader config shapes.
 
 Required sections

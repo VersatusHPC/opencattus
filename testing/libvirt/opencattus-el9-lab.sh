@@ -788,6 +788,7 @@ create_headnode() {
         --disk "path=${HEADNODE_SEED_ISO},device=cdrom" \
         --network "network=${EXTERNAL_NETWORK_NAME},model=virtio,mac=${HEADNODE_EXT_MAC}" \
         --network "network=${MANAGEMENT_NETWORK_NAME},model=virtio,mac=${HEADNODE_MGMT_MAC}" \
+        --channel "unix,target_type=virtio,name=org.qemu.guest_agent.0" \
         --graphics vnc,listen=127.0.0.1 \
         --console pty,target_type=serial \
         --noautoconsole
@@ -900,7 +901,11 @@ prepare_headnode() {
         sudo rm -rf /var/cache/dnf/*;
         sudo dnf makecache --refresh &&
         sudo dnf install --refresh --setopt=keepcache=0 -y dnf-plugins-core $(headnode_glibmm_package) newt qemu-guest-agent rsync tar wget"
-    ssh_remote "sudo systemctl enable --now qemu-guest-agent" >/dev/null 2>&1 || true
+    ssh_remote "if [[ -e /dev/virtio-ports/org.qemu.guest_agent.0 ]]; then
+            sudo systemctl enable --now qemu-guest-agent
+        else
+            sudo systemctl enable qemu-guest-agent >/dev/null 2>&1 || true
+        fi" >/dev/null 2>&1 || true
 
     running_kernel=$(remote_running_kernel)
     available_kernel=$(remote_available_kernel)
@@ -1071,13 +1076,6 @@ EOF
 prepare_opencattus_binary() {
     ssh_remote "mkdir -p '${HEADNODE_DATA_DIR}'"
 
-    if ssh_remote "test -x '${REMOTE_BINARY_PATH}'" >/dev/null 2>&1; then
-        if probe_remote_binary; then
-            log "Reusing existing OpenCATTUS binary on the headnode"
-            return
-        fi
-    fi
-
     if [[ -n "${OPENCATTUS_BINARY}" ]]; then
         scp_to_remote "${OPENCATTUS_BINARY}" "${REMOTE_BINARY_PATH}"
         ssh_remote "chmod +x '${REMOTE_BINARY_PATH}'"
@@ -1086,6 +1084,13 @@ prepare_opencattus_binary() {
         fi
 
         log "Provided binary is not usable on the ${DISTRO_ID}${DISTRO_MAJOR} headnode; falling back to in-guest build"
+    fi
+
+    if ssh_remote "test -x '${REMOTE_BINARY_PATH}'" >/dev/null 2>&1; then
+        if probe_remote_binary; then
+            log "Reusing existing OpenCATTUS binary on the headnode"
+            return
+        fi
     fi
 
     build_binary_in_guest

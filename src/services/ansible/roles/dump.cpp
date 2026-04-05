@@ -13,6 +13,15 @@
 
 namespace {
 using namespace opencattus::utils::singleton;
+
+std::string buildFirewallDumpCommand()
+{
+    return "if command -v firewall-cmd >/dev/null 2>&1 && "
+           "systemctl is-active --quiet firewalld.service; then "
+           "firewall-cmd --list-all-zones; else "
+           "echo 'firewalld inactive or firewall-cmd not installed'; fi";
+}
+
 void dumpPreInstallState()
 {
     using namespace opencattus::services::runner;
@@ -44,9 +53,7 @@ void dumpPreInstallState()
     shell::cmd("systemctl --no-pager list-units --plain --type=service --all");
 
     LOG_INFO("Firewall configuration");
-    shell::cmd("if command -v firewall-cmd >/dev/null 2>&1; then "
-               "firewall-cmd --list-all-zones; else "
-               "echo 'firewall-cmd not installed'; fi");
+    shell::cmd(buildFirewallDumpCommand());
 
     LOG_INFO("End of cluster state dump");
     opts->maybeStopAfterStep("dump-cluster-state");
@@ -57,4 +64,13 @@ namespace opencattus::services::ansible::roles::dump {
 
 void run(const Role& role) { dumpPreInstallState(); }
 
+}
+
+TEST_CASE("buildFirewallDumpCommand only queries firewalld when the service is active")
+{
+    const auto command = buildFirewallDumpCommand();
+
+    CHECK(command.contains("command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld.service"));
+    CHECK(command.contains("firewall-cmd --list-all-zones"));
+    CHECK(command.contains("firewalld inactive or firewall-cmd not installed"));
 }

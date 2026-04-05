@@ -55,10 +55,55 @@ Current Recovery Status
      - Verified unattended in the EL9 libvirt/KVM lab with two compute nodes,
        external plus management networks, and an OpenHPC MPI hello-world run
        spanning them.
-   * - EL10
-     - Not validated
-     - The first EL10 bootstrap target is Rocky Linux 10 + Confluent. xCAT is
-       intentionally out of scope until upstream EL10 support exists.
+   * - Rocky Linux 10.1 + Confluent
+     - Initially validated
+     - First EL10 bootstrap baseline. Verified unattended in the EL10
+       libvirt/KVM lab with one deployed compute node, healthy ``sinfo``, and
+       a two-rank OpenHPC MPI hello-world run on that node.
+
+EL10 Bootstrap Matrix
+~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :widths: 30 18 52
+   :header-rows: 1
+
+   * - Capability
+     - Confluent
+     - Notes
+   * - Answerfile-driven unattended install
+     - Validated
+     - Verified from a clean Rocky Linux 10.1 libvirt/KVM run.
+   * - Headnode verification
+     - Validated
+     - ``chronyd``, NFS, MariaDB, Munge, SLURM, and Confluent services
+       checked after install.
+   * - Single compute node boot and join
+     - Validated
+     - ``sinfo -N`` reaches ``idle`` on the deployed node.
+   * - OpenHPC MPI hello world
+     - Validated
+     - Two MPI ranks run on the deployed Rocky Linux 10.1 compute node
+       through Slurm.
+   * - External + management network topology
+     - Validated
+     - This is the current EL10 lab topology.
+   * - Multi-node cluster
+     - Not yet validated
+     - The EL10 branch has not yet repeated the EL9 two-node recovery
+       milestone.
+   * - Dedicated service network
+     - Not yet validated
+     - Still outside the initial EL10 baseline.
+   * - Dedicated application network / OFED path
+     - Not yet validated
+     - Still outside the initial EL10 baseline.
+   * - TUI-driven install
+     - Not yet validated
+     - EL10 work has focused on unattended answerfile installs first.
+   * - ``--dump-answerfile`` round-trip
+     - Not yet validated
+     - Do not treat dumped answerfiles as an EL10 recovery baseline yet.
 
 Current EL9 Support Matrix
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -100,6 +100,13 @@ std::string buildSpackModuleTree(const models::OS& os)
         opencattus::utils::enums::toString(os.getArch()));
 }
 
+std::string buildUserSpackModulePathExport(const models::OS& os)
+{
+    return fmt::format(
+        "export MODULEPATH=/opt/spack/share/spack/lmod/{}/Core${{MODULEPATH:+:$MODULEPATH}}",
+        buildSpackModuleTree(os));
+}
+
 void addNode(const models::Node& node, std::string_view image)
 {
     services::runner::shell::cmd(buildNodeDefinitionScript(node, image));
@@ -250,7 +257,7 @@ if [ $EUID -eq 0 ] ; then
     source /opt/spack/share/spack/spack-completion.bash
 else
     # Normal users get access to prebuilt Spack modules
-    export MODULEPATH=/opt/spack/share/spack/lmod/{spackModuleTree}/Core:$MODULEPATH
+    {spackModulePathExport}
 fi
 
 export LMOD_IGNORE_CACHE=1
@@ -268,7 +275,7 @@ rm -rf /tmp/scratchdir || :
 
         fmt::arg("domain", cluster()->getDomainName()),
         fmt::arg("releasever", os().getMajorVersion()),
-        fmt::arg("spackModuleTree", buildSpackModuleTree(os())),
+        fmt::arg("spackModulePathExport", buildUserSpackModulePathExport(os())),
         fmt::arg("hnIp",
             cluster()
                 ->getHeadnode()
@@ -370,4 +377,13 @@ TEST_CASE("buildSpackModuleTree matches Spack's Enterprise Linux module naming")
     CHECK(buildSpackModuleTree(
               OS(OS::Distro::Rocky, OS::Platform::el10, 0))
         == "linux-rocky10-x86_64");
+}
+
+TEST_CASE("buildUserSpackModulePathExport tolerates an unset MODULEPATH")
+{
+    using opencattus::models::OS;
+
+    CHECK(buildUserSpackModulePathExport(
+              OS(OS::Distro::Rocky, OS::Platform::el10, 0))
+        == "export MODULEPATH=/opt/spack/share/spack/lmod/linux-rocky10-x86_64/Core${MODULEPATH:+:$MODULEPATH}");
 }
