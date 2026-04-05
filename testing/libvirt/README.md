@@ -60,6 +60,21 @@ The example config deliberately keeps `NODE_REAL_MEMORY_MB` below the VM's assig
 
 The default config also assumes a single active lab on the host. If you want multiple labs at once, override the external and management subnet settings in addition to changing `LAB_NAME`.
 
+## EL9 support matrix
+
+| Capability | xCAT | Confluent | Notes |
+| --- | --- | --- | --- |
+| Answerfile-driven unattended install | Validated | Validated | Verified in the EL9 libvirt/KVM recovery lab. |
+| Headnode verification | Validated | Validated | `chronyd`, NFS, MariaDB, Munge, SLURM, and provisioner services checked after install. |
+| Single compute node boot and join | Validated | Validated | `sinfo -N` reaches a usable node state. |
+| OpenHPC MPI hello world | Validated | Validated | Run through Slurm on the recovered EL9 cluster. |
+| External + management network topology | Validated | Validated | This is the currently tested lab topology. |
+| Dedicated service network | Not yet validated | Not yet validated | Parser/model handling was repaired, but there is no end-to-end EL9 lab coverage yet. |
+| Dedicated application network / OFED path | Not yet validated | Not yet validated | Still outside the recovered EL9 baseline. |
+| Multi-node cluster | Not yet validated | Not yet validated | Only one compute node is covered so far. |
+| TUI-driven install | Not yet validated | Not yet validated | Recovery work has focused on unattended answerfile installs first. |
+| `--dump-answerfile` round-trip | Not yet validated | Not yet validated | Do not treat dumped answerfiles as a recovery baseline yet. |
+
 ## Self-hosted GitHub Actions
 
 This repo's CI is intended to run on your own GitHub Actions runner, not on GitHub-hosted machines.
