@@ -121,6 +121,55 @@ std::string buildUserSpackModulePathExport(const models::OS& os)
         buildSpackModuleTree(os));
 }
 
+std::string buildNodeImageRepoFiles(const models::OS& os)
+{
+    switch (os.getDistro()) {
+        case models::OS::Distro::Rocky:
+            return "{epel,OpenHPC,rocky}.repo";
+        case models::OS::Distro::AlmaLinux:
+            return "{epel,OpenHPC,almalinux}.repo";
+        case models::OS::Distro::RHEL:
+            return "{epel,OpenHPC,rhel}.repo";
+        case models::OS::Distro::OL:
+            return "{epel,OpenHPC,oracle}.repo";
+        default:
+            std::unreachable();
+    }
+}
+
+std::string buildNodeImagePackages(const models::OS& os)
+{
+    switch (os.getPlatform()) {
+        case models::OS::Platform::el8:
+            return "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs "
+                   "lua-filesystem lua-posix";
+        case models::OS::Platform::el9:
+            return "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs";
+        case models::OS::Platform::el10:
+            return "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs";
+        default:
+            std::unreachable();
+    }
+}
+
+std::string buildNodeImageInstallCommand(const models::OS& os)
+{
+    switch (os.getPlatform()) {
+        case models::OS::Platform::el8:
+            return "dnf install -y --nogpg --enablerepo=powertools "
+                   "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs "
+                   "lua-filesystem lua-posix";
+        case models::OS::Platform::el9:
+            return "dnf install -y --nogpg "
+                   "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs";
+        case models::OS::Platform::el10:
+            return "dnf install -y --nogpg "
+                   "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs";
+        default:
+            std::unreachable();
+    }
+}
+
 void addNode(const models::Node& node, std::string_view image)
 {
     services::runner::shell::cmd(buildNodeDefinitionScript(node, image));
@@ -238,10 +287,10 @@ EOF
 \install -vD -m 0400 -o munge -g munge /etc/munge/munge.key       $scratchdir/etc/munge/munge.key
 \install -vD -m 0644 -o root  -g root  /etc/slurm/slurm.conf      $scratchdir/etc/slurm/slurm.conf
 # Install the GPG keys & repos
-\cp -va /etc/yum.repos.d/{{epel,OpenHPC}}.repo $scratchdir/etc/yum.repos.d/
+\cp -va /etc/yum.repos.d/{nodeImageRepoFiles} $scratchdir/etc/yum.repos.d/
 imgutil exec $scratchdir <<EOF
 set -xeu -o pipefail
-dnf install -y --nogpg ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs
+{nodeImageInstallCommand}
 sed -e '/^account required pam_slurm.so/d' -i /etc/pam.d/sshd
 echo 'account required pam_slurm.so' >> /etc/pam.d/sshd
 echo SLURMD_OPTIONS=\"--conf-server {hnIp}\" > /etc/sysconfig/slurmd
@@ -290,6 +339,8 @@ rm -rf /tmp/scratchdir || :
         fmt::arg("domain", cluster()->getDomainName()),
         fmt::arg("releasever", os().getMajorVersion()),
         fmt::arg("spackModulePathExport", buildUserSpackModulePathExport(os())),
+        fmt::arg("nodeImageInstallCommand", buildNodeImageInstallCommand(os())),
+        fmt::arg("nodeImageRepoFiles", buildNodeImageRepoFiles(os())),
         fmt::arg("hnIp",
             cluster()
                 ->getHeadnode()
@@ -408,6 +459,9 @@ TEST_CASE("buildSpackModuleTree matches Spack's Enterprise Linux module naming")
     using opencattus::models::OS;
 
     CHECK(buildSpackModuleTree(
+              OS(OS::Distro::Rocky, OS::Platform::el8, 10))
+        == "linux-rocky8-x86_64");
+    CHECK(buildSpackModuleTree(
               OS(OS::Distro::Rocky, OS::Platform::el9, 7))
         == "linux-rocky9-x86_64");
     CHECK(buildSpackModuleTree(
@@ -420,6 +474,69 @@ TEST_CASE("buildUserSpackModulePathExport tolerates an unset MODULEPATH")
     using opencattus::models::OS;
 
     CHECK(buildUserSpackModulePathExport(
+              OS(OS::Distro::Rocky, OS::Platform::el8, 10))
+        == "export MODULEPATH=/opt/spack/share/spack/lmod/linux-rocky8-x86_64/Core${MODULEPATH:+:$MODULEPATH}");
+    CHECK(buildUserSpackModulePathExport(
               OS(OS::Distro::Rocky, OS::Platform::el10, 0))
         == "export MODULEPATH=/opt/spack/share/spack/lmod/linux-rocky10-x86_64/Core${MODULEPATH:+:$MODULEPATH}");
+}
+
+TEST_CASE("buildNodeImageRepoFiles keeps distro repo filenames explicit")
+{
+    using opencattus::models::OS;
+
+    CHECK(buildNodeImageRepoFiles(
+              OS(OS::Distro::Rocky, OS::Platform::el8, 10))
+        == "{epel,OpenHPC,rocky}.repo");
+    CHECK(buildNodeImageRepoFiles(
+              OS(OS::Distro::AlmaLinux, OS::Platform::el8, 10))
+        == "{epel,OpenHPC,almalinux}.repo");
+    CHECK(buildNodeImageRepoFiles(
+              OS(OS::Distro::RHEL, OS::Platform::el9, 7))
+        == "{epel,OpenHPC,rhel}.repo");
+    CHECK(buildNodeImageRepoFiles(
+              OS(OS::Distro::OL, OS::Platform::el9, 5))
+        == "{epel,OpenHPC,oracle}.repo");
+}
+
+TEST_CASE("buildNodeImagePackages keeps EL8 and newer node images explicit")
+{
+    using opencattus::models::OS;
+
+    const auto el8Packages
+        = buildNodeImagePackages(OS(OS::Distro::Rocky, OS::Platform::el8, 10));
+    CHECK(el8Packages
+        == "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs "
+           "lua-filesystem lua-posix");
+
+    const auto el9Packages
+        = buildNodeImagePackages(OS(OS::Distro::Rocky, OS::Platform::el9, 7));
+    CHECK(el9Packages
+        == "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs");
+
+    const auto el10Packages
+        = buildNodeImagePackages(OS(OS::Distro::Rocky, OS::Platform::el10, 1));
+    CHECK(el10Packages
+        == "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs");
+}
+
+TEST_CASE("buildNodeImageInstallCommand keeps EL8, EL9, and EL10 explicit")
+{
+    using opencattus::models::OS;
+
+    CHECK(buildNodeImageInstallCommand(
+              OS(OS::Distro::Rocky, OS::Platform::el8, 10))
+        == "dnf install -y --nogpg --enablerepo=powertools "
+           "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs "
+           "lua-filesystem lua-posix");
+
+    CHECK(buildNodeImageInstallCommand(
+              OS(OS::Distro::Rocky, OS::Platform::el9, 7))
+        == "dnf install -y --nogpg "
+           "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs");
+
+    CHECK(buildNodeImageInstallCommand(
+              OS(OS::Distro::Rocky, OS::Platform::el10, 1))
+        == "dnf install -y --nogpg "
+           "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs");
 }

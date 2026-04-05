@@ -29,7 +29,8 @@ Options:
   -c FILE   Source configuration values from FILE before applying defaults.
   -h        Show this help text.
 
-The harness currently serves two purposes:
+The harness currently serves three purposes:
+  * the EL8 Confluent validation path
   * the validated EL9 recovery paths for xCAT and Confluent
   * the Rocky Linux 10 + Confluent bootstrap path for EL10 porting work
 EOF
@@ -97,6 +98,10 @@ default_headnode_service_mac() {
         "$(token_hex_byte 2)"
 }
 
+is_distro_major_el8() {
+    [[ "${DISTRO_MAJOR}" == "8" ]]
+}
+
 is_distro_major_el9() {
     [[ "${DISTRO_MAJOR}" == "9" ]]
 }
@@ -107,10 +112,10 @@ is_distro_major_el10() {
 
 require_supported_distro_major() {
     case "${DISTRO_MAJOR}" in
-        9|10)
+        8|9|10)
             ;;
         *)
-            die "Unsupported DISTRO_MAJOR ${DISTRO_MAJOR}; the shared lab supports explicit EL9 and EL10 paths only"
+            die "Unsupported DISTRO_MAJOR ${DISTRO_MAJOR}; the shared lab supports explicit EL8, EL9, and EL10 paths only"
             ;;
     esac
 }
@@ -118,6 +123,8 @@ require_supported_distro_major() {
 default_remote_build_preset() {
     if is_distro_major_el10; then
         printf 'el10-gcc-release'
+    elif is_distro_major_el8; then
+        printf 'rhel8-gcc-toolset-14-release'
     elif is_distro_major_el9; then
         printf 'rhel9-gcc-toolset-14-release'
     else
@@ -128,6 +135,8 @@ default_remote_build_preset() {
 default_remote_build_preset_build() {
     if is_distro_major_el10; then
         printf 'el10-gcc-release-build'
+    elif is_distro_major_el8; then
+        printf 'rhel8-gcc-toolset-14-release-build'
     elif is_distro_major_el9; then
         printf 'rhel9-gcc-toolset-14-release-build'
     else
@@ -138,6 +147,8 @@ default_remote_build_preset_build() {
 headnode_glibmm_package() {
     if is_distro_major_el10; then
         printf 'glibmm2.68'
+    elif is_distro_major_el8; then
+        printf 'glibmm24'
     elif is_distro_major_el9; then
         printf 'glibmm24'
     else
@@ -148,6 +159,8 @@ headnode_glibmm_package() {
 virt_install_osinfo_name() {
     if is_distro_major_el10; then
         printf 'generic'
+    elif is_distro_major_el8; then
+        printf 'rocky8'
     elif is_distro_major_el9; then
         printf 'rocky9'
     else
@@ -168,10 +181,14 @@ load_defaults() {
     require_supported_distro_major
 
     if [[ -z "${PROVISIONER+x}" ]]; then
-        if is_distro_major_el10; then
+        if is_distro_major_el8; then
+            PROVISIONER=confluent
+        elif is_distro_major_el9; then
+            PROVISIONER=xcat
+        elif is_distro_major_el10; then
             PROVISIONER=confluent
         else
-            PROVISIONER=xcat
+            die "Unsupported distro major ${DISTRO_MAJOR}"
         fi
     fi
 
@@ -660,6 +677,12 @@ check_config() {
         "Unsupported provisioner ${PROVISIONER}; expected xcat or confluent"
     [[ "${SERVICE_NETWORK_ENABLED}" == "0" || "${SERVICE_NETWORK_ENABLED}" == "1" ]] || die \
         "SERVICE_NETWORK_ENABLED must be 0 or 1"
+    if is_distro_major_el8; then
+        [[ "${DISTRO_ID}" == "rocky" ]] || die \
+            "The current EL8 validation lab only targets Rocky Linux 8"
+        [[ "${PROVISIONER}" == "confluent" ]] || die \
+            "The current EL8 validation lab is Confluent-only"
+    fi
     if is_distro_major_el10; then
         [[ "${DISTRO_ID}" == "rocky" ]] || die \
             "The current EL10 bootstrap lab only targets Rocky Linux 10"
@@ -722,9 +745,16 @@ check_config() {
 
 answerfile_template_path() {
     local distro_template="${SCRIPT_DIR}/templates/${DISTRO_ID}${DISTRO_MAJOR}-${PROVISIONER}.answerfile.ini"
+    local fallback_template
 
     if [[ -f "${distro_template}" ]]; then
         printf '%s' "${distro_template}"
+        return 0
+    fi
+
+    fallback_template="${SCRIPT_DIR}/templates/rocky${DISTRO_MAJOR}-${PROVISIONER}.answerfile.ini"
+    if [[ -f "${fallback_template}" ]]; then
+        printf '%s' "${fallback_template}"
         return 0
     fi
 
@@ -1025,10 +1055,19 @@ prepare_headnode() {
 
     log "Ensuring headnode runtime prerequisites are installed"
     ssh_remote "sudo systemctl stop packagekit packagekit-offline-update >/dev/null 2>&1 || true;
-        sudo dnf clean all >/dev/null 2>&1 || true;
-        sudo rm -rf /var/cache/dnf/*;
-        sudo dnf makecache --refresh &&
-        sudo dnf install --refresh --setopt=keepcache=0 -y dnf-plugins-core $(headnode_glibmm_package) newt qemu-guest-agent rsync tar wget"
+        for attempt in 1 2 3; do
+            sudo rm -f /var/cache/dnf/metadata_lock.pid;
+            sudo dnf clean all >/dev/null 2>&1 || true;
+            sudo rm -rf /var/cache/dnf/*;
+            if sudo dnf makecache --refresh &&
+                sudo dnf install --refresh --setopt=keepcache=0 -y dnf-plugins-core $(headnode_glibmm_package) newt qemu-guest-agent rsync tar wget; then
+                break;
+            fi;
+            if [[ \$attempt -eq 3 ]]; then
+                exit 1;
+            fi;
+            sleep 5;
+        done"
     ssh_remote "if [[ -e /dev/virtio-ports/org.qemu.guest_agent.0 ]]; then
             sudo systemctl enable --now qemu-guest-agent
         else
