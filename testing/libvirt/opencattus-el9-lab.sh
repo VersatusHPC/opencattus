@@ -1020,7 +1020,15 @@ sync_repo_to_remote() {
 build_binary_in_guest() {
     local build_log="${LOG_DIR}/build.log"
     local compiler_setup_cmd
+    local remote_build_dir="${REMOTE_SOURCE_DIR}/out/build/${REMOTE_BUILD_PRESET}"
+    local remote_build_type="Release"
     local remote_cmd
+
+    case "${REMOTE_BUILD_PRESET}" in
+        *debug)
+            remote_build_type="Debug"
+            ;;
+    esac
 
     sync_repo_to_remote
 
@@ -1046,8 +1054,11 @@ export PATH="\$HOME/.local/bin:\$PATH" &&
 cd '${REMOTE_SOURCE_DIR}' &&
 ${compiler_setup_cmd}
 conan profile detect --force &&
-cmake --preset '${REMOTE_BUILD_PRESET}' &&
-cmake --build --preset '${REMOTE_BUILD_PRESET_BUILD}' --target opencattus -j '${REMOTE_BUILD_JOBS}' &&
+cmake -S . -B '${remote_build_dir}' \
+    -DCMAKE_BUILD_TYPE='${remote_build_type}' \
+    -DCMAKE_C_COMPILER=gcc \
+    -DCMAKE_CXX_COMPILER=g++ &&
+cmake --build '${remote_build_dir}' --target opencattus -j '${REMOTE_BUILD_JOBS}' &&
 install -m 0755 '${REMOTE_BUILD_BINARY}' '${REMOTE_BINARY_PATH}'
 EOF
 )
