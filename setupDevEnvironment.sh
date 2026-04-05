@@ -131,7 +131,7 @@ case "$os_version" in
     ;;
   10)
     dnf -y install python pip libubsan libasan liblsan libtsan libhwasan \
-      glibmm-2.68 glibmm-2.68-devel \
+      glibmm2.68 glibmm2.68-devel \
       perl-File-Copy perl-File-Compare perl-Thread-Queue
     ;;
 esac

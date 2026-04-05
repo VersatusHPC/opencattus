@@ -109,7 +109,7 @@ default_remote_build_preset_build() {
 
 headnode_glibmm_package() {
     if (( DISTRO_MAJOR >= 10 )); then
-        printf 'glibmm-2.68'
+        printf 'glibmm2.68'
     else
         printf 'glibmm24'
     fi
@@ -1059,6 +1059,13 @@ EOF
 
 prepare_opencattus_binary() {
     ssh_remote "mkdir -p '${HEADNODE_DATA_DIR}'"
+
+    if ssh_remote "test -x '${REMOTE_BINARY_PATH}'" >/dev/null 2>&1; then
+        if probe_remote_binary; then
+            log "Reusing existing OpenCATTUS binary on the headnode"
+            return
+        fi
+    fi
 
     if [[ -n "${OPENCATTUS_BINARY}" ]]; then
         scp_to_remote "${OPENCATTUS_BINARY}" "${REMOTE_BINARY_PATH}"
