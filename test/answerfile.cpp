@@ -350,7 +350,7 @@ TEST_SUITE("opencattus::models::answerfile")
         std::ofstream(diskImagePath).close();
         writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
             interfaces.front(), std::nullopt, true, "xcat", std::nullopt,
-            "rocky", "10.0");
+            "rocky", "10.1");
 
         try {
             AnswerFile answerfile(answerfilePath);
@@ -382,7 +382,7 @@ TEST_SUITE("opencattus::models::answerfile")
         std::ofstream(diskImagePath).close();
         writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
             interfaces.front(), std::nullopt, true, "confluent",
-            std::nullopt, "rocky", "10.0");
+            std::nullopt, "rocky", "10.1");
 
         try {
             AnswerFile answerfile(answerfilePath);

@@ -897,7 +897,7 @@ TEST_CASE("RepoConfigParser")
             .arch = "x86_64",
             .beegfsVersion = "beegfs_7.4.0",
             .ohpcVersion = "4",
-            .osversion = "10.0",
+            .osversion = "10.1",
             .releasever = "10",
             .xcatVersion = "latest",
             .zabbixVersion = "7.0",
@@ -919,7 +919,7 @@ TEST_CASE("defaultOpenHPCVersionFor maps the supported EL releases")
               OS(models::OS::Distro::Rocky, OS::Platform::el9, 7))
         == "3");
     CHECK(defaultOpenHPCVersionFor(
-              OS(models::OS::Distro::Rocky, OS::Platform::el10, 0))
+              OS(models::OS::Distro::Rocky, OS::Platform::el10, 1))
         == "4");
 }
 
@@ -1297,12 +1297,12 @@ TEST_CASE("RepoNames")
 
     // Rocky EL10
     {
-        const auto osinfo = OS(models::OS::Distro::Rocky, OS::Platform::el10, 0);
+        const auto osinfo = OS(models::OS::Distro::Rocky, OS::Platform::el10, 1);
         const auto el10Vars = RepoConfigVars {
             .arch = "x86_64",
             .beegfsVersion = "beegfs_7.4.0",
             .ohpcVersion = "4",
-            .osversion = "10.0",
+            .osversion = "10.1",
             .releasever = "10",
             .xcatVersion = "latest",
             .zabbixVersion = "7.0",

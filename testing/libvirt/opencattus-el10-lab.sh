@@ -5,7 +5,7 @@ set -Eeuo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 : "${DISTRO_ID:=rocky}"
-: "${DISTRO_VERSION:=10.0}"
+: "${DISTRO_VERSION:=10.1}"
 : "${DISTRO_MAJOR:=10}"
 : "${PROVISIONER:=confluent}"
 
