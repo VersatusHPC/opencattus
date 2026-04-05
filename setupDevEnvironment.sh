@@ -132,7 +132,7 @@ case "$os_version" in
   10)
     dnf -y install python pip libubsan libasan liblsan libtsan libhwasan \
       glibmm2.68 glibmm2.68-devel \
-      perl-File-Copy perl-File-Compare perl-Thread-Queue
+      perl-File-Copy perl-File-Compare perl-Thread-Queue perl-FindBin
     ;;
 esac
 
