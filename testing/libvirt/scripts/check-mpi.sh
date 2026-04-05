@@ -72,7 +72,7 @@ resolve_mpi_modules() {
     local compiler_module
     local mpi_module
 
-    for compiler_prefix in gnu15 gnu12; do
+    for compiler_prefix in gnu15 gnu14 gnu13 gnu12 gnu9; do
         compiler_module=$(first_module_match "${compiler_prefix}") || true
         if [[ -z "${compiler_module}" ]]; then
             continue
