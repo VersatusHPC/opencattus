@@ -29,7 +29,8 @@ Options:
   -c FILE   Source configuration values from FILE before applying defaults.
   -h        Show this help text.
 
-The harness currently targets EL9 cloud images plus the xCAT provisioner path.
+The harness currently targets EL9 cloud images plus the xCAT and Confluent
+provisioner paths.
 EOF
 }
 
@@ -528,7 +529,8 @@ check_host_prereqs() {
 check_config() {
     local topology_vcpus
 
-    [[ "${PROVISIONER}" == "xcat" ]] || die "Only the xCAT path is supported by this harness today"
+    [[ "${PROVISIONER}" == "xcat" || "${PROVISIONER}" == "confluent" ]] || die \
+        "Unsupported provisioner ${PROVISIONER}; expected xcat or confluent"
     [[ -n "${BASE_IMAGE}" ]] || die "BASE_IMAGE is required"
     [[ -n "${CLUSTER_ISO}" ]] || die "CLUSTER_ISO is required"
     [[ -f "${BASE_IMAGE}" ]] || die "Base image not found: ${BASE_IMAGE}"
@@ -799,9 +801,12 @@ render_answerfile() {
     local workfile
     local index
 
-    template="${SCRIPT_DIR}/templates/rocky9-xcat.answerfile.ini"
+    template="${SCRIPT_DIR}/templates/rocky9-${PROVISIONER}.answerfile.ini"
     workfile="${ANSWERFILE_PATH}"
     mkdir -p "${LAB_DIR}"
+
+    [[ -f "${template}" ]] || die \
+        "Answerfile template not found for provisioner ${PROVISIONER}: ${template}"
 
     sed \
         -e "s|__CLUSTER_NAME__|${CLUSTER_NAME}|g" \
@@ -821,6 +826,7 @@ render_answerfile() {
         -e "s|__REMOTE_ISO_PATH__|${REMOTE_ISO_PATH}|g" \
         -e "s|__DISTRO_ID__|${DISTRO_ID}|g" \
         -e "s|__DISTRO_VERSION__|${DISTRO_VERSION}|g" \
+        -e "s|__PROVISIONER__|${PROVISIONER}|g" \
         -e "s|__PARTITION_NAME__|${PARTITION_NAME}|g" \
         -e "s|__MARIADB_ROOT_PASSWORD__|${MARIADB_ROOT_PASSWORD}|g" \
         -e "s|__SLURMDB_PASSWORD__|${SLURMDB_PASSWORD}|g" \

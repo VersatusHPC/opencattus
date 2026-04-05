@@ -87,7 +87,7 @@ set -xeu
 setsebool -P httpd_can_network_connect=on
 
 # Configure the internal network interfaces as trusted on FirewallD
-if systemctl is-enabled -q firewalld; then
+if systemctl is-active --quiet firewalld.service; then
     firewall-cmd --zone=trusted --change-interface={internalNic} --permanent
     firewall-cmd --reload
 fi
