@@ -48,11 +48,13 @@ Current Recovery Status
    * - Rocky Linux 9.7 + xCAT
      - Validated
      - Current recovery baseline. Verified unattended in the EL9 libvirt/KVM
-       lab with one compute node and an OpenHPC MPI hello-world run.
+       lab with two compute nodes and an OpenHPC MPI hello-world run spanning
+       them.
    * - Rocky Linux 9.7 + Confluent
      - Validated
-     - Verified unattended in the EL9 libvirt/KVM lab with one compute node,
-       external plus management networks, and an OpenHPC MPI hello-world run.
+     - Verified unattended in the EL9 libvirt/KVM lab with two compute nodes,
+       external plus management networks, and an OpenHPC MPI hello-world run
+       spanning them.
    * - EL10
      - Not validated
      - Porting work starts only after the EL9 baseline is stable.
@@ -84,7 +86,8 @@ Current EL9 Support Matrix
    * - OpenHPC MPI hello world
      - Validated
      - Validated
-     - Run through Slurm on the recovered EL9 cluster.
+     - Run through Slurm on the recovered EL9 cluster in both single-node and
+       two-node MPI layouts.
    * - External + management network topology
      - Validated
      - Validated
@@ -99,9 +102,10 @@ Current EL9 Support Matrix
      - Not yet validated
      - Still outside the recovered EL9 baseline.
    * - Multi-node cluster
-     - Not yet validated
-     - Not yet validated
-     - Only one compute node is covered so far.
+     - Validated
+     - Validated
+     - Two compute nodes boot, join the cluster, and complete the MPI smoke
+       test.
    * - TUI-driven install
      - Not yet validated
      - Not yet validated

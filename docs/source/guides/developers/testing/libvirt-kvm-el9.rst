@@ -30,6 +30,7 @@ The harness lives in ``testing/libvirt``:
 * ``testing/libvirt/templates/rocky9-xcat.answerfile.ini`` and ``testing/libvirt/templates/rocky9-confluent.answerfile.ini`` are the answerfile templates.
 * ``testing/libvirt/scripts/check-headnode.sh`` validates the headnode services after installation.
 * ``testing/libvirt/scripts/check-cluster.sh`` waits for the compute nodes to join the cluster.
+* ``testing/libvirt/scripts/check-mpi.sh`` compiles and runs the OpenHPC MPI hello-world smoke test through Slurm.
 
 Host requirements
 -----------------
@@ -72,6 +73,14 @@ Quick start
 
    Set ``BASE_IMAGE``, ``CLUSTER_ISO``, and either ``OPENCATTUS_BINARY`` or
    ``OPENCATTUS_SOURCE_DIR``.
+
+   For the validated two-node MPI path, also set:
+
+   .. code-block:: bash
+
+      COMPUTE_COUNT=2
+      MPI_SMOKE_NODES=2
+      MPI_SMOKE_TASKS=2
 
 2. Run the full unattended lab:
 
@@ -130,7 +139,7 @@ Cluster verification:
 * On the xCAT path, VirtualBMC exposes each compute node as an IPMI endpoint on the management subnet, and the harness opens the minimal host-side firewalld rule needed for UDP ``623`` from the headnode.
 * The harness restarts compute VMs with ``virsh`` so PXE reboots stay deterministic during unattended runs.
 * The default compute VM topology is kept consistent with the answerfile values that feed ``slurm.conf``: ``2`` vCPUs exposed as ``1`` socket, ``2`` cores, ``1`` thread.
-* The validated EL9 xCAT and Confluent runs can execute an OpenHPC MPI hello-world smoke test.
+* The validated EL9 xCAT and Confluent runs can execute an OpenHPC MPI hello-world smoke test across one or two compute nodes.
 
 Why this replaces the older Vagrant path
 ----------------------------------------
@@ -148,5 +157,5 @@ Known limits
 ------------
 
 * EL10 is out of scope for this harness. Get the EL9 path stable first.
-* The currently validated Confluent topology is one compute node on external plus management networks.
+* The currently validated multi-node EL9 topology is two compute nodes on external plus management networks.
 * Nested-virtualization CI is not realistic in the current GitHub workflow; this lab is meant for a real EL9 KVM host.

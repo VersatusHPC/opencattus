@@ -443,7 +443,7 @@ auto& getNetworkField(AnswerFile& answerfile, Network::Profile profile)
 
 void Cluster::dumpData(const std::filesystem::path& answerfilePath)
 {
-    AnswerFile answerfil(answerfilePath);
+    AnswerFile answerfil(answerfilePath, false);
     LOG_TRACE("Dump Management Network");
 
     for (const auto& network : m_network) {
@@ -455,20 +455,52 @@ void Cluster::dumpData(const std::filesystem::path& answerfilePath)
 
         auto nserv = network->getNameservers();
         if (!nserv.empty()) {
-            // field.nameservers = std::make_optional(nserv);
+            std::vector<std::string> nameservers;
+            nameservers.reserve(nserv.size());
+            for (const auto& nameserver : nserv) {
+                nameservers.emplace_back(nameserver.to_string());
+            }
+            field.nameservers = std::move(nameservers);
         }
 
-        field.con_ip_addr = network->getAddress();
+        try {
+            const auto& connection
+                = getHeadnode().getConnection(network->getProfile());
+
+            if (const auto interface = connection.getInterface(); interface) {
+                field.con_interface = std::string(interface.value());
+            }
+            if (const auto mac = connection.getMAC(); mac) {
+                field.con_mac_addr = std::string(mac.value());
+            }
+            field.con_ip_addr = connection.getAddress();
+        } catch (const std::exception&) {
+            field.con_ip_addr = network->getAddress();
+        }
     }
 
     answerfil.system.disk_image = getDiskImage().getPath();
+    answerfil.system.distro = getHeadnode().getOS().getDistro();
+    answerfil.system.version = getHeadnode().getOS().getVersion();
+    if (const auto kernel = getHeadnode().getOS().getKernel(); kernel) {
+        answerfil.system.kernel = std::string(kernel.value());
+    }
+    answerfil.system.provisioner
+        = getProvisioner() == Provisioner::xCAT ? "xcat" : "confluent";
 
     answerfil.information.cluster_name = getName();
     answerfil.information.company_name = getCompanyName();
     answerfil.information.administrator_email = getAdminMail();
 
     answerfil.time.timezone = getTimezone().getTimezone();
+    const auto timeservers = getTimezone().getTimeservers();
+    if (!timeservers.empty()) {
+        answerfil.time.timeserver = timeservers.front();
+    }
     answerfil.time.locale = getLocale();
+
+    answerfil.hostname.hostname = getHeadnode().getHostname();
+    answerfil.hostname.domain_name = getDomainName();
 
     for (const auto& node : this->m_nodes) {
         AFNode afNode;

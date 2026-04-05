@@ -45,13 +45,21 @@ Keep the cloud image and ISO under `/var/lib/libvirt/images` unless you have alr
    `testing/libvirt/config/rocky9-confluent.env.example`, then set
    `BASE_IMAGE`, `CLUSTER_ISO`, and either `OPENCATTUS_BINARY` or
    `OPENCATTUS_SOURCE_DIR`.
-2. Run the full lab:
+2. If you want the validated two-node MPI path, also set:
+
+```bash
+COMPUTE_COUNT=2
+MPI_SMOKE_NODES=2
+MPI_SMOKE_TASKS=2
+```
+
+3. Run the full lab:
 
 ```bash
 testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env run
 ```
 
-3. Inspect logs under `/var/tmp/opencattus-lab/<lab-name>/logs`.
+4. Inspect logs under `/var/tmp/opencattus-lab/<lab-name>/logs`.
 
 The harness also stores libvirt-owned disk artifacts under `/var/lib/libvirt/images/opencattus-lab/<lab-name>`.
 The `run` command collects logs even when install or verification fails so the failed lab is still debuggable.
@@ -67,11 +75,11 @@ The default config also assumes a single active lab on the host. If you want mul
 | Answerfile-driven unattended install | Validated | Validated | Verified in the EL9 libvirt/KVM recovery lab. |
 | Headnode verification | Validated | Validated | `chronyd`, NFS, MariaDB, Munge, SLURM, and provisioner services checked after install. |
 | Single compute node boot and join | Validated | Validated | `sinfo -N` reaches a usable node state. |
-| OpenHPC MPI hello world | Validated | Validated | Run through Slurm on the recovered EL9 cluster. |
+| OpenHPC MPI hello world | Validated | Validated | Run through Slurm on the recovered EL9 cluster in both single-node and two-node MPI layouts. |
 | External + management network topology | Validated | Validated | This is the currently tested lab topology. |
 | Dedicated service network | Not yet validated | Not yet validated | Parser/model handling was repaired, but there is no end-to-end EL9 lab coverage yet. |
 | Dedicated application network / OFED path | Not yet validated | Not yet validated | Still outside the recovered EL9 baseline. |
-| Multi-node cluster | Not yet validated | Not yet validated | Only one compute node is covered so far. |
+| Multi-node cluster | Validated | Validated | Two compute nodes boot, join the cluster, and complete the MPI smoke test. |
 | TUI-driven install | Not yet validated | Not yet validated | Recovery work has focused on unattended answerfile installs first. |
 | `--dump-answerfile` round-trip | Not yet validated | Not yet validated | Do not treat dumped answerfiles as a recovery baseline yet. |
 
@@ -116,12 +124,12 @@ testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env destroy
 - The compute VMs can PXE boot on the management network.
 - The compute nodes become reachable on the management network and appear in `sinfo`.
 - The default compute VM topology now matches the answerfile's SLURM declaration: `2` vCPUs presented as `1` socket, `2` cores, `1` thread.
-- The validated EL9 paths can run an OpenHPC MPI hello-world smoke test.
+- The validated EL9 paths can run an OpenHPC MPI hello-world smoke test across one or two compute nodes.
 
 ## Current limits
 
 - This harness does not claim EL10 readiness.
-- The currently validated Confluent topology is one compute node on external
-  plus management networks. Service/application network variants still need
-  broader coverage.
+- The currently validated multi-node EL9 topology is two compute nodes on
+  external plus management networks. Service/application network variants
+  still need broader coverage.
 - Nested virtualization CI is out of scope for GitHub Actions; this is intended for a real EL9 KVM host.
