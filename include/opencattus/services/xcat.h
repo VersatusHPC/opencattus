@@ -218,9 +218,12 @@ private:
     void generateOSImagePath(ImageType, NodeType);
 
     /**
-     * @brief Configures settings specific to Enterprise Linux 9 (EL9).
-     *
-     * This function sets up configurations for EL9.
+     * @brief Configures xCAT distro aliases for Enterprise Linux 8.
+     */
+    static void configureEL8();
+
+    /**
+     * @brief Configures xCAT distro aliases for Enterprise Linux 9.
      */
     static void configureEL9();
 

@@ -12,6 +12,8 @@ Recommended starting points:
 
 - ``testing/libvirt/templates/rocky8-confluent.answerfile.ini`` for the
   validated EL8 + Confluent lab path.
+- ``testing/libvirt/templates/rocky8-xcat.answerfile.ini`` for the validated
+  EL8 + xCAT lab path.
 - ``testing/libvirt/templates/rocky9-xcat.answerfile.ini`` for the currently
   validated EL9 + xCAT path.
 - ``testing/libvirt/templates/rocky9-confluent.answerfile.ini`` for the
@@ -161,7 +163,7 @@ This section defines the installation ISO, distro, version, and provisioner.
     disk_image=/root/Rocky-8.10-x86_64-dvd.iso
     distro=rocky
     version=8.10
-    provisioner=confluent  # use xcat for the validated EL9 xCAT path
+    provisioner=confluent  # use xcat for the validated EL8 or EL9 xCAT paths
     # kernel is optional and mainly used for specialized flows
 
 Nodes

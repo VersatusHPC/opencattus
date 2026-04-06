@@ -52,6 +52,11 @@ Current Recovery Status
      - Verified unattended in the EL8 libvirt/KVM lab with one compute node,
        external plus management networks, and a non-root OpenHPC MPI
        hello-world smoke run on the deployed node.
+   * - Rocky Linux 8.10 + xCAT
+     - Validated
+     - Verified unattended in the EL8 libvirt/KVM lab with one compute node,
+       external plus management networks, and a non-root OpenHPC MPI
+       hello-world smoke run on the deployed node.
    * - Rocky Linux 9.7 + xCAT
      - Validated
      - Current recovery baseline. Verified unattended in the EL9 libvirt/KVM
@@ -74,42 +79,54 @@ Current EL8 Support Matrix
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. list-table::
-   :widths: 30 18 52
+   :widths: 30 18 18 34
    :header-rows: 1
 
    * - Capability
+     - xCAT
      - Confluent
      - Notes
    * - Answerfile-driven unattended install
      - Validated
+     - Validated
      - Verified in the EL8 libvirt/KVM lab.
    * - Headnode verification
      - Validated
-     - ``chronyd``, NFS, MariaDB, Munge, SLURM, and Confluent services
-       checked after install.
+     - Validated
+     - ``chronyd``, NFS, MariaDB, Munge, SLURM, and provisioner services
+       checked after install. The xCAT ``lsdef -t osimage`` probe is
+       advisory because it can lag behind an otherwise healthy fresh
+       headnode.
    * - Single compute node boot and join
+     - Validated
      - Validated
      - ``sinfo -N`` reaches ``idle`` on the deployed node.
    * - OpenHPC MPI hello world
      - Validated
+     - Validated
      - Two MPI ranks run through Slurm on the validated single-node EL8 lab.
    * - External + management network topology
+     - Validated
      - Validated
      - This is the current EL8 lab topology.
    * - Dedicated service network
      - Not yet validated
+     - Not yet validated
      - Still outside the current EL8 baseline.
    * - Dedicated application network / OFED path
+     - Not yet validated
      - Not yet validated
      - Still outside the current EL8 baseline.
    * - Multi-node cluster
      - Not yet validated
-     - EL8 recovery work has only validated the single-node Confluent path so
-       far.
+     - Not yet validated
+     - EL8 recovery work has only validated the single-node lab paths so far.
    * - TUI-driven install
+     - Not yet validated
      - Not yet validated
      - Recovery work has focused on unattended answerfile installs first.
    * - ``--dump-answerfile`` round-trip
+     - Not yet validated
      - Not yet validated
      - Do not treat dumped answerfiles as an EL8 recovery baseline yet.
 

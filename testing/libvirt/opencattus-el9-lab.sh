@@ -680,8 +680,6 @@ check_config() {
     if is_distro_major_el8; then
         [[ "${DISTRO_ID}" == "rocky" ]] || die \
             "The current EL8 validation lab only targets Rocky Linux 8"
-        [[ "${PROVISIONER}" == "confluent" ]] || die \
-            "The current EL8 validation lab is Confluent-only"
     fi
     if is_distro_major_el10; then
         [[ "${DISTRO_ID}" == "rocky" ]] || die \

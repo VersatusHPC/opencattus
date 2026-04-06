@@ -12,7 +12,8 @@ Scope:
 - Headnode and cluster verification after provisioning.
 - Host-side log collection for failed runs.
 
-The currently validated targets are `Rocky Linux 8.10 + Confluent`,
+The currently validated targets are `Rocky Linux 8.10 + xCAT`,
+`Rocky Linux 8.10 + Confluent`,
 `Rocky Linux 9.7 + xCAT`, `Rocky Linux 9.7 + Confluent`, and
 `Rocky Linux 10.1 + Confluent`. The current EL10 baseline is still narrower
 than the full EL9 recovery scope, and the EL8 baseline is narrower than EL9,
@@ -52,6 +53,7 @@ Keep the cloud image and ISO under `/var/lib/libvirt/images`, ideally in a dedic
    - `testing/libvirt/config/rocky9-xcat.env.example`
    - `testing/libvirt/config/rocky9-confluent.env.example`
    - `testing/libvirt/config/rocky9-confluent-service.env.example`
+   - `testing/libvirt/config/rocky8-xcat.env.example`
    - `testing/libvirt/config/rocky8-confluent.env.example`
    - `testing/libvirt/config/rocky10-confluent.env.example`
    - `testing/libvirt/config/rocky10-confluent-service.env.example`
@@ -67,6 +69,7 @@ MPI_SMOKE_TASKS=2
 3. Run the full lab:
 
 ```bash
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-xcat.env run
 testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-confluent.env run
 testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env run
 ```
@@ -88,18 +91,18 @@ The default config also assumes a single active lab on the host. If you want mul
 
 ## EL8 support matrix
 
-| Capability | Confluent | Notes |
-| --- | --- | --- |
-| Answerfile-driven unattended install | Validated | Verified in the EL8 libvirt/KVM lab. |
-| Headnode verification | Validated | `chronyd`, NFS, MariaDB, Munge, SLURM, and Confluent services checked after install. |
-| Single compute node boot and join | Validated | `sinfo -N` reaches `idle` on the deployed node. |
-| OpenHPC MPI hello world | Validated | Two MPI ranks run through Slurm on the validated single-node EL8 lab. |
-| External + management network topology | Validated | This is the current EL8 lab topology. |
-| Dedicated service network | Not yet validated | Still outside the current EL8 baseline. |
-| Dedicated application network / OFED path | Not yet validated | Still outside the current EL8 baseline. |
-| Multi-node cluster | Not yet validated | EL8 recovery work has only validated the single-node Confluent path so far. |
-| TUI-driven install | Not yet validated | Recovery work has focused on unattended answerfile installs first. |
-| `--dump-answerfile` round-trip | Not yet validated | Do not treat dumped answerfiles as an EL8 recovery baseline yet. |
+| Capability | xCAT | Confluent | Notes |
+| --- | --- | --- | --- |
+| Answerfile-driven unattended install | Validated | Validated | Verified in the EL8 libvirt/KVM lab. |
+| Headnode verification | Validated | Validated | `chronyd`, NFS, MariaDB, Munge, SLURM, and provisioner services checked after install. The xCAT `lsdef -t osimage` probe is advisory because it can lag behind an otherwise healthy fresh headnode. |
+| Single compute node boot and join | Validated | Validated | `sinfo -N` reaches `idle` on the deployed node. |
+| OpenHPC MPI hello world | Validated | Validated | Two MPI ranks run through Slurm on the validated single-node EL8 lab. |
+| External + management network topology | Validated | Validated | This is the current EL8 lab topology. |
+| Dedicated service network | Not yet validated | Not yet validated | Still outside the current EL8 baseline. |
+| Dedicated application network / OFED path | Not yet validated | Not yet validated | Still outside the current EL8 baseline. |
+| Multi-node cluster | Not yet validated | Not yet validated | EL8 recovery work has only validated the single-node lab paths so far. |
+| TUI-driven install | Not yet validated | Not yet validated | Recovery work has focused on unattended answerfile installs first. |
+| `--dump-answerfile` round-trip | Not yet validated | Not yet validated | Do not treat dumped answerfiles as an EL8 recovery baseline yet. |
 
 ## EL9 support matrix
 
@@ -157,6 +160,12 @@ Run the workflow from the Actions tab when you want a full unattended cluster ga
 ## Useful commands
 
 ```bash
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-xcat.env create
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-xcat.env install
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-xcat.env boot
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-xcat.env verify
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-xcat.env collect
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-xcat.env destroy
 testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-confluent.env create
 testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-confluent.env install
 testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-confluent.env boot
@@ -188,7 +197,7 @@ testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env destroy
 - The compute VMs can PXE boot on the management network.
 - The compute nodes become reachable on the management network and appear in `sinfo`.
 - The default compute VM topology now matches the answerfile's SLURM declaration: `2` vCPUs presented as `1` socket, `2` cores, `1` thread.
-- The validated EL8 path can run a non-root OpenHPC MPI hello-world smoke test on the deployed compute node.
+- The validated EL8 paths can run a non-root OpenHPC MPI hello-world smoke test on the deployed compute node.
 - The validated EL9 paths can run an OpenHPC MPI hello-world smoke test across one or two compute nodes.
 
 ## Current limits
@@ -202,8 +211,8 @@ testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env destroy
   external plus management networks. EL9 Confluent service-network coverage is
   now also validated, but the xCAT service-network and broader application
   network variants still need coverage.
-- The currently validated EL8 topology is a single Confluent-managed compute
-  node on external plus management networks.
+- The currently validated EL8 topology is a single xCAT-managed or
+  Confluent-managed compute node on external plus management networks.
 - The currently validated EL10 service-network topology adds a dedicated
   headnode `oc-svc0` interface and `[network_service]`, but the application
   network / OFED path is still outside the EL10 baseline.
