@@ -148,8 +148,8 @@ void OFED::install() const
 
     switch (m_kind) {
         case OFED::Kind::Inbox:
-            opencattus::Singleton<opencattus::services::IOSService>::get()
-                ->groupInstall("Infiniband Support");
+            opencattus::utils::singleton::osservice()->groupInstall(
+                "Infiniband Support");
             break;
 
         case OFED::Kind::Doca: {
@@ -157,8 +157,7 @@ void OFED::install() const
                 = opencattus::Singleton<opencattus::services::IRunner>::get();
             auto repoManager = opencattus::Singleton<
                 opencattus::services::repos::RepoManager>::get();
-            auto osservice
-                = opencattus::Singleton<opencattus::services::IOSService>::get();
+            const auto osservice = opencattus::utils::singleton::osservice();
             const auto requestedKernel = requestedKernelForOFED();
             const auto runningKernel = osservice->getKernelRunning();
             const auto installMode
