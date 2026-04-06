@@ -102,6 +102,56 @@ function(detect_build_type BUILD_TYPE)
 endfunction()
 
 
+function(detect_enterprise_linux_major EL_MAJOR)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        set(${EL_MAJOR} "" PARENT_SCOPE)
+        return()
+    endif()
+
+    if(NOT EXISTS "/etc/redhat-release" OR NOT EXISTS "/etc/os-release")
+        set(${EL_MAJOR} "" PARENT_SCOPE)
+        return()
+    endif()
+
+    file(STRINGS "/etc/os-release" OS_RELEASE_LINES REGEX "^VERSION_ID=")
+    set(_VERSION_ID "")
+    foreach(_LINE IN LISTS OS_RELEASE_LINES)
+        if(_LINE MATCHES "^VERSION_ID=(.+)$")
+            set(_VERSION_ID "${CMAKE_MATCH_1}")
+            string(REGEX REPLACE "^\"|\"$" "" _VERSION_ID "${_VERSION_ID}")
+            break()
+        endif()
+    endforeach()
+
+    if(_VERSION_ID)
+        string(REGEX MATCH "^[0-9]+" _EL_MAJOR "${_VERSION_ID}")
+        set(${EL_MAJOR} "${_EL_MAJOR}" PARENT_SCOPE)
+    else()
+        set(${EL_MAJOR} "" PARENT_SCOPE)
+    endif()
+endfunction()
+
+
+function(conan_extra_build_args OUTVAR)
+    detect_enterprise_linux_major(EL_MAJOR)
+
+    set(EXTRA_ARGS "")
+    if(EL_MAJOR STREQUAL "8")
+        list(APPEND EXTRA_ARGS
+            --build=b2/*
+            --build=gperf/*
+            --build=libtool/*
+            --build=m4/*
+            --build=ninja/*
+            --build=pkgconf/*)
+        message(STATUS
+            "CMake-Conan: forcing source builds for EL8 build tools to avoid incompatible remote binaries")
+    endif()
+
+    set(${OUTVAR} "${EXTRA_ARGS}" PARENT_SCOPE)
+endfunction()
+
+
 function(detect_host_profile output_file)
     detect_os(MYOS MYOS_API_LEVEL MYOS_VERSION)
     detect_arch(MYARCH)
@@ -258,13 +308,14 @@ macro(conan_provide_dependency package_name)
         message(STATUS "CMake-Conan: first find_package() found. Installing dependencies with Conan")
         conan_profile_detect_default()
         detect_host_profile(${CMAKE_BINARY_DIR}/conan_host_profile)
+        conan_extra_build_args(CONAN_EXTRA_BUILD_ARGS)
         if(NOT CMAKE_CONFIGURATION_TYPES)
             message(STATUS "CMake-Conan: Installing single configuration ${CMAKE_BUILD_TYPE}")
-            conan_install(-pr ${CMAKE_BINARY_DIR}/conan_host_profile --build=missing -g CMakeDeps)
+            conan_install(-pr ${CMAKE_BINARY_DIR}/conan_host_profile --build=missing ${CONAN_EXTRA_BUILD_ARGS} -g CMakeDeps)
         else()
             message(STATUS "CMake-Conan: Installing both Debug and Release")
-            conan_install(-pr ${CMAKE_BINARY_DIR}/conan_host_profile -s build_type=Release --build=missing -g CMakeDeps)
-            conan_install(-pr ${CMAKE_BINARY_DIR}/conan_host_profile -s build_type=Debug --build=missing -g CMakeDeps)
+            conan_install(-pr ${CMAKE_BINARY_DIR}/conan_host_profile -s build_type=Release --build=missing ${CONAN_EXTRA_BUILD_ARGS} -g CMakeDeps)
+            conan_install(-pr ${CMAKE_BINARY_DIR}/conan_host_profile -s build_type=Debug --build=missing ${CONAN_EXTRA_BUILD_ARGS} -g CMakeDeps)
         endif()
     else()
         message(STATUS "CMake-Conan: find_package(${ARGV1}) found, 'conan install' already ran")

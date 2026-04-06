@@ -46,6 +46,24 @@
       }
     },
     {
+      "name": "rhel8-gcc-release",
+      "displayName": "RHEL8 GCC Release",
+      "description": "Target Red Hat Enterprise Linux 8 with the gcc compiler, release build type",
+      "inherits": "conf-linux-gcc-common",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "rhel8-gcc-debug",
+      "displayName": "RHEL8 GCC Debug",
+      "description": "Target Red Hat Enterprise Linux 8 with the gcc compiler, debug build type",
+      "inherits": "conf-linux-gcc-common",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
       "name": "rhel9-gcc-release",
       "displayName": "RHEL9 GCC Release",
       "description": "Target Red Hat Enterprise Linux 9 with the gcc compiler, release build type",
@@ -80,6 +98,24 @@
       "cacheVariables": {
         "CMAKE_C_COMPILER": "/opt/rh/gcc-toolset-14/root/usr/bin/gcc",
         "CMAKE_CXX_COMPILER": "/opt/rh/gcc-toolset-14/root/usr/bin/g++"
+      }
+    },
+    {
+      "name": "rhel8-gcc-toolset-14-release",
+      "displayName": "RHEL8 GCC 14 Release",
+      "description": "Target Red Hat Enterprise Linux 8 with the gcc toolset 14 compiler, release build type",
+      "inherits": "conf-linux-gcc-toolset-14-common",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "rhel8-gcc-toolset-14-debug",
+      "displayName": "RHEL8 GCC 14 Debug",
+      "description": "Target Red Hat Enterprise Linux 8 with the gcc toolset 14 compiler, debug build type",
+      "inherits": "conf-linux-gcc-toolset-14-common",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
@@ -149,6 +185,26 @@
   ],
   "buildPresets": [
     {
+      "name": "rhel8-gcc-release-build",
+      "displayName": "RHEL8 gcc build release",
+      "configurePreset": "rhel8-gcc-release"
+    },
+    {
+      "name": "rhel8-gcc-debug-build",
+      "displayName": "RHEL8 gcc build debug",
+      "configurePreset": "rhel8-gcc-debug"
+    },
+    {
+      "name": "rhel8-gcc-toolset-14-release-build",
+      "displayName": "RHEL8 gcc toolset 14 build release",
+      "configurePreset": "rhel8-gcc-toolset-14-release"
+    },
+    {
+      "name": "rhel8-gcc-toolset-14-debug-build",
+      "displayName": "RHEL8 gcc toolset 14 build debug",
+      "configurePreset": "rhel8-gcc-toolset-14-debug"
+    },
+    {
       "name": "rhel9-gcc-release-build",
       "displayName": "gcc build release",
       "configurePreset": "rhel9-gcc-release"
@@ -201,6 +257,34 @@
         "noTestsAction": "error",
         "stopOnFailure": true
       }
+    },
+    {
+      "name": "test-rhel8-gcc-release",
+      "displayName": "Strict",
+      "description": "Enable output and stop on failure",
+      "inherits": "test-common",
+      "configurePreset": "rhel8-gcc-release"
+    },
+    {
+      "name": "test-rhel8-gcc-debug",
+      "displayName": "Strict",
+      "description": "Enable output and stop on failure",
+      "inherits": "test-common",
+      "configurePreset": "rhel8-gcc-debug"
+    },
+    {
+      "name": "test-rhel8-gcc-toolset-14-release",
+      "displayName": "Strict",
+      "description": "Enable output and stop on failure",
+      "inherits": "test-common",
+      "configurePreset": "rhel8-gcc-toolset-14-release"
+    },
+    {
+      "name": "test-rhel8-gcc-toolset-14-debug",
+      "displayName": "Strict",
+      "description": "Enable output and stop on failure",
+      "inherits": "test-common",
+      "configurePreset": "rhel8-gcc-toolset-14-debug"
     },
     {
       "name": "test-rhel9-gcc-release",

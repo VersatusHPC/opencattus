@@ -27,6 +27,56 @@ std::string buildNodeDeclaration(std::string_view nodeName,
         nodeName, nodeAddress, nodeName, cpusPerNode, sockets, realMemory,
         coresPerSocket, threadsPerCore);
 }
+
+std::string buildControllerStartupScript()
+{
+    return R"(
+systemctl enable munge slurmctld slurmdbd mariadb
+systemctl start munge mariadb
+)";
+}
+
+std::string buildControllerActivationScript()
+{
+    return R"slurm(
+# slurmctld refuses to start if clustername has changed,
+# remove this file mitigate it
+rm -rf /var/spool/slurmctld/clustername
+
+systemctl restart slurmdbd
+for attempt in $(seq 1 20); do
+    if systemctl is-active --quiet slurmdbd && bash -c 'exec 3<>/dev/tcp/127.0.0.1/6819' 2>/dev/null; then
+        exec 3>&-
+        exec 3<&-
+        break
+    fi
+    sleep 2
+done
+systemctl is-active --quiet slurmdbd
+
+systemctl restart slurmctld
+for attempt in $(seq 1 20); do
+    if systemctl is-active --quiet slurmctld; then
+        break
+    fi
+    sleep 2
+done
+systemctl is-active --quiet slurmctld
+
+echo "slurmctld is $(systemctl is-active slurmctld)"
+echo "slurmdbd is $(systemctl is-active slurmdbd)"
+
+# Wait for slurmdbd to accept accounting requests
+for attempt in $(seq 1 20); do
+    if sacct >/dev/null 2>&1; then
+        break
+    fi
+    sleep 2
+done
+
+sacct
+)slurm";
+}
 } // namespace
 
 namespace opencattus::services::ansible::roles::slurm {
@@ -78,7 +128,7 @@ void run(const Role& role)
     runner::shell::fmt(R"del(
 # SLURM configuration
 dnf -y install ohpc-slurm-server mariadb-server mariadb
-systemctl enable --now munge slurmctld slurmdbd mariadb
+{controllerStartupScript}
 
 # Secure the installation, `mysql -u root` will exit with
 # non-zero exit code if this already run before, use `mysql -u root -p`
@@ -150,6 +200,7 @@ chown slurm:slurm /etc/slurm/slurmdbd.conf
 chmod 600 /etc/slurm/slurmdbd.conf
 
     )del",
+        fmt::arg("controllerStartupScript", buildControllerStartupScript()),
         fmt::arg("hostname", answerfile()->hostname.hostname),
         fmt::arg(
             "mariadb_root_pass", answerfile()->slurm.mariadb_root_password),
@@ -195,23 +246,10 @@ EOF
     echo "# END AUTO-GENERATED NODE CONFIG"
 }} >> $slurm_conf
 
-# slurmctld refuses to start if clustername has changed,
-# remove this file mitigate it
-rm -rf /var/spool/slurmctld/clustername
-systemctl restart slurmctld slurmdbd
-echo "slurmctld is $(systemctl is-active slurmctld)"
-echo "slurmdbd is $(systemctl is-active slurmdbd)"
-
-# Wait for slurmdbd to accept accounting requests
-for attempt in $(seq 1 20); do
-    if sacct >/dev/null 2>&1; then
-        break
-    fi
-    sleep 2
-done
-
-sacct
+{controllerActivationScript}
 )del",
+        fmt::arg("controllerActivationScript",
+            buildControllerActivationScript()),
         fmt::arg("hostname", answerfile()->hostname.hostname),
         fmt::arg("node_declarations", fmt::join(nodeDeclarations, "\n")),
         fmt::arg("node_prefix", nodesPrefix),
@@ -228,4 +266,26 @@ TEST_CASE("buildNodeDeclaration pins the management address")
         == "NodeName=n01 NodeAddr=192.168.30.1 NodeHostName=n01 CPUs=1 "
            "Sockets=1 RealMemory=4096 CoresPerSocket=1 ThreadsPerCore=1 "
            "State=UNKNOWN");
+}
+
+TEST_CASE("buildControllerStartupScript keeps service ordering explicit")
+{
+    const auto script = buildControllerStartupScript();
+
+    CHECK(script.contains("systemctl enable munge slurmctld slurmdbd mariadb"));
+    CHECK(script.contains("systemctl start munge mariadb"));
+    CHECK_FALSE(script.contains("systemctl enable --now munge slurmctld slurmdbd mariadb"));
+}
+
+TEST_CASE("buildControllerActivationScript waits for slurmdbd before slurmctld")
+{
+    const auto script = buildControllerActivationScript();
+
+    CHECK(script.contains("systemctl restart slurmdbd"));
+    CHECK(script.contains("/dev/tcp/127.0.0.1/6819"));
+    CHECK(script.contains("systemctl restart slurmctld"));
+    CHECK(script.find("systemctl restart slurmdbd")
+        < script.find("systemctl restart slurmctld"));
+    CHECK(script.contains("systemctl is-active --quiet slurmctld"));
+    CHECK(script.contains("sacct >/dev/null 2>&1"));
 }

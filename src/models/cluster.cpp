@@ -452,6 +452,7 @@ void validateProvisionerSupport(const OS& os, Cluster::Provisioner provisioner)
             }
             return;
         case OS::Platform::el8:
+            return;
         case OS::Platform::el9:
             return;
         default:

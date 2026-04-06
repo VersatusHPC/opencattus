@@ -5,16 +5,19 @@ OpenCATTUS on Enterprise Linux.
 
 Scope:
 
-- One EL9 cloud-image headnode VM.
+- One EL8 or EL9 cloud-image headnode VM, or the current Rocky Linux 10 cloud
+  image for EL10 bootstrap work.
 - One or more PXE-booted compute VMs.
 - Unattended answerfile-driven installation.
 - Headnode and cluster verification after provisioning.
 - Host-side log collection for failed runs.
 
-The currently validated targets are `Rocky Linux 9.7 + xCAT`,
-`Rocky Linux 9.7 + Confluent`, and `Rocky Linux 10.1 + Confluent`.
-The current EL10 baseline is still narrower than the full EL9 recovery scope,
-but it now includes both the one-node smoke and a validated two-node MPI run.
+The currently validated targets are `Rocky Linux 8.10 + xCAT`,
+`Rocky Linux 8.10 + Confluent`,
+`Rocky Linux 9.7 + xCAT`, `Rocky Linux 9.7 + Confluent`, and
+`Rocky Linux 10.1 + Confluent`. The current EL10 baseline is still narrower
+than the full EL9 recovery scope, and the EL8 baseline is narrower than EL9,
+but both now have real unattended lab coverage.
 
 ## Host requirements
 
@@ -34,9 +37,10 @@ sudo python3 -m pip install virtualbmc pyghmi
 
 You also need:
 
-- An EL9 qcow2 cloud image for the headnode.
-- An EL9 DVD ISO for the compute image creation step.
-- Either a locally built EL9 `opencattus` binary or the full source tree so the harness can build inside the headnode.
+- An Enterprise Linux qcow2 cloud image for the headnode that matches the lab
+  template you want to run.
+- A matching Enterprise Linux DVD ISO for the compute image creation step.
+- Either a locally built `opencattus` binary or the full source tree so the harness can build inside the headnode.
 - Compute VMs sized realistically for xCAT stateless boot. The current tested floor is `8192` MiB per compute node; `4096` MiB failed during initramfs expansion of `rootimg.cpio.gz`.
 
 Keep the cloud image and ISO under `/var/lib/libvirt/images`, ideally in a dedicated asset directory such as `/var/lib/libvirt/images/opencattus-assets`, unless you have already labeled another path for libvirt access. The harness stores the headnode qcow2 overlay and cloud-init seed ISO there by default to avoid SELinux denials on enforcing Enterprise Linux hosts.
@@ -46,6 +50,8 @@ Keep the cloud image and ISO under `/var/lib/libvirt/images`, ideally in a dedic
 1. Copy one of these environment templates, then set `BASE_IMAGE`,
    `CLUSTER_ISO`, and either `OPENCATTUS_BINARY` or `OPENCATTUS_SOURCE_DIR`:
 
+   - `testing/libvirt/config/rocky8-xcat.env.example`
+   - `testing/libvirt/config/rocky8-confluent.env.example`
    - `testing/libvirt/config/rocky9-xcat.env.example`
    - `testing/libvirt/config/rocky9-confluent.env.example`
    - `testing/libvirt/config/rocky9-confluent-service.env.example`
@@ -63,6 +69,8 @@ MPI_SMOKE_TASKS=2
 3. Run the full lab:
 
 ```bash
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-xcat.env run
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-confluent.env run
 testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env run
 ```
 
@@ -80,6 +88,21 @@ The `run` command collects logs even when install or verification fails so the f
 The example config deliberately keeps `NODE_REAL_MEMORY_MB` below the VM's assigned RAM. That is not a typo. xCAT unpacks the stateless image in memory during PXE boot, so the guest needs headroom beyond the SLURM `RealMemory` value you advertise to jobs.
 
 The default config also assumes a single active lab on the host. If you want multiple labs at once, override the external and management subnet settings in addition to changing `LAB_NAME`.
+
+## EL8 support matrix
+
+| Capability | xCAT | Confluent | Notes |
+| --- | --- | --- | --- |
+| Answerfile-driven unattended install | Validated | Validated | Verified in the EL8 libvirt/KVM lab. |
+| Headnode verification | Validated | Validated | `chronyd`, NFS, MariaDB, Munge, SLURM, and provisioner services checked after install. The xCAT `lsdef -t osimage` probe is advisory because it can lag behind an otherwise healthy fresh headnode. |
+| Single compute node boot and join | Validated | Validated | `sinfo -N` reaches `idle` on the deployed node. |
+| OpenHPC MPI hello world | Validated | Validated | Two MPI ranks run through Slurm on the validated single-node EL8 lab. |
+| External + management network topology | Validated | Validated | This is the current EL8 lab topology. |
+| Dedicated service network | Not yet validated | Not yet validated | Still outside the current EL8 baseline. |
+| Dedicated application network / OFED path | Not yet validated | Not yet validated | Still outside the current EL8 baseline. |
+| Multi-node cluster | Not yet validated | Not yet validated | EL8 recovery work has only validated the single-node lab paths so far. |
+| TUI-driven install | Not yet validated | Not yet validated | Recovery work has focused on unattended answerfile installs first. |
+| `--dump-answerfile` round-trip | Not yet validated | Not yet validated | Do not treat dumped answerfiles as an EL8 recovery baseline yet. |
 
 ## EL9 support matrix
 
@@ -137,6 +160,18 @@ Run the workflow from the Actions tab when you want a full unattended cluster ga
 ## Useful commands
 
 ```bash
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-xcat.env create
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-xcat.env install
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-xcat.env boot
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-xcat.env verify
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-xcat.env collect
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-xcat.env destroy
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-confluent.env create
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-confluent.env install
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-confluent.env boot
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-confluent.env verify
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-confluent.env collect
+testing/libvirt/opencattus-el8-lab.sh -c /path/to/rocky8-confluent.env destroy
 testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env create
 testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env install
 testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env boot
@@ -150,7 +185,7 @@ testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env destroy
 - The headnode VM boots with deterministic NIC naming.
 - The headnode is normalized before install, including a kernel update and reboot when the cloud image lags the configured repos.
 - The harness can build `opencattus` inside the headnode when you provide `OPENCATTUS_SOURCE_DIR` instead of a prebuilt binary.
-- OpenCATTUS can run unattended from an answerfile on EL9.
+- OpenCATTUS can run unattended from an answerfile on EL8 and EL9.
 - xCAT or Confluent, plus SLURM, NFS, and the core headnode services, are
   active afterwards depending on the selected provisioner.
 - The Confluent path can build a diskless image, deploy a node, and reach a
@@ -162,6 +197,7 @@ testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env destroy
 - The compute VMs can PXE boot on the management network.
 - The compute nodes become reachable on the management network and appear in `sinfo`.
 - The default compute VM topology now matches the answerfile's SLURM declaration: `2` vCPUs presented as `1` socket, `2` cores, `1` thread.
+- The validated EL8 paths can run a non-root OpenHPC MPI hello-world smoke test on the deployed compute node.
 - The validated EL9 paths can run an OpenHPC MPI hello-world smoke test across one or two compute nodes.
 
 ## Current limits
@@ -175,6 +211,8 @@ testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env destroy
   external plus management networks. EL9 Confluent service-network coverage is
   now also validated, but the xCAT service-network and broader application
   network variants still need coverage.
+- The currently validated EL8 topology is a single xCAT-managed or
+  Confluent-managed compute node on external plus management networks.
 - The currently validated EL10 service-network topology adds a dedicated
   headnode `oc-svc0` interface and `[network_service]`, but the application
   network / OFED path is still outside the EL10 baseline.

@@ -1217,13 +1217,32 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
     static std::string resolveCodeReadyBuilderName(const OS& osinfo)
     {
         auto distro = osinfo.getDistro();
+        auto platform = osinfo.getPlatform();
         auto majorVersion = osinfo.getMajorVersion();
         std::string arch = opencattus::utils::enums::toString(osinfo.getArch());
 
         switch (distro) {
             case OS::Distro::AlmaLinux:
+                switch (platform) {
+                    case OS::Platform::el8:
+                        return "\"AlmaLinux 8 - PowerTools\"";
+                    case OS::Platform::el9:
+                    case OS::Platform::el10:
+                        return fmt::format("\"AlmaLinux {} - CRB\"",
+                            majorVersion);
+                    default:
+                        throw std::runtime_error("Unsupported platform");
+                }
             case OS::Distro::Rocky:
-                return "crb";
+                switch (platform) {
+                    case OS::Platform::el8:
+                        return "powertools";
+                    case OS::Platform::el9:
+                    case OS::Platform::el10:
+                        return "crb";
+                    default:
+                        throw std::runtime_error("Unsupported platform");
+                }
             case OS::Distro::RHEL:
                 return fmt::format("codeready-builder-for-rhel-{}-{}-rpms",
                     majorVersion, arch);
@@ -1250,8 +1269,7 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
         switch (distro) {
             case OS::Distro::AlmaLinux:
                 addToOutput("AlmaLinuxBaseOS");
-                addToOutput("\"AlmaLinux {releasever} - CRB\"",
-                    fmt::arg("releasever", majorVersion));
+                addToOutput("{}", resolveCodeReadyBuilderName(osinfo));
                 break;
             case OS::Distro::Rocky: {
                 addToOutput("appstream");
@@ -1280,6 +1298,8 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
         addToOutput("elrepo");
         switch (osinfo.getPlatform()) {
             case OS::Platform::el8:
+                addToOutput("beegfs");
+                break;
             case OS::Platform::el9:
                 addToOutput("beegfs");
                 break;
@@ -1365,6 +1385,25 @@ TEST_CASE("RepoNames")
             });
     }
 
+    // AlmaLinux EL8
+    {
+        const auto osinfo
+            = OS(models::OS::Distro::AlmaLinux, OS::Platform::el8, 10);
+        const auto conffiles = RepoConfigParser::load<ShouldUseVaultService>(
+            "repos/", osinfo, varsEl8);
+        const auto enabledRepos = enabler.resolveReposNames(osinfo, conffiles);
+        CHECK(enabledRepos
+            == std::vector<std::string> {
+                "AlmaLinuxBaseOS",
+                "\"AlmaLinux 8 - PowerTools\"",
+                "epel",
+                "OpenHPC",
+                "OpenHPC-Updates",
+                "rpmfusion",
+                "elrepo",
+                "beegfs",
+            });
+    }
     // Rocky EL10
     {
         const auto osinfo = OS(models::OS::Distro::Rocky, OS::Platform::el10, 1);
@@ -1403,7 +1442,7 @@ TEST_CASE("RepoNames")
             == std::vector<std::string> {
                 "appstream",
                 "baseos",
-                "crb",
+                "powertools",
                 "epel",
                 "OpenHPC",
                 "OpenHPC-Updates",
