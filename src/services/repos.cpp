@@ -1248,6 +1248,12 @@ public:
 template <typename MChecker = DefaultMirrorExistenceChecker,
     typename UChecker = DefaultMirrorExistenceChecker>
 struct RepoConfAdapter final {
+    static constexpr bool shouldForceUpstream(const RepoId& repoid)
+    {
+        return repoid.id == "epel" || repoid.id == "epel-debuginfo"
+            || repoid.id == "epel-source";
+    }
+
     static RPMRepository fromConfig(const RepoConfig& config)
     {
         const RepoId& repoid = config.repoId;
@@ -1258,7 +1264,7 @@ struct RepoConfAdapter final {
             .paths = config.upstream,
         };
         return RepoAssembler::assemble<MChecker, UChecker>(
-            repoid, mirror, upstream);
+            repoid, mirror, upstream, false, shouldForceUpstream(repoid));
     };
 
     static RPMRepositoryFile fromConfigs(const std::string& filename,
@@ -1298,7 +1304,10 @@ struct RepoConfAdapter final {
 TEST_CASE("RepoAdapter")
 {
 #ifdef BUILD_TESTING
-    Options opts {};
+    Options opts {
+        .enableMirrors = true,
+        .mirrorBaseUrl = "https://mirror.example.com",
+    };
     opencattus::services::initializeSingletonsOptions(
         std::make_unique<const Options>(opts));
     // Log::init(5);
@@ -1308,6 +1317,22 @@ TEST_CASE("RepoAdapter")
         TrueMirrorExistenceChecker>::fromConfFile(conffile,
         conffile.filesnames());
     CHECK(repofiles.size() == conffile.files().size());
+
+    const auto epelOpt = conffile.find("epel");
+    REQUIRE(epelOpt.has_value() == true);
+    const auto epelRepo = RepoConfAdapter<TrueMirrorExistenceChecker,
+        TrueMirrorExistenceChecker>::fromConfig(epelOpt.value());
+    REQUIRE(epelRepo.baseurl().has_value() == true);
+    CHECK(epelOpt->upstream.repo.starts_with(epelRepo.baseurl().value()));
+    REQUIRE(epelRepo.gpgkey().has_value() == true);
+    CHECK(epelRepo.gpgkey().value() == epelOpt->upstream.gpgkey.value());
+
+    const auto ohpcOpt = conffile.find("OpenHPC");
+    REQUIRE(ohpcOpt.has_value() == true);
+    const auto ohpcRepo = RepoConfAdapter<TrueMirrorExistenceChecker,
+        TrueMirrorExistenceChecker>::fromConfig(ohpcOpt.value());
+    REQUIRE(ohpcRepo.baseurl().has_value() == true);
+    CHECK(ohpcRepo.baseurl().value().starts_with(opts.mirrorBaseUrl));
 #endif
 };
 
