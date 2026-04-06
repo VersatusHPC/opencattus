@@ -68,6 +68,9 @@ them:
 - ``[ofed]`` to enable non-inbox OFED handling
 - ``[postfix]`` and related subsections for mail relay configuration
 
+For ``[ofed]``, use ``kind=doca`` for the NVIDIA DOCA path. The older
+``kind=mellanox`` spelling is still accepted as a legacy alias.
+
 Information
 ~~~~~~~~~~~
 

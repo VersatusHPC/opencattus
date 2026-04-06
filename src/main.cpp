@@ -66,9 +66,11 @@ int runTestCommand(const std::string& testCommand,
     } else if (testCommand == "confluent-install") {
         Confluent cfl;
         cfl.install();
-    } else if (testCommand == "install-mellanox-ofed") {
-        OFED(OFED::Kind::Mellanox, "latest").install();
-    } else if (testCommand == "image-install-mellanox-ofed") {
+    } else if (testCommand == "install-doca-ofed"
+        || testCommand == "install-mellanox-ofed") {
+        OFED(OFED::Kind::Doca, "latest").install();
+    } else if (testCommand == "image-install-doca-ofed"
+        || testCommand == "image-install-mellanox-ofed") {
         auto provisioner = std::make_unique<opencattus::services::XCAT>();
         provisioner->configureInfiniband();
     } else if (testCommand == "dump-headnode-os") {

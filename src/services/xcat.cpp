@@ -611,7 +611,7 @@ void XCAT::configureInfiniband()
 
                 break;
 
-            case OFED::Kind::Mellanox: {
+            case OFED::Kind::Doca: {
                 auto repoManager = opencattus::utils::singleton::repos();
                 auto runner = opencattus::utils::singleton::runner();
                 auto opts = opencattus::utils::singleton::options();

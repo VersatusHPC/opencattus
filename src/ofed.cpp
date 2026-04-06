@@ -34,7 +34,7 @@ bool OFED::installed() const
 
     auto runner = opencattus::Singleton<IRunner>::get();
     switch (m_kind) {
-        case OFED::Kind::Mellanox:
+        case OFED::Kind::Doca:
             return runner->executeCommand("rpm -q doca-ofed") == 0;
         case OFED::Kind::Inbox:
             return runner->executeCommand(
@@ -69,7 +69,7 @@ void OFED::install() const
                 ->groupInstall("Infiniband Support");
             break;
 
-        case OFED::Kind::Mellanox: {
+        case OFED::Kind::Doca: {
             auto runner
                 = opencattus::Singleton<opencattus::services::IRunner>::get();
             auto repoManager = opencattus::Singleton<

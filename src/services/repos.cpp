@@ -34,6 +34,7 @@
 #include <opencattus/services/osservice.h>
 #include <opencattus/services/repos.h>
 #include <opencattus/services/runner.h>
+#include <opencattus/utils/string.h>
 #include <opencattus/utils/singleton.h>
 
 #ifdef BUILD_TESTING
@@ -372,6 +373,7 @@ struct RepoConfigVars final {
     std::string xcatVersion; // major.minor, ex: 2.17 or latest
     std::string zabbixVersion; // major.minor, ex: 6.4
     std::string ofedVersion; // major.minor, ex: 6.4
+    std::string ofedRepoTarget; // repo OS target, ex: 9.6 or 10
 };
 
 // Represents a Mirror Repository
@@ -714,7 +716,8 @@ class RepoConfigParser final {
             fmt::arg("zabbixVersion", vars.zabbixVersion),
             fmt::arg("xcatVersion", vars.xcatVersion),
             fmt::arg("ohpcVersion", vars.ohpcVersion),
-            fmt::arg("ofedVersion", vars.ofedVersion));
+            fmt::arg("ofedVersion", vars.ofedVersion),
+            fmt::arg("ofedRepoTarget", vars.ofedRepoTarget));
     };
 
 public:
@@ -839,6 +842,7 @@ public:
             .xcatVersion = "latest",
             .zabbixVersion = "6.4",
             .ofedVersion = "latest-2.9-LTS",
+            .ofedRepoTarget = "9.6",
         })
     {
         RepoConfFile conffile;
@@ -902,6 +906,32 @@ std::string defaultOpenHPCVersionFor(const OS& osinfo)
     }
 }
 
+std::string defaultDOCARepoTargetFor(
+    const OS& osinfo, std::string_view ofedVersion)
+{
+    const auto normalized
+        = opencattus::utils::string::lower(std::string(ofedVersion));
+    const auto isLts = normalized.contains("lts");
+
+    switch (osinfo.getPlatform()) {
+        case OS::Platform::el8:
+            return isLts ? "8.10" : "8";
+        case OS::Platform::el9:
+            return isLts ? "9.6" : "9";
+        case OS::Platform::el10:
+            if (isLts) {
+                throw std::runtime_error(
+                    "DOCA LTS repo target is not defined for EL10; choose a "
+                    "supported major-track DOCA stream explicitly");
+            }
+            return "10";
+        default:
+            throw std::runtime_error(fmt::format(
+                "Unsupported DOCA repository baseline for EL{}",
+                osinfo.getMajorVersion()));
+    }
+}
+
 TEST_CASE("RepoConfigParser")
 {
 #ifdef BUILD_TESTING
@@ -927,12 +957,83 @@ TEST_CASE("RepoConfigParser")
             .releasever = "10",
             .xcatVersion = "latest",
             .zabbixVersion = "7.0",
-            .ofedVersion = "latest-2.9-LTS",
+            .ofedVersion = "latest",
+            .ofedRepoTarget = "10",
         });
     const auto ohpcOpt = el10Conf.find("OpenHPC");
     REQUIRE(ohpcOpt.has_value() == true);
     CHECK(ohpcOpt->upstream.repo
         == "https://repos.openhpc.community/OpenHPC/4/EL_10/");
+#endif
+}
+
+TEST_CASE("defaultDOCARepoTargetFor uses explicit EL baselines")
+{
+#ifdef BUILD_TESTING
+    CHECK(defaultDOCARepoTargetFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el8, 10),
+              "latest-2.9-LTS")
+        == "8.10");
+    CHECK(defaultDOCARepoTargetFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el9, 7),
+              "latest-2.9-LTS")
+        == "9.6");
+    CHECK(defaultDOCARepoTargetFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el9, 7), "latest")
+        == "9");
+    CHECK(defaultDOCARepoTargetFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el10, 1), "latest")
+        == "10");
+    CHECK_THROWS_AS(
+        defaultDOCARepoTargetFor(
+            OS(models::OS::Distro::Rocky, OS::Platform::el10, 1),
+            "latest-2.9-LTS"),
+        std::runtime_error);
+#endif
+}
+
+TEST_CASE("RepoConfigParser emits explicit DOCA repo targets")
+{
+#ifdef BUILD_TESTING
+    const auto el9Conf = RepoConfigParser::parseTest("repos/repos.conf",
+        RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.3.3",
+            .ohpcVersion = "3",
+            .osversion = "9.7",
+            .releasever = "9",
+            .xcatVersion = "latest",
+            .zabbixVersion = "6.4",
+            .ofedVersion = "latest-2.9-LTS",
+            .ofedRepoTarget = "9.6",
+        });
+    const auto el9Doca = el9Conf.find("doca");
+    REQUIRE(el9Doca.has_value() == true);
+    CHECK(el9Doca->upstream.repo
+        == "https://linux.mellanox.com/public/repo/doca/latest-2.9-LTS/"
+           "rhel9.6/x86_64/");
+    REQUIRE(el9Doca->upstream.gpgkey.has_value() == true);
+    CHECK(el9Doca->upstream.gpgkey.value()
+        == "https://linux.mellanox.com/public/repo/doca/latest-2.9-LTS/"
+           "rhel9.6/x86_64/GPG-KEY-Mellanox.pub");
+
+    const auto el10Conf = RepoConfigParser::parseTest("repos/repos.conf",
+        RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.4.0",
+            .ohpcVersion = "4",
+            .osversion = "10.1",
+            .releasever = "10",
+            .xcatVersion = "latest",
+            .zabbixVersion = "7.0",
+            .ofedVersion = "latest",
+            .ofedRepoTarget = "10",
+        });
+    const auto el10Doca = el10Conf.find("doca");
+    REQUIRE(el10Doca.has_value() == true);
+    CHECK(el10Doca->upstream.repo
+        == "https://linux.mellanox.com/public/repo/doca/latest/rhel10/"
+           "x86_64/");
 #endif
 }
 
@@ -1332,6 +1433,8 @@ TEST_CASE("RepoNames")
         .releasever = "9",
         .xcatVersion = "latest",
         .zabbixVersion = "6.4",
+        .ofedVersion = "latest-2.9-LTS",
+        .ofedRepoTarget = "9.6",
     };
     const RepoConfigVars& varsEl8 = RepoConfigVars {
         .arch = "x86_64",
@@ -1341,6 +1444,8 @@ TEST_CASE("RepoNames")
         .releasever = "8",
         .xcatVersion = "latest",
         .zabbixVersion = "6.4",
+        .ofedVersion = "latest-2.9-LTS",
+        .ofedRepoTarget = "8.10",
     };
 
     // RHEL
@@ -1414,6 +1519,8 @@ TEST_CASE("RepoNames")
             .releasever = "10",
             .xcatVersion = "latest",
             .zabbixVersion = "7.0",
+            .ofedVersion = "latest",
+            .ofedRepoTarget = "10",
         };
         const auto conffiles = RepoConfigParser::load<ShouldUseVaultService>(
             "repos/", osinfo, el10Vars);
@@ -1563,6 +1670,8 @@ TEST_CASE("RepoGenerator")
         .releasever = "9",
         .xcatVersion = "latest",
         .zabbixVersion = "6.4",
+        .ofedVersion = "latest-2.9-LTS",
+        .ofedRepoTarget = "9.6",
     };
     opencattus::Singleton<const Options>::init(
         std::make_unique<const Options>(opts));
@@ -1615,7 +1724,7 @@ TEST_SUITE("opencattus::services::repos [slow]")
         "almalinux.repo",
         "nvidia.repo",
         "influxdata.repo",
-        "mlx-doca.repo",
+        "mlnx-doca.repo",
         "rocky.repo",
         "rocky-addons.repo",
         "rocky-extras.repo",
@@ -1756,6 +1865,7 @@ void RepoManager::initializeDefaultRepositories()
         .xcatVersion = opts->xcatVersion,
         .zabbixVersion = opts->zabbixVersion,
         .ofedVersion = ofedVersion,
+        .ofedRepoTarget = defaultDOCARepoTargetFor(osinfo, ofedVersion),
     };
 
     switch (osinfo.getPackageType()) {

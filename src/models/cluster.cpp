@@ -28,6 +28,7 @@
 #include <opencattus/services/options.h>
 #include <opencattus/services/runner.h>
 #include <opencattus/services/xcat.h>
+#include <opencattus/utils/string.h>
 #include <opencattus/utils/singleton.h>
 
 #if __cpp_lib_starts_ends_with < 201711L
@@ -37,6 +38,29 @@
 using opencattus::services::DryRunner;
 using opencattus::services::IRunner;
 using opencattus::services::Runner;
+
+namespace {
+
+auto parseOFEDKind(std::string_view rawKind) -> std::optional<OFED::Kind>
+{
+    const auto normalized
+        = opencattus::utils::string::lower(std::string(rawKind));
+    if (normalized == "mellanox") {
+        return OFED::Kind::Doca;
+    }
+
+    return opencattus::utils::enums::ofStringOpt<OFED::Kind>(
+        rawKind, opencattus::utils::enums::Case::Insensitive);
+}
+
+auto supportedOFEDKinds() -> std::vector<std::string>
+{
+    auto values = opencattus::utils::enums::toStrings<OFED::Kind>();
+    values.emplace_back("mellanox (legacy alias for doca)");
+    return values;
+}
+
+}
 
 static constexpr std::unique_ptr<IRunner> makeRunner(const bool option)
 {
@@ -667,15 +691,13 @@ void Cluster::fillData(const AnswerFile& answerfil)
     if (answerfil.ofed.enabled) {
         // Install the cofigured OFED variant
         LOG_DEBUG("Loading OFED {}", answerfil.ofed.kind);
-        auto kind = utils::enums::ofStringOpt<OFED::Kind>(
-            answerfil.ofed.kind, utils::enums::Case::Insensitive);
+        auto kind = parseOFEDKind(answerfil.ofed.kind);
         if (!kind) {
             throw std::runtime_error(fmt::format(
                 "Invalid OFED kind, expected one of {}, found {}. Edit the "
                 "anwerfile {} [ofed] section and try again.",
                 opts->answerfile,
-                fmt::join(
-                    opencattus::utils::enums::toStrings<OFED::Kind>(), ", "),
+                fmt::join(supportedOFEDKinds(), ", "),
                 answerfil.ofed.kind));
         }
         setOFED(kind.value(), answerfil.ofed.version.value());

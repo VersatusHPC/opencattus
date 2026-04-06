@@ -128,6 +128,16 @@ void writeAnswerfile(const std::filesystem::path& path,
         << "node_ip=192.168.30.1\n"
         << "bmc_address=192.168.31.101\n";
 }
+
+void appendOFEDSection(const std::filesystem::path& path,
+    std::string_view kind, std::string_view version = "latest")
+{
+    std::ofstream out(path, std::ios::app);
+    REQUIRE(out.is_open());
+    out << "\n[ofed]\n"
+        << "kind=" << kind << '\n'
+        << "version=" << version << '\n';
+}
 }
 
 TEST_SUITE("opencattus::models::answerfile")
@@ -590,6 +600,74 @@ TEST_SUITE("opencattus::models::answerfile")
 
         std::filesystem::remove(sourcePath);
         std::filesystem::remove(outputPath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("fillData maps the legacy mellanox OFED answerfile kind to DOCA")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-ofed-legacy-alias");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-ofed-legacy-alias");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(
+            answerfilePath, diskImagePath, interfaces.front(), interfaces.front());
+        appendOFEDSection(answerfilePath, "mellanox", "latest-2.9-LTS");
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            Cluster cluster;
+            cluster.fillData(answerfile);
+
+            REQUIRE(cluster.getOFED().has_value());
+            CHECK(cluster.getOFED()->getKind() == OFED::Kind::Doca);
+            CHECK(cluster.getOFED()->getVersion() == "latest-2.9-LTS");
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while mapping legacy OFED alias");
+        }
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("fillData accepts the explicit doca OFED answerfile kind")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-ofed-doca");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-ofed-doca");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(
+            answerfilePath, diskImagePath, interfaces.front(), interfaces.front());
+        appendOFEDSection(answerfilePath, "doca", "latest");
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            Cluster cluster;
+            cluster.fillData(answerfile);
+
+            REQUIRE(cluster.getOFED().has_value());
+            CHECK(cluster.getOFED()->getKind() == OFED::Kind::Doca);
+            CHECK(cluster.getOFED()->getVersion() == "latest");
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while loading explicit DOCA OFED kind");
+        }
+
+        std::filesystem::remove(answerfilePath);
         std::filesystem::remove(diskImagePath);
     }
 }
