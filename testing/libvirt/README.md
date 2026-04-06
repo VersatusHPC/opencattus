@@ -50,11 +50,11 @@ Keep the cloud image and ISO under `/var/lib/libvirt/images`, ideally in a dedic
 1. Copy one of these environment templates, then set `BASE_IMAGE`,
    `CLUSTER_ISO`, and either `OPENCATTUS_BINARY` or `OPENCATTUS_SOURCE_DIR`:
 
+   - `testing/libvirt/config/rocky8-xcat.env.example`
+   - `testing/libvirt/config/rocky8-confluent.env.example`
    - `testing/libvirt/config/rocky9-xcat.env.example`
    - `testing/libvirt/config/rocky9-confluent.env.example`
    - `testing/libvirt/config/rocky9-confluent-service.env.example`
-   - `testing/libvirt/config/rocky8-xcat.env.example`
-   - `testing/libvirt/config/rocky8-confluent.env.example`
    - `testing/libvirt/config/rocky10-confluent.env.example`
    - `testing/libvirt/config/rocky10-confluent-service.env.example`
 2. The Rocky 10 wrapper defaults to a one-node, two-rank MPI smoke. If you

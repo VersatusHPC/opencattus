@@ -1404,7 +1404,6 @@ TEST_CASE("RepoNames")
                 "beegfs",
             });
     }
-
     // Rocky EL10
     {
         const auto osinfo = OS(models::OS::Distro::Rocky, OS::Platform::el10, 1);

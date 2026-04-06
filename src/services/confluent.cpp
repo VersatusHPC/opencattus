@@ -169,7 +169,6 @@ std::string buildNodeImageInstallCommand(const models::OS& os)
             std::unreachable();
     }
 }
-
 void addNode(const models::Node& node, std::string_view image)
 {
     services::runner::shell::cmd(buildNodeDefinitionScript(node, image));

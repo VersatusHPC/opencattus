@@ -30,7 +30,7 @@ Options:
   -h        Show this help text.
 
 The harness currently serves three purposes:
-  * the EL8 Confluent validation path
+  * the validated EL8 recovery paths for xCAT and Confluent
   * the validated EL9 recovery paths for xCAT and Confluent
   * the Rocky Linux 10 + Confluent bootstrap path for EL10 porting work
 EOF
@@ -101,7 +101,6 @@ default_headnode_service_mac() {
 is_distro_major_el8() {
     [[ "${DISTRO_MAJOR}" == "8" ]]
 }
-
 is_distro_major_el9() {
     [[ "${DISTRO_MAJOR}" == "9" ]]
 }
@@ -755,7 +754,6 @@ answerfile_template_path() {
         printf '%s' "${fallback_template}"
         return 0
     fi
-
     printf '%s' "${SCRIPT_DIR}/templates/rocky9-${PROVISIONER}.answerfile.ini"
 }
 
