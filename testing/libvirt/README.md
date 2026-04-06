@@ -112,7 +112,7 @@ The default config also assumes a single active lab on the host. If you want mul
 | Dedicated application network / OFED path | Not yet validated | Not yet validated | Still outside the current EL8 baseline. |
 | Multi-node cluster | Not yet validated | Not yet validated | EL8 recovery work has only validated the single-node lab paths so far. |
 | TUI-driven install | Not yet validated | Not yet validated | Recovery work has focused on unattended answerfile installs first. |
-| `--dump-answerfile` round-trip | Not yet validated | Not yet validated | Do not treat dumped answerfiles as an EL8 recovery baseline yet. |
+| `--dump-answerfile` round-trip | Validated | Validated | Rocky Linux 8.10 now completes a full dump-regenerate-install cycle in the EL8 libvirt/KVM lab for both xCAT and Confluent. |
 
 ## EL9 support matrix
 
@@ -209,9 +209,9 @@ testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env destroy
 - The default compute VM topology now matches the answerfile's SLURM declaration: `2` vCPUs presented as `1` socket, `2` cores, `1` thread.
 - The validated EL8 paths can run a non-root OpenHPC MPI hello-world smoke test on the deployed compute node.
 - The validated EL9 paths can run an OpenHPC MPI hello-world smoke test across one or two compute nodes.
-- The validated EL9 and EL10 Confluent paths can dump a fresh answerfile with
-  ``--dump-answerfile`` and complete the unattended install from that dumped
-  file.
+- The validated EL8 xCAT and Confluent paths and the validated EL9 and EL10
+  Confluent paths can dump a fresh answerfile with ``--dump-answerfile`` and
+  complete the unattended install from that dumped file.
 
 ## Current limits
 

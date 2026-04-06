@@ -126,11 +126,10 @@ Current EL8 Support Matrix
      - Not yet validated
      - Recovery work has focused on unattended answerfile installs first.
    * - ``--dump-answerfile`` round-trip
-     - Not yet validated
      - Validated
-     - Rocky Linux 9.7 + Confluent now completes a full dump-regenerate-install
-       cycle in the EL9 libvirt/KVM lab. EL9 xCAT and the EL8 paths are still
-       outside the validated round-trip baseline.
+     - Validated
+     - Rocky Linux 8.10 now completes a full dump-regenerate-install cycle in
+       the EL8 libvirt/KVM lab for both xCAT and Confluent.
 
 EL10 Bootstrap Matrix
 ~~~~~~~~~~~~~~~~~~~~~
@@ -234,8 +233,10 @@ Current EL9 Support Matrix
      - Recovery work has focused on unattended answerfile installs first.
    * - ``--dump-answerfile`` round-trip
      - Not yet validated
-     - Not yet validated
-     - Do not treat dumped answerfiles as a recovery baseline yet.
+     - Validated
+     - Rocky Linux 9.7 + Confluent now completes a full dump-regenerate-install
+       cycle in the EL9 libvirt/KVM lab. EL9 xCAT is still outside the
+       validated round-trip baseline.
 
 Answerfile Requirements
 ~~~~~~~~~~~~~~~~~~~~~~~

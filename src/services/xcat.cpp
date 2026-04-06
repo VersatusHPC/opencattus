@@ -160,6 +160,38 @@ std::filesystem::path getLocalOtherPkgRepoPath(const OS& nodeOS)
         / opencattus::utils::enums::toString(nodeOS.getArch());
 }
 
+std::vector<std::string> getKernelPackagesForGenimage(
+    const OS& nodeOS, std::string_view kernelVersion)
+{
+    switch (nodeOS.getPlatform()) {
+        case OS::Platform::el8:
+            return {
+                fmt::format("kernel-{}", kernelVersion),
+                fmt::format("kernel-devel-{}", kernelVersion),
+                fmt::format("kernel-core-{}", kernelVersion),
+                fmt::format("kernel-modules-{}", kernelVersion),
+            };
+        case OS::Platform::el9:
+            return {
+                fmt::format("kernel-{}", kernelVersion),
+                fmt::format("kernel-devel-{}", kernelVersion),
+                fmt::format("kernel-core-{}", kernelVersion),
+                fmt::format("kernel-modules-{}", kernelVersion),
+                fmt::format("kernel-modules-core-{}", kernelVersion),
+            };
+        case OS::Platform::el10:
+            return {
+                fmt::format("kernel-{}", kernelVersion),
+                fmt::format("kernel-devel-{}", kernelVersion),
+                fmt::format("kernel-core-{}", kernelVersion),
+                fmt::format("kernel-modules-{}", kernelVersion),
+                fmt::format("kernel-modules-core-{}", kernelVersion),
+            };
+        default:
+            std::unreachable();
+    }
+}
+
 std::string formatDHCPInterfaces(std::string_view interface)
 {
     // xCAT expects either a plain interface list or a real hostname selector
@@ -457,19 +489,14 @@ void XCAT::genimage() const
         return;
     }
     const auto& kernelVersion = kernelVersionOpt.value();
+    const auto& nodeOS = cluster()->getNodes().front().getOS();
 
     LOG_WARN(
         "Using kernel version from the answerfile: {} at [system].kernel in {}",
         kernelVersion, answerfile()->path());
     LOG_INFO("Customizing the kernel image");
-    const auto kernelPackages = fmt::format(
-        // Pay attention to the spaces, they are required
-        "kernel-{0} "
-        "kernel-devel-{0} "
-        "kernel-core-{0} "
-        "kernel-modules-{0} "
-        "kernel-modules-core-{0}",
-        kernelVersion);
+    const auto kernelPackages = fmt::format("{}",
+        fmt::join(getKernelPackagesForGenimage(nodeOS, kernelVersion), " "));
 
     shell::fmt("mkdir -p /install/kernels/{}", kernelVersion);
     shell::fmt("dnf download {} --destdir /install/kernels/{}", kernelPackages,
@@ -1196,6 +1223,37 @@ TEST_CASE("buildEnterpriseLinuxTemplateAliasCommands uses explicit EL releases")
         return command.contains("compute.rhels9.x86_64.pkglist")
             && command.contains("compute.rocky9.x86_64.pkglist");
     }));
+}
+
+TEST_CASE("getKernelPackagesForGenimage uses explicit EL releases")
+{
+    const auto el8Packages = getKernelPackagesForGenimage(
+        OS(OS::Distro::Rocky, OS::Platform::el8, 10), "4.18.0-553.el8_10");
+    const auto el9Packages = getKernelPackagesForGenimage(
+        OS(OS::Distro::Rocky, OS::Platform::el9, 7), "5.14.0-611.el9_7");
+    const auto el10Packages = getKernelPackagesForGenimage(
+        OS(OS::Distro::Rocky, OS::Platform::el10, 1), "6.12.0-124.el10_1");
+
+    CHECK(el8Packages == std::vector<std::string> {
+                             "kernel-4.18.0-553.el8_10",
+                             "kernel-devel-4.18.0-553.el8_10",
+                             "kernel-core-4.18.0-553.el8_10",
+                             "kernel-modules-4.18.0-553.el8_10",
+                         });
+    CHECK(el9Packages == std::vector<std::string> {
+                             "kernel-5.14.0-611.el9_7",
+                             "kernel-devel-5.14.0-611.el9_7",
+                             "kernel-core-5.14.0-611.el9_7",
+                             "kernel-modules-5.14.0-611.el9_7",
+                             "kernel-modules-core-5.14.0-611.el9_7",
+                         });
+    CHECK(el10Packages == std::vector<std::string> {
+                              "kernel-6.12.0-124.el10_1",
+                              "kernel-devel-6.12.0-124.el10_1",
+                              "kernel-core-6.12.0-124.el10_1",
+                              "kernel-modules-6.12.0-124.el10_1",
+                              "kernel-modules-core-6.12.0-124.el10_1",
+                          });
 }
 
 TEST_CASE("formatDHCPInterfaces uses a plain interface selector")
