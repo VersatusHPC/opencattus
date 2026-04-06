@@ -241,7 +241,7 @@ void OFED::install() const
     }
 }
 
-TEST_CASE("selectDocaInstallMode keeps LTS streams on the legacy path")
+TEST_CASE("selectDocaInstallMode keeps EL9 LTS streams on the legacy path")
 {
     const OFED ofed(OFED::Kind::Doca, "latest-2.9-LTS");
     const auto mode = selectDocaInstallMode(ofed,
@@ -252,7 +252,29 @@ TEST_CASE("selectDocaInstallMode keeps LTS streams on the legacy path")
     CHECK(mode == DocaInstallMode::LegacyKernelSupport);
 }
 
-TEST_CASE("selectDocaInstallMode uses DKMS for current DOCA streams")
+TEST_CASE("selectDocaInstallMode uses DKMS for current EL8 DOCA streams")
+{
+    const OFED ofed(OFED::Kind::Doca, "latest");
+    const auto mode = selectDocaInstallMode(ofed,
+        opencattus::models::OS(opencattus::models::OS::Distro::Rocky,
+            opencattus::models::OS::Platform::el8, 10),
+        std::nullopt, "4.18.0-553.75.1.el8_10.x86_64");
+
+    CHECK(mode == DocaInstallMode::RepoDkms);
+}
+
+TEST_CASE("selectDocaInstallMode uses DKMS for current EL9 DOCA streams")
+{
+    const OFED ofed(OFED::Kind::Doca, "latest");
+    const auto mode = selectDocaInstallMode(ofed,
+        opencattus::models::OS(opencattus::models::OS::Distro::Rocky,
+            opencattus::models::OS::Platform::el9, 7),
+        std::nullopt, "5.14.0-570.24.1.el9_6.x86_64");
+
+    CHECK(mode == DocaInstallMode::RepoDkms);
+}
+
+TEST_CASE("selectDocaInstallMode uses DKMS for current EL10 DOCA streams")
 {
     const OFED ofed(OFED::Kind::Doca, "latest");
     const auto mode = selectDocaInstallMode(ofed,

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdlib> // setenv / getenv
+#include <optional>
 #include <ranges>
 
 #include <filesystem>
@@ -190,6 +191,54 @@ std::vector<std::string> getKernelPackagesForGenimage(
         default:
             std::unreachable();
     }
+}
+
+struct XcatInfinibandPlan final {
+    std::vector<std::string> otherPackages;
+    std::optional<std::string> kernelVersion;
+    std::optional<std::string> localRepoName;
+};
+
+XcatInfinibandPlan buildXcatInfinibandPlan(const OFED& ofed, const OS& nodeOS,
+    std::optional<std::string_view> configuredKernel,
+    std::string_view runningKernel)
+{
+    switch (nodeOS.getPlatform()) {
+        case OS::Platform::el8:
+        case OS::Platform::el9:
+            break;
+        case OS::Platform::el10:
+            throw std::invalid_argument(
+                "xCAT compute-node OFED staging is unsupported on EL10");
+        default:
+            std::unreachable();
+    }
+
+    switch (ofed.getKind()) {
+        case OFED::Kind::Inbox:
+            return XcatInfinibandPlan {
+                .otherPackages = { "@infiniband" },
+                .kernelVersion = std::nullopt,
+                .localRepoName = std::nullopt,
+            };
+
+        case OFED::Kind::Doca: {
+            const auto kernelVersion = configuredKernel.has_value()
+                ? std::string(configuredKernel.value())
+                : std::string(runningKernel);
+            return XcatInfinibandPlan {
+                .otherPackages = { "mlnx-ofa_kernel", "doca-ofed" },
+                .kernelVersion = kernelVersion,
+                .localRepoName = fmt::format("doca-kernel-{}", kernelVersion),
+            };
+        }
+
+        case OFED::Kind::Oracle:
+            throw std::logic_error(
+                "Oracle RDMA release is not yet supported");
+    }
+
+    std::unreachable();
 }
 
 std::string formatDHCPInterfaces(std::string_view interface)
@@ -605,71 +654,55 @@ void XCAT::configureInfiniband()
         = opencattus::utils::singleton::cluster()->getNodes()[0].getOS();
     LOG_INFO("[xCAT] Configuring infiniband");
     if (const auto& ofed = cluster()->getOFED()) {
-        switch (ofed->getKind()) {
-            case OFED::Kind::Inbox:
-                m_stateless.otherpkgs.emplace_back("@infiniband");
-
-                break;
-
-            case OFED::Kind::Doca: {
-                auto repoManager = opencattus::utils::singleton::repos();
-                auto runner = opencattus::utils::singleton::runner();
-                auto opts = opencattus::utils::singleton::options();
-                auto osservice = opencattus::utils::singleton::osservice();
-
-                // Add the rpm to the image
-                m_stateless.otherpkgs.emplace_back("mlnx-ofa_kernel");
-                m_stateless.otherpkgs.emplace_back("doca-ofed");
-
-                // The kernel modules are build by the OFED.cpp module, see
-                // OFED.cpp
-                const auto kernelVersion = [&]() -> std::string {
-                    const auto kernelOpt = osinfo.getKernel();
-                    if (kernelOpt) {
-                        return std::string(kernelOpt.value());
-                    }
-                    const auto kernel = osservice->getKernelRunning();
-                    LOG_WARN("Kernel version ommited in configuration, using "
-                             "the running kernel {}",
-                        kernel);
-                    return kernel;
-                }();
-                osinfo.getKernel().value_or(osservice->getKernelInstalled());
-                ;
-                // Configure Apache to serve the RPM repository
-                const auto repoName
-                    = fmt::format("doca-kernel-{}", kernelVersion);
-                const auto localRepo = functions::createHTTPRepo(repoName);
-
-                // Create the RPM repository
-                runner->checkCommand(
-                    fmt::format("bash -c \"cp -v "
-                                "/usr/share/doca-host-*/Modules/{}/*.rpm {}\"",
-                        kernelVersion, localRepo.directory.string()));
-                runner->checkCommand(
-                    fmt::format("createrepo {}", localRepo.directory.string()));
-
-                // dryRun does not initialize the repositories
-                if (!opts->dryRun) {
-                    auto docaUrl = repoManager->repo("doca")->uri().value();
-                    runner->checkCommand(fmt::format(
-                        "bash -c \"chdef -t osimage {} --plus otherpkgdir={}\"",
-                        m_stateless.osimage, docaUrl));
-                }
-
-                // Add the local repository to the stateless image
-                runner->checkCommand(fmt::format(
-                    "bash -c \"chdef -t osimage {} --plus otherpkgdir={}\"",
-                    m_stateless.osimage, localRepo.url));
-
-            } break;
-
-            case OFED::Kind::Oracle:
-                throw std::logic_error(
-                    "Oracle RDMA release is not yet supported");
-
-                break;
+        auto runner = opencattus::utils::singleton::runner();
+        auto osservice = opencattus::utils::singleton::osservice();
+        const auto configuredKernel = osinfo.getKernel();
+        const auto runningKernel = osservice->getKernelRunning();
+        if (!configuredKernel.has_value()) {
+            LOG_WARN("Kernel version ommited in configuration, using "
+                     "the running kernel {}",
+                runningKernel);
         }
+        const auto plan = buildXcatInfinibandPlan(*ofed, osinfo,
+            configuredKernel
+                ? std::optional<std::string_view>(configuredKernel.value())
+                : std::nullopt,
+            runningKernel);
+
+        for (const auto& package : plan.otherPackages) {
+            m_stateless.otherpkgs.emplace_back(package);
+        }
+
+        if (!plan.localRepoName.has_value()) {
+            return;
+        }
+
+        auto repoManager = opencattus::utils::singleton::repos();
+        auto opts = opencattus::utils::singleton::options();
+
+        // Configure Apache to serve the staged DOCA kernel repository.
+        const auto localRepo = functions::createHTTPRepo(plan.localRepoName.value());
+
+        // Create the RPM repository.
+        runner->checkCommand(
+            fmt::format("bash -c \"cp -v "
+                        "/usr/share/doca-host-*/Modules/{}/*.rpm {}\"",
+                plan.kernelVersion.value(), localRepo.directory.string()));
+        runner->checkCommand(
+            fmt::format("createrepo {}", localRepo.directory.string()));
+
+        // dryRun does not initialize the repositories
+        if (!opts->dryRun) {
+            auto docaUrl = repoManager->repo("doca")->uri().value();
+            runner->checkCommand(fmt::format(
+                "bash -c \"chdef -t osimage {} --plus otherpkgdir={}\"",
+                m_stateless.osimage, docaUrl));
+        }
+
+        // Add the local repository to the stateless image
+        runner->checkCommand(fmt::format(
+            "bash -c \"chdef -t osimage {} --plus otherpkgdir={}\"",
+            m_stateless.osimage, localRepo.url));
     }
 }
 
@@ -1293,6 +1326,66 @@ TEST_CASE("getLocalOtherPkgRepoPath matches xCAT local repo layout")
     const OS nodeOS(OS::Distro::Rocky, OS::Platform::el9, 7, OS::Arch::x86_64);
     CHECK(getLocalOtherPkgRepoPath(nodeOS)
         == "/install/post/otherpkgs/rocky9.7/x86_64");
+}
+
+TEST_CASE("buildXcatInfinibandPlan uses inbox packages for EL8 compute nodes")
+{
+    const auto plan = buildXcatInfinibandPlan(
+        OFED(OFED::Kind::Inbox, ""),
+        OS(OS::Distro::Rocky, OS::Platform::el8, 10, OS::Arch::x86_64),
+        std::nullopt, "4.18.0-553.75.1.el8_10.x86_64");
+    const std::vector<std::string> expectedPackages { "@infiniband" };
+
+    CHECK(plan.otherPackages == expectedPackages);
+    CHECK_FALSE(plan.kernelVersion.has_value());
+    CHECK_FALSE(plan.localRepoName.has_value());
+}
+
+TEST_CASE("buildXcatInfinibandPlan stages DOCA packages for EL8 compute nodes")
+{
+    const auto plan = buildXcatInfinibandPlan(
+        OFED(OFED::Kind::Doca, "latest-2.9-LTS"),
+        OS(OS::Distro::Rocky, OS::Platform::el8, 10, OS::Arch::x86_64),
+        std::nullopt, "4.18.0-553.75.1.el8_10.x86_64");
+    const std::vector<std::string> expectedPackages {
+        "mlnx-ofa_kernel",
+        "doca-ofed",
+    };
+
+    CHECK(plan.otherPackages == expectedPackages);
+    REQUIRE(plan.kernelVersion.has_value());
+    CHECK(plan.kernelVersion.value() == "4.18.0-553.75.1.el8_10.x86_64");
+    REQUIRE(plan.localRepoName.has_value());
+    CHECK(plan.localRepoName.value()
+        == "doca-kernel-4.18.0-553.75.1.el8_10.x86_64");
+}
+
+TEST_CASE("buildXcatInfinibandPlan keeps explicit EL9 kernel pinning")
+{
+    const auto plan = buildXcatInfinibandPlan(
+        OFED(OFED::Kind::Doca, "latest"),
+        OS(OS::Distro::Rocky, OS::Platform::el9, 7, OS::Arch::x86_64),
+        std::optional<std::string_view>("5.14.0-570.28.1.el9_6.x86_64"),
+        "5.14.0-570.24.1.el9_6.x86_64");
+
+    REQUIRE(plan.kernelVersion.has_value());
+    CHECK(plan.kernelVersion.value() == "5.14.0-570.28.1.el9_6.x86_64");
+    REQUIRE(plan.localRepoName.has_value());
+    CHECK(plan.localRepoName.value()
+        == "doca-kernel-5.14.0-570.28.1.el9_6.x86_64");
+}
+
+TEST_CASE("buildXcatInfinibandPlan rejects EL10 compute-node staging")
+{
+    CHECK_THROWS_WITH_AS(
+        [&] {
+            buildXcatInfinibandPlan(
+                OFED(OFED::Kind::Doca, "latest"),
+                OS(OS::Distro::Rocky, OS::Platform::el10, 1,
+                    OS::Arch::x86_64),
+                std::nullopt, "6.12.0-65.el10_1.x86_64");
+        }(),
+        doctest::Contains("EL10"), std::invalid_argument);
 }
 
 TEST_CASE("shellSingleQuote escapes single quotes")
