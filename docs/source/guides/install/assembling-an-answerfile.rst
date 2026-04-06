@@ -70,6 +70,10 @@ them:
 
 For ``[ofed]``, use ``kind=doca`` for the NVIDIA DOCA path. The older
 ``kind=mellanox`` spelling is still accepted as a legacy alias.
+Set ``version`` to the NVIDIA repo stream you want to consume. For example,
+``latest-2.9-LTS`` keeps the current LTS stream, while ``latest`` tracks the
+current major-version repo. OpenCATTUS keeps those behaviors explicit instead
+of assuming every Enterprise Linux release should use the same DOCA layout.
 
 Information
 ~~~~~~~~~~~

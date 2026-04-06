@@ -14,7 +14,90 @@
 #include <opencattus/utils/singleton.h>
 #include <utility>
 
+#ifdef BUILD_TESTING
+#include <doctest/doctest.h>
+#else
+#define DOCTEST_CONFIG_DISABLE
+#include <doctest/doctest.h>
+#endif
+
 using opencattus::functions::IRunner;
+
+namespace {
+
+enum class DocaInstallMode { LegacyKernelSupport, RepoDkms };
+
+auto normalizeOFEDVersion(std::string_view version) -> std::string
+{
+    return opencattus::utils::string::lower(std::string(version));
+}
+
+auto isDocaLtsStream(std::string_view version) -> bool
+{
+    return normalizeOFEDVersion(version).contains("lts");
+}
+
+auto requestedKernelForOFED() -> std::optional<std::string>
+{
+    return opencattus::utils::singleton::answerfile()->system.kernel;
+}
+
+auto selectDocaInstallMode(const OFED& ofed,
+    const opencattus::models::OS& osinfo,
+    std::optional<std::string_view> requestedKernel,
+    std::string_view runningKernel) -> DocaInstallMode
+{
+    switch (osinfo.getPlatform()) {
+        case opencattus::models::OS::Platform::el8:
+        case opencattus::models::OS::Platform::el9:
+        case opencattus::models::OS::Platform::el10:
+            break;
+        default:
+            std::unreachable();
+    }
+
+    if (requestedKernel.has_value() && requestedKernel.value() != runningKernel)
+    {
+        return DocaInstallMode::LegacyKernelSupport;
+    }
+
+    if (isDocaLtsStream(ofed.getVersion())) {
+        return DocaInstallMode::LegacyKernelSupport;
+    }
+
+    return DocaInstallMode::RepoDkms;
+}
+
+auto buildDocaLegacyPrereqCommand(
+    const std::optional<std::string_view> kernelVersion) -> std::string
+{
+    if (kernelVersion.has_value()) {
+        return fmt::format(
+            "dnf -y --nogpg install kernel-{kernelVersion} "
+            "kernel-devel-{kernelVersion} kernel-headers-{kernelVersion} "
+            "doca-extra tar",
+            fmt::arg("kernelVersion", kernelVersion.value()));
+    }
+
+    return "dnf -y --nogpg install kernel kernel-devel kernel-headers "
+           "doca-extra tar";
+}
+
+auto buildDocaDkmsPrereqCommand(
+    const std::optional<std::string_view> kernelVersion) -> std::string
+{
+    if (kernelVersion.has_value()) {
+        return fmt::format(
+            "dnf -y --nogpg install dkms gcc make perl mokutil "
+            "kernel-devel-{kernelVersion} kernel-headers-{kernelVersion}",
+            fmt::arg("kernelVersion", kernelVersion.value()));
+    }
+
+    return "dnf -y --nogpg install dkms gcc make perl mokutil "
+           "kernel-devel-$(uname -r) kernel-headers-$(uname -r)";
+}
+
+} // namespace
 
 void OFED::setKind(Kind kind) { m_kind = kind; }
 
@@ -74,54 +157,71 @@ void OFED::install() const
                 = opencattus::Singleton<opencattus::services::IRunner>::get();
             auto repoManager = opencattus::Singleton<
                 opencattus::services::repos::RepoManager>::get();
-            const auto kernelVersion
-                = opencattus::utils::singleton::answerfile()->system.kernel;
+            auto osservice
+                = opencattus::Singleton<opencattus::services::IOSService>::get();
+            const auto requestedKernel = requestedKernelForOFED();
+            const auto runningKernel = osservice->getKernelRunning();
+            const auto installMode
+                = selectDocaInstallMode(*this,
+                    opencattus::utils::singleton::os(),
+                    requestedKernel ? std::optional<std::string_view>(
+                                          requestedKernel.value())
+                                    : std::nullopt,
+                    runningKernel);
 
             repoManager->enable("doca");
-            // Install the required packages
             runner->checkCommand("dnf makecache --repo=doca");
-            if (kernelVersion) {
-                LOG_WARN("Building OFED with kernel version from the "
-                         "answerfile {} @ [system].kernel: {}",
-                    opencattus::utils::singleton::answerfile()->path(),
-                    kernelVersion.value());
-                runner->checkCommand(
-                    fmt::format("dnf -y install --nogpg kernel-{kernelVersion} "
-                                "kernel-devel-{kernelVersion} doca-extra",
-                        fmt::arg("kernelVersion", kernelVersion.value())));
-            } else {
-                runner->checkCommand(
-                    "dnf -y --nogpg install kernel kernel-devel doca-extra");
-            }
 
-            LOG_INFO("Compiling OFED DOCA drivers, this may take a while, use "
-                     "`--skip compile-doca-driver` to skip");
-            if (kernelVersion) {
-                if (!opts->shouldSkip("compile-doca-driver")) {
-                    runner->checkCommand(fmt::format(
-                        "/opt/mellanox/doca/tools/doca-kernel-support -k {}",
-                        kernelVersion.value()));
+            if (installMode == DocaInstallMode::LegacyKernelSupport) {
+                if (requestedKernel) {
+                    LOG_WARN("Building DOCA OFED with kernel version from the "
+                             "answerfile {} @ [system].kernel: {}",
+                        opencattus::utils::singleton::answerfile()->path(),
+                        requestedKernel.value());
+                } else {
+                    LOG_WARN("Using the legacy DOCA kernel-support path for "
+                             "DOCA stream {} and running kernel {}",
+                        getVersion(), runningKernel);
                 }
+
+                runner->checkCommand(buildDocaLegacyPrereqCommand(
+                    requestedKernel ? std::optional<std::string_view>(
+                                          requestedKernel.value())
+                                    : std::nullopt));
+
+                LOG_INFO("Compiling DOCA kernel support, this may take a "
+                         "while, use `--skip compile-doca-driver` to skip");
+                if (!opts->shouldSkip("compile-doca-driver")) {
+                    if (requestedKernel) {
+                        runner->checkCommand(fmt::format(
+                            "/opt/mellanox/doca/tools/doca-kernel-support -k "
+                            "{}",
+                            requestedKernel.value()));
+                    } else {
+                        runner->checkCommand(
+                            "/opt/mellanox/doca/tools/doca-kernel-support");
+                    }
+                }
+
+                auto rpm = runner->checkOutput(
+                    "bash -c \"find /tmp/DOCA*/ -name '*.rpm' -printf '%T@ "
+                    "%p\n' | sort -nk1 | tail -1 | awk '{print $2}'\"");
+                assert(!rpm.empty());
+                runner->executeCommand(fmt::format("dnf install -y {}", rpm[0]));
             } else {
-                runner->checkCommand(fmt::format(
-                    "/opt/mellanox/doca/tools/doca-kernel-support"));
+                LOG_INFO("Using the DOCA repo + DKMS installation path for "
+                         "stream {} and running kernel {}",
+                    getVersion(), runningKernel);
+                repoManager->enable("epel");
+                runner->checkCommand("dnf makecache --repo=epel");
+                runner->checkCommand(buildDocaDkmsPrereqCommand(
+                    std::optional<std::string_view>(runningKernel)));
             }
-
-            // Get the last rpm in /tmp/DOCA*/ folder
-            // On dry-run the below command will not run so we
-            // cannot get the output of it
-            auto rpm = runner->checkOutput(
-                "bash -c \"find /tmp/DOCA*/ -name '*.rpm' -printf '%T@ %p\n' | "
-                "sort -nk1 | tail -1 | awk '{print $2}'\"");
-            assert(rpm.size() > 0); // at last one line
-
-            // Install the (last) generated rpm
-            runner->executeCommand(fmt::format("dnf install -y {}", rpm[0]));
 
             runner->checkCommand("dnf makecache --repo=doca*");
             runner->checkCommand(
                 "dnf install --nogpg -y doca-ofed mlnx-fw-updater");
-            runner->executeCommand("systemctl restart openibd");
+            runner->executeCommand("systemctl restart openibd || true");
             // runner->executeCommand("systemctl enable --now opensmd");
         } break;
 
@@ -130,4 +230,56 @@ void OFED::install() const
 
             break;
     }
+}
+
+TEST_CASE("selectDocaInstallMode keeps LTS streams on the legacy path")
+{
+    const OFED ofed(OFED::Kind::Doca, "latest-2.9-LTS");
+    const auto mode = selectDocaInstallMode(ofed,
+        opencattus::models::OS(opencattus::models::OS::Distro::Rocky,
+            opencattus::models::OS::Platform::el9, 7),
+        std::nullopt, "5.14.0-570.24.1.el9_6.x86_64");
+
+    CHECK(mode == DocaInstallMode::LegacyKernelSupport);
+}
+
+TEST_CASE("selectDocaInstallMode uses DKMS for current DOCA streams")
+{
+    const OFED ofed(OFED::Kind::Doca, "latest");
+    const auto mode = selectDocaInstallMode(ofed,
+        opencattus::models::OS(opencattus::models::OS::Distro::Rocky,
+            opencattus::models::OS::Platform::el10, 1),
+        std::nullopt, "6.12.0-65.el10_1.x86_64");
+
+    CHECK(mode == DocaInstallMode::RepoDkms);
+}
+
+TEST_CASE("selectDocaInstallMode keeps pinned kernels on the legacy path")
+{
+    const OFED ofed(OFED::Kind::Doca, "latest");
+    const auto mode = selectDocaInstallMode(ofed,
+        opencattus::models::OS(opencattus::models::OS::Distro::Rocky,
+            opencattus::models::OS::Platform::el9, 7),
+        std::optional<std::string_view>("5.14.0-570.28.1.el9_6.x86_64"),
+        "5.14.0-570.24.1.el9_6.x86_64");
+
+    CHECK(mode == DocaInstallMode::LegacyKernelSupport);
+}
+
+TEST_CASE("buildDocaDkmsPrereqCommand uses the running kernel by default")
+{
+    CHECK(buildDocaDkmsPrereqCommand(std::nullopt)
+        == "dnf -y --nogpg install dkms gcc make perl mokutil "
+           "kernel-devel-$(uname -r) kernel-headers-$(uname -r)");
+}
+
+TEST_CASE("buildDocaLegacyPrereqCommand keeps explicit kernel pinning")
+{
+    CHECK(buildDocaLegacyPrereqCommand(
+              std::optional<std::string_view>("5.14.0-570.28.1.el9_6.x86_64"))
+        == "dnf -y --nogpg install "
+           "kernel-5.14.0-570.28.1.el9_6.x86_64 "
+           "kernel-devel-5.14.0-570.28.1.el9_6.x86_64 "
+           "kernel-headers-5.14.0-570.28.1.el9_6.x86_64 "
+           "doca-extra tar");
 }
