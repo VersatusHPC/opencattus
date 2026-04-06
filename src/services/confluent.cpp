@@ -1,4 +1,5 @@
 #include <fmt/core.h>
+#include <opencattus/ofed.h>
 #include <opencattus/functions.h>
 #include <opencattus/models/cpu.h>
 #include <opencattus/models/node.h>
@@ -8,6 +9,8 @@
 #include <opencattus/utils/network.h>
 #include <opencattus/utils/optional.h>
 #include <opencattus/utils/singleton.h>
+#include <optional>
+#include <stdexcept>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -169,6 +172,48 @@ std::string buildNodeImageInstallCommand(const models::OS& os)
             std::unreachable();
     }
 }
+
+std::string buildNodeImageOFEDCommands(bool applicationNetworkConfigured,
+    const std::optional<OFED>& ofed)
+{
+    if (!applicationNetworkConfigured || !ofed.has_value()) {
+        return "";
+    }
+
+    switch (ofed->getKind()) {
+        case OFED::Kind::Inbox:
+            return R"(
+imgutil exec $scratchdir <<EOF
+dnf group install -y --nogpg "Infiniband Support"
+EOF
+)";
+
+        case OFED::Kind::Doca:
+            return R"(
+if ! test -f /etc/yum.repos.d/mlnx-doca.repo; then
+    echo "Expected /etc/yum.repos.d/mlnx-doca.repo for DOCA node image staging" >&2
+    exit 1
+fi
+if ! test -f /etc/yum.repos.d/doca-kernel-$(uname -r).repo; then
+    echo "Expected /etc/yum.repos.d/doca-kernel-$(uname -r).repo for DOCA node image staging" >&2
+    exit 1
+fi
+export doca_repo_folder=$(perl -lane 'print $1 if /baseurl=file:\/\/(.*)/' /etc/yum.repos.d/doca-kernel-$(uname -r).repo)
+\cp -va /etc/yum.repos.d/mlnx-doca.repo $scratchdir/etc/yum.repos.d/
+\cp -va /etc/yum.repos.d/doca-kernel-$(uname -r).repo $scratchdir/etc/yum.repos.d/
+imgutil exec -v $doca_repo_folder:$doca_repo_folder $scratchdir <<EOF
+dnf install --nogpg -y doca-ofed mlnx-ofa_kernel
+EOF
+)";
+
+        case OFED::Kind::Oracle:
+            throw std::logic_error(
+                "Oracle RDMA is not yet supported in the Confluent node image path");
+    }
+
+    std::unreachable();
+}
+
 void addNode(const models::Node& node, std::string_view image)
 {
     services::runner::shell::cmd(buildNodeDefinitionScript(node, image));
@@ -298,15 +343,7 @@ systemctl enable munge
 systemctl enable slurmd
 EOF
 
-if {ofedEnabled}; then
-    # Grabs the folder from the baseurl= line of doca-kernel-$(uname -r).repo
-    export doca_repo_folder=$(cat /etc/yum.repos.d/doca-kernel-$(uname -r).repo | perl -lane 'print $1 if /baseurl=file:\/\/(.*)/')
-    \cp -va /etc/yum.repos.d/mlnx-doca.repo $scratchdir/etc/yum.repos.d/
-    \cp -va /etc/yum.repos.d/doca-kernel-$(uname -r).repo $scratchdir/etc/yum.repos.d/
-    imgutil exec -v $doca_repo_folder:$doca_repo_folder $scratchdir <<EOF
-        dnf install --nogpg -y doca-ofed mlnx-ofa_kernel
-EOF
-fi
+{nodeImageOFEDCommands}
 
 # Spack node configuration
 imgutil exec $scratchdir <<EOF
@@ -358,7 +395,10 @@ rm -rf /tmp/scratchdir || :
                 utils::optional::unwrap(answerfile()->management.con_interface,
                     "Internal interface not found in [network_management]"))),
         fmt::arg("image", image),
-        fmt::arg("ofedEnabled", answerfile()->ofed.enabled));
+        fmt::arg("nodeImageOFEDCommands",
+            buildNodeImageOFEDCommands(
+                answerfile()->application.con_interface.has_value(),
+                cluster()->getOFED())));
 
     addNodes(image);
 
@@ -538,4 +578,35 @@ TEST_CASE("buildNodeImageInstallCommand keeps EL8, EL9, and EL10 explicit")
               OS(OS::Distro::Rocky, OS::Platform::el10, 1))
         == "dnf install -y --nogpg "
            "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs");
+}
+
+TEST_CASE("buildNodeImageOFEDCommands skips OFED runtime staging without an application network")
+{
+    CHECK(buildNodeImageOFEDCommands(false,
+              std::optional<OFED>(OFED(OFED::Kind::Doca, "latest")))
+        .empty());
+    CHECK(buildNodeImageOFEDCommands(false,
+              std::optional<OFED>(OFED(OFED::Kind::Inbox, "")))
+        .empty());
+}
+
+TEST_CASE("buildNodeImageOFEDCommands uses inbox packages for inbox OFED")
+{
+    const auto script = buildNodeImageOFEDCommands(true,
+        std::optional<OFED>(OFED(OFED::Kind::Inbox, "")));
+
+    CHECK(script.contains("dnf group install -y --nogpg \"Infiniband Support\""));
+    CHECK_FALSE(script.contains("mlnx-doca.repo"));
+    CHECK_FALSE(script.contains("doca-ofed"));
+}
+
+TEST_CASE("buildNodeImageOFEDCommands stages DOCA repos for DOCA OFED")
+{
+    const auto script = buildNodeImageOFEDCommands(true,
+        std::optional<OFED>(OFED(OFED::Kind::Doca, "latest")));
+
+    CHECK(script.contains("/etc/yum.repos.d/mlnx-doca.repo"));
+    CHECK(script.contains("/etc/yum.repos.d/doca-kernel-$(uname -r).repo"));
+    CHECK(script.contains("dnf install --nogpg -y doca-ofed mlnx-ofa_kernel"));
+    CHECK_FALSE(script.contains("Infiniband Support"));
 }
