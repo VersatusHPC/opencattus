@@ -291,7 +291,9 @@ load_defaults() {
     INSTALL_TIMEOUT_SECONDS=${INSTALL_TIMEOUT_SECONDS:-10800}
     VERIFY_TIMEOUT_SECONDS=${VERIFY_TIMEOUT_SECONDS:-1800}
 
+    ANSWERFILE_ROUNDTRIP=${ANSWERFILE_ROUNDTRIP:-0}
     ANSWERFILE_PATH=${ANSWERFILE_PATH:-${LAB_DIR}/answerfile.ini}
+    ROUNDTRIP_ANSWERFILE_PATH=${ROUNDTRIP_ANSWERFILE_PATH:-${LAB_DIR}/answerfile.roundtrip.ini}
     REMOTE_BINARY_PATH=${REMOTE_BINARY_PATH:-${HEADNODE_DATA_DIR}/opencattus}
     REMOTE_BUILD_PRESET=${REMOTE_BUILD_PRESET:-$(default_remote_build_preset)}
     REMOTE_BUILD_PRESET_BUILD=${REMOTE_BUILD_PRESET_BUILD:-$(default_remote_build_preset_build)}
@@ -305,6 +307,7 @@ load_defaults() {
     REMOTE_BUILD_BINARY=${REMOTE_BUILD_BINARY:-${REMOTE_SOURCE_DIR}/out/build/${REMOTE_BUILD_PRESET}/src/opencattus}
     REMOTE_ISO_PATH=${REMOTE_ISO_PATH:-${HEADNODE_DATA_DIR}/cluster.iso}
     REMOTE_ANSWERFILE_PATH=${REMOTE_ANSWERFILE_PATH:-${HEADNODE_DATA_DIR}/answerfile.ini}
+    REMOTE_ROUNDTRIP_ANSWERFILE_PATH=${REMOTE_ROUNDTRIP_ANSWERFILE_PATH:-${HEADNODE_DATA_DIR}/answerfile.roundtrip.ini}
     REMOTE_CHECK_HEADNODE=${REMOTE_CHECK_HEADNODE:-${HEADNODE_DATA_DIR}/check-headnode.sh}
     REMOTE_CHECK_CLUSTER=${REMOTE_CHECK_CLUSTER:-${HEADNODE_DATA_DIR}/check-cluster.sh}
     REMOTE_CHECK_MPI=${REMOTE_CHECK_MPI:-${HEADNODE_DATA_DIR}/check-mpi.sh}
@@ -676,6 +679,8 @@ check_config() {
         "Unsupported provisioner ${PROVISIONER}; expected xcat or confluent"
     [[ "${SERVICE_NETWORK_ENABLED}" == "0" || "${SERVICE_NETWORK_ENABLED}" == "1" ]] || die \
         "SERVICE_NETWORK_ENABLED must be 0 or 1"
+    [[ "${ANSWERFILE_ROUNDTRIP}" == "0" || "${ANSWERFILE_ROUNDTRIP}" == "1" ]] || die \
+        "ANSWERFILE_ROUNDTRIP must be 0 or 1"
     if is_distro_major_el8; then
         [[ "${DISTRO_ID}" == "rocky" ]] || die \
             "The current EL8 validation lab only targets Rocky Linux 8"
@@ -1169,6 +1174,10 @@ scp_to_remote() {
     scp "${SSH_OPTIONS[@]}" "$1" "$(remote_host):$2"
 }
 
+copy_from_remote() {
+    scp "${SSH_OPTIONS[@]}" "$(remote_host):$1" "$2"
+}
+
 probe_remote_binary() {
     local probe_log="${LOG_DIR}/binary-probe.log"
 
@@ -1285,13 +1294,33 @@ copy_lab_assets() {
         sudo rsync -a --delete '${REMOTE_REPO_CONFIG_STAGING}/' '${REMOTE_INSTALL_REPO_DIR}/'"
 }
 
+active_remote_answerfile_path() {
+    if [[ "${ANSWERFILE_ROUNDTRIP}" == "1" ]]; then
+        printf '%s' "${REMOTE_ROUNDTRIP_ANSWERFILE_PATH}"
+    else
+        printf '%s' "${REMOTE_ANSWERFILE_PATH}"
+    fi
+}
+
+prepare_roundtrip_answerfile() {
+    [[ "${ANSWERFILE_ROUNDTRIP}" == "1" ]] || return 0
+
+    log "Dumping a round-trip answerfile from the rendered lab input"
+    ssh_remote "rm -f '${REMOTE_ROUNDTRIP_ANSWERFILE_PATH}'"
+    ssh_remote "sudo '${REMOTE_BINARY_PATH}' -l 6 -a '${REMOTE_ANSWERFILE_PATH}' --dump-answerfile '${REMOTE_ROUNDTRIP_ANSWERFILE_PATH}'"
+    ssh_remote "test -s '${REMOTE_ROUNDTRIP_ANSWERFILE_PATH}'"
+    ssh_remote "sudo chown '${SSH_USER}:${SSH_USER}' '${REMOTE_ROUNDTRIP_ANSWERFILE_PATH}'"
+    mkdir -p "$(dirname -- "${ROUNDTRIP_ANSWERFILE_PATH}")"
+    copy_from_remote "${REMOTE_ROUNDTRIP_ANSWERFILE_PATH}" "${ROUNDTRIP_ANSWERFILE_PATH}"
+}
+
 run_installer() {
     local install_log="${LOG_DIR}/install.log"
     local remote_cmd
 
     remote_cmd=$(cat <<EOF
 cd '${HEADNODE_DATA_DIR}' &&
-sudo '${REMOTE_BINARY_PATH}' -l 6 -a '${REMOTE_ANSWERFILE_PATH}' -u
+sudo '${REMOTE_BINARY_PATH}' -l 6 -a '$(active_remote_answerfile_path)' -u
 EOF
 )
 
@@ -1407,6 +1436,8 @@ collect_logs() {
         ssh_remote "sudo sinfo -N -h -o '%N %T'" >"${headnode_log_dir}/sinfo.txt" || true
         ssh_remote "sudo showmount -e localhost" >"${headnode_log_dir}/showmount.txt" || true
         ssh_remote "test -f '${MPI_SMOKE_OUTPUT}' && cat '${MPI_SMOKE_OUTPUT}'" >"${headnode_log_dir}/mpi-smoke.txt" || true
+        ssh_remote "test -f '${REMOTE_ANSWERFILE_PATH}' && cat '${REMOTE_ANSWERFILE_PATH}'" >"${headnode_log_dir}/answerfile.input.ini" || true
+        ssh_remote "test -f '${REMOTE_ROUNDTRIP_ANSWERFILE_PATH}' && cat '${REMOTE_ROUNDTRIP_ANSWERFILE_PATH}'" >"${headnode_log_dir}/answerfile.roundtrip.ini" || true
         ssh_remote "sudo tar -C /var/log -czf - messages secure dnf.log slurm 2>/dev/null" >"${headnode_log_dir}/var-log.tar.gz" || true
     fi
 }
@@ -1462,6 +1493,7 @@ install_lab() {
     prepare_opencattus_binary
     render_answerfile
     copy_lab_assets
+    prepare_roundtrip_answerfile
     run_installer
 }
 
