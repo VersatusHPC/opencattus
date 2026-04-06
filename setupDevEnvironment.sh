@@ -35,6 +35,44 @@ add_epel() {
     "https://dl.fedoraproject.org/pub/epel/epel-release-latest-${os_version}.noarch.rpm"
 }
 
+python_bootstrap_bin() {
+  case "$os_version" in
+    8)
+      printf '%s\n' "/usr/bin/python3.12"
+      ;;
+    9|10)
+      if command -v python3 >/dev/null 2>&1; then
+        command -v python3
+      else
+        command -v python
+      fi
+      ;;
+    *)
+      command -v python3
+      ;;
+  esac
+}
+
+install_conan_user() {
+  python_bin=$(python_bootstrap_bin)
+
+  if [ ! -x "$python_bin" ]; then
+    echo "Unable to locate a supported Python interpreter at $python_bin"
+    exit 3
+  fi
+
+  case "$os_version" in
+    8)
+      "$python_bin" -m ensurepip --upgrade
+      mkdir -p "$HOME/.local/bin"
+      ln -sf "$python_bin" "$HOME/.local/bin/python3"
+      ;;
+  esac
+
+  "$python_bin" -m pip install --user --upgrade pip
+  "$python_bin" -m pip install --user conan
+}
+
 # OS relevant settings
 redhat() {
   if [ "$(id -u)" -eq 0 ]; then
@@ -118,9 +156,10 @@ dnf -y install rsync git gcc-c++ gdb cmake ccache ninja-build llvm-toolset \
 
 case "$os_version" in
   8)
-    dnf -y install python3 python3-pip\* gcc-toolset-14 \
+    dnf -y install python3.12 python3.12-pip-wheel gcc-toolset-14 \
       gcc-toolset-14-libubsan-devel gcc-toolset-14-libasan-devel cppcheck \
-      perl-File-Copy perl-File-Compare perl-Thread-Queue
+      glibmm24 glibmm24-devel \
+      perl-Thread-Queue perl-open
     ;;
   9)
     dnf -y install python pip libasan libubsan gcc-toolset-14 \
@@ -131,13 +170,13 @@ case "$os_version" in
     ;;
   10)
     dnf -y install python pip libubsan libasan liblsan libtsan libhwasan \
-      glibmm-2.68 glibmm-2.68-devel \
-      perl-File-Copy perl-File-Compare perl-Thread-Queue
+      glibmm2.68 glibmm2.68-devel \
+      perl-File-Copy perl-File-Compare perl-Thread-Queue perl-FindBin
     ;;
 esac
 
 # Install Conan as user
-pip3 install --user conan
+install_conan_user
 
 # Required libraries
 dnf -y install newt-devel

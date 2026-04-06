@@ -362,6 +362,7 @@ private:
         const AFNetwork& network, const std::string& networkSection);
 
     void loadSlurm();
+    void dumpSlurm();
 
 public:
     AFNetwork external;

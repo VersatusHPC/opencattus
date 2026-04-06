@@ -49,7 +49,9 @@ void writeAnswerfile(const std::filesystem::path& path,
     std::optional<std::string_view> applicationInterface = std::nullopt,
     bool includeServiceNetwork = true,
     std::string_view provisioner = "confluent",
-    std::optional<std::string_view> serviceNameservers = std::nullopt)
+    std::optional<std::string_view> serviceNameservers = std::nullopt,
+    std::string_view distro = "rocky",
+    std::string_view version = "9.7")
 {
     std::ofstream out(path);
     REQUIRE(out.is_open());
@@ -103,8 +105,8 @@ void writeAnswerfile(const std::filesystem::path& path,
         << "partition_name=batch\n\n"
         << "[system]\n"
         << "disk_image=" << diskImagePath.string() << '\n'
-        << "distro=rocky\n"
-        << "version=9.7\n"
+        << "distro=" << distro << '\n'
+        << "version=" << version << '\n'
         << "provisioner=" << provisioner << "\n\n"
         << "[node]\n"
         << "prefix=n\n"
@@ -273,7 +275,41 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(diskImagePath);
     }
 
-    TEST_CASE("fillData maps the answerfile provisioner into the cluster model")
+    TEST_CASE("fillData still accepts xcat on Rocky Linux 8")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-cluster-provisioner-xcat-el8");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-provisioner-xcat-el8");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "xcat", std::nullopt,
+            "rocky", "8.10");
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            Cluster cluster;
+            cluster.fillData(answerfile);
+
+            CHECK(cluster.getProvisioner() == Cluster::Provisioner::xCAT);
+            CHECK(cluster.getHeadnode().getOS().getPlatform()
+                == opencattus::models::OS::Platform::el8);
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while filling cluster for Rocky Linux 8 xCAT");
+        }
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("fillData maps the Rocky Linux 9 answerfile provisioner into the cluster model")
     {
         initializeOptionsSingleton();
 
@@ -281,13 +317,13 @@ TEST_SUITE("opencattus::models::answerfile")
         REQUIRE_FALSE(interfaces.empty());
 
         const auto diskImagePath
-            = tempIsoPath("opencattus-cluster-provisioner-mapping");
+            = tempIsoPath("opencattus-cluster-provisioner-mapping-el9");
         std::ofstream(diskImagePath).close();
 
         SUBCASE("xcat")
         {
             const auto answerfilePath
-                = tempAnswerfilePath("opencattus-cluster-provisioner-xcat");
+                = tempAnswerfilePath("opencattus-cluster-provisioner-xcat-el9");
             writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
                 interfaces.front(), std::nullopt, true, "xcat");
 
@@ -298,10 +334,12 @@ TEST_SUITE("opencattus::models::answerfile")
 
                 CHECK(cluster.getProvisioner()
                     == Cluster::Provisioner::xCAT);
+                CHECK(cluster.getHeadnode().getOS().getPlatform()
+                    == opencattus::models::OS::Platform::el9);
             } catch (const std::exception& e) {
                 FAIL(std::string(e.what()));
             } catch (...) {
-                FAIL("non-std exception while filling cluster for xCAT provisioner");
+                FAIL("non-std exception while filling cluster for Rocky Linux 9 xCAT");
             }
 
             std::filesystem::remove(answerfilePath);
@@ -310,7 +348,7 @@ TEST_SUITE("opencattus::models::answerfile")
         SUBCASE("confluent")
         {
             const auto answerfilePath = tempAnswerfilePath(
-                "opencattus-cluster-provisioner-confluent");
+                "opencattus-cluster-provisioner-confluent-el9");
             writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
                 interfaces.front(), std::nullopt, true, "confluent");
 
@@ -321,16 +359,87 @@ TEST_SUITE("opencattus::models::answerfile")
 
                 CHECK(cluster.getProvisioner()
                     == Cluster::Provisioner::Confluent);
+                CHECK(cluster.getHeadnode().getOS().getPlatform()
+                    == opencattus::models::OS::Platform::el9);
             } catch (const std::exception& e) {
                 FAIL(std::string(e.what()));
             } catch (...) {
                 FAIL(
-                    "non-std exception while filling cluster for Confluent provisioner");
+                    "non-std exception while filling cluster for Rocky Linux 9 Confluent");
             }
 
             std::filesystem::remove(answerfilePath);
         }
 
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("fillData rejects xcat on EL10")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-cluster-provisioner-xcat-el10");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-provisioner-xcat-el10");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "xcat", std::nullopt,
+            "rocky", "10.1");
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            Cluster cluster;
+
+            CHECK_THROWS_WITH(cluster.fillData(answerfile),
+                doctest::Contains("xCAT is not supported on EL10"));
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while validating EL10 xCAT rejection");
+        }
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("fillData accepts confluent on Rocky Linux 10")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath = tempAnswerfilePath(
+            "opencattus-cluster-provisioner-confluent-el10");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-provisioner-confluent-el10");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "confluent",
+            std::nullopt, "rocky", "10.1");
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            Cluster cluster;
+            cluster.fillData(answerfile);
+
+            CHECK(cluster.getProvisioner()
+                == Cluster::Provisioner::Confluent);
+            CHECK(cluster.getHeadnode().getOS().getDistro()
+                == opencattus::models::OS::Distro::Rocky);
+            CHECK(cluster.getHeadnode().getOS().getPlatform()
+                == opencattus::models::OS::Platform::el10);
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while filling cluster for Rocky Linux 10 Confluent");
+        }
+
+        std::filesystem::remove(answerfilePath);
         std::filesystem::remove(diskImagePath);
     }
 
@@ -412,6 +521,71 @@ TEST_SUITE("opencattus::models::answerfile")
             FAIL(std::string(e.what()));
         } catch (...) {
             FAIL("non-std exception while dumping cluster data");
+        }
+
+        std::filesystem::remove(sourcePath);
+        std::filesystem::remove(outputPath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("dumpData round-trips service and application network sections")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE(interfaces.size() >= 2);
+
+        const auto sourcePath
+            = tempAnswerfilePath("opencattus-cluster-roundtrip-source");
+        const auto outputPath
+            = tempAnswerfilePath("opencattus-cluster-roundtrip-output");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-roundtrip");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(sourcePath, diskImagePath, interfaces.front(),
+            interfaces.front(), interfaces.back(), true, "confluent",
+            "1.1.1.1, 8.8.8.8 9.9.9.9", "rocky", "10.1");
+
+        try {
+            AnswerFile sourceAnswerfile(sourcePath);
+            Cluster cluster;
+            cluster.fillData(sourceAnswerfile);
+
+            std::filesystem::remove(outputPath);
+            cluster.dumpData(outputPath);
+
+            AnswerFile dumpedAnswerfile(outputPath);
+
+            CHECK(dumpedAnswerfile.system.provisioner == "confluent");
+            CHECK(dumpedAnswerfile.system.version == "10.1");
+
+            REQUIRE(dumpedAnswerfile.service.con_interface.has_value());
+            CHECK(dumpedAnswerfile.service.con_interface.value()
+                == interfaces.front());
+            REQUIRE(dumpedAnswerfile.service.con_ip_addr.has_value());
+            CHECK(dumpedAnswerfile.service.con_ip_addr->to_string()
+                == "192.168.31.254");
+            REQUIRE(dumpedAnswerfile.service.domain_name.has_value());
+            CHECK(dumpedAnswerfile.service.domain_name.value()
+                == "cluster.service.example.com");
+            REQUIRE(dumpedAnswerfile.service.nameservers.has_value());
+            CHECK(dumpedAnswerfile.service.nameservers.value()
+                == std::vector<std::string> {
+                    "1.1.1.1", "8.8.8.8", "9.9.9.9" });
+
+            REQUIRE(dumpedAnswerfile.application.con_interface.has_value());
+            CHECK(dumpedAnswerfile.application.con_interface.value()
+                == interfaces.back());
+            REQUIRE(dumpedAnswerfile.application.con_ip_addr.has_value());
+            CHECK(dumpedAnswerfile.application.con_ip_addr->to_string()
+                == "172.16.0.254");
+            REQUIRE(dumpedAnswerfile.application.domain_name.has_value());
+            CHECK(dumpedAnswerfile.application.domain_name.value()
+                == "cluster.application.example.com");
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while round-tripping cluster answerfile data");
         }
 
         std::filesystem::remove(sourcePath);

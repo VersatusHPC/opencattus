@@ -19,19 +19,63 @@ namespace opencattus::services::files {
 
 TEST_SUITE_BEGIN("opencattus::services::files");
 
+namespace {
+#if GLIBMM_MINOR_VERSION >= 68
+    using KeyFileHandle = Glib::RefPtr<Glib::KeyFile>;
+
+    auto makeKeyFileHandle() -> KeyFileHandle { return Glib::KeyFile::create(); }
+
+    auto glibErrorMessage(const Glib::Error& error) -> std::string
+    {
+        return error.what();
+    }
+
+    constexpr auto sha256ChecksumType() -> Glib::Checksum::Type
+    {
+        return Glib::Checksum::Type::SHA256;
+    }
+
+    constexpr auto md5ChecksumType() -> Glib::Checksum::Type
+    {
+        return Glib::Checksum::Type::MD5;
+    }
+#else
+    using KeyFileHandle = std::unique_ptr<Glib::KeyFile>;
+
+    auto makeKeyFileHandle() -> KeyFileHandle
+    {
+        return std::make_unique<Glib::KeyFile>();
+    }
+
+    auto glibErrorMessage(const Glib::Error& error) -> std::string
+    {
+        return error.what().raw();
+    }
+
+    constexpr auto sha256ChecksumType() -> Glib::Checksum::ChecksumType
+    {
+        return Glib::Checksum::ChecksumType::CHECKSUM_SHA256;
+    }
+
+    constexpr auto md5ChecksumType() -> Glib::Checksum::ChecksumType
+    {
+        return Glib::Checksum::ChecksumType::CHECKSUM_MD5;
+    }
+#endif
+}
+
 struct KeyFile::Impl {
     fs::path m_path;
-    std::unique_ptr<Glib::KeyFile> m_keyfile;
+    KeyFileHandle m_keyfile;
 
-    Impl(Glib::KeyFile&& keyfile, fs::path path)
+    explicit Impl(fs::path path)
         : m_path(std::move(path))
-        , m_keyfile(std::make_unique<Glib::KeyFile>(std::move(keyfile))) { };
+        , m_keyfile(makeKeyFileHandle()) { };
 };
 
 KeyFile::KeyFile(const fs::path& path)
-    : m_impl(std::make_unique<KeyFile::Impl>(Glib::KeyFile(), path))
+    : m_impl(std::make_unique<KeyFile::Impl>(path))
 {
-    m_impl->m_path = path;
     if (opencattus::functions::exists(path)) {
         m_impl->m_keyfile->load_from_file(path);
     }
@@ -40,12 +84,12 @@ KeyFile::KeyFile(const fs::path& path)
 KeyFile::~KeyFile() = default;
 
 namespace {
-    std::vector<std::string> toStrings(const std::vector<Glib::ustring>& input)
-    {
-        return input | std::views::transform([](const auto& group) {
-            return group.raw();
-        }) | std::ranges::to<std::vector<std::string>>();
-    }
+std::vector<std::string> toStrings(const std::vector<Glib::ustring>& input)
+{
+    return input | std::views::transform([](const auto& group) {
+        return group.raw();
+    }) | std::ranges::to<std::vector<std::string>>();
+}
 }
 
 std::vector<std::string> KeyFile::listAllPrefixedEntries(
@@ -128,8 +172,9 @@ void KeyFile::setString(
     try {
         m_impl->m_keyfile->set_string(group, key, value);
     } catch (const Glib::Error& e) {
-        LOG_ERROR("KeyFile::setString error {}", e.what().raw());
-        throw FileException(e.what());
+        const auto message = glibErrorMessage(e);
+        LOG_ERROR("KeyFile::setString error {}", message);
+        throw FileException(message);
     }
 }
 
@@ -141,8 +186,9 @@ void KeyFile::setString(const std::string& group, const std::string& key,
         try {
             m_impl->m_keyfile->set_string(group, key, value.value());
         } catch (const Glib::Error& e) {
-            LOG_ERROR("KeyFile::setString error {}", e.what().raw());
-            throw FileException(e.what().raw());
+            const auto message = glibErrorMessage(e);
+            LOG_ERROR("KeyFile::setString error {}", message);
+            throw FileException(message);
         }
     }
 }
@@ -153,8 +199,9 @@ void KeyFile::setBoolean(
     try {
         m_impl->m_keyfile->set_boolean(group, key, value);
     } catch (const Glib::Error& e) {
-        LOG_ERROR("KeyFile::setString error {}", e.what().raw());
-        throw FileException(e.what());
+        const auto message = glibErrorMessage(e);
+        LOG_ERROR("KeyFile::setString error {}", message);
+        throw FileException(message);
     }
 }
 
@@ -169,14 +216,14 @@ void KeyFile::loadData(const std::string& data)
 
 std::string checksum(const std::string& data)
 {
-    Glib::Checksum checksum(Glib::Checksum::ChecksumType::CHECKSUM_SHA256);
+    Glib::Checksum checksum(sha256ChecksumType());
     checksum.update(data);
     return checksum.get_string();
 }
 
 std::string checksum(const fs::path& path, const std::size_t chunkSize)
 {
-    Glib::Checksum checksum(Glib::Checksum::ChecksumType::CHECKSUM_SHA256);
+    Glib::Checksum checksum(sha256ChecksumType());
     std::ifstream file(path, std::ios::in | std::ios::binary);
     if (!file.is_open()) {
         throw fs::filesystem_error(
@@ -205,7 +252,7 @@ std::string checksum(const fs::path& path, const std::size_t chunkSize)
 
 std::string md5sum(const std::string& data)
 {
-    Glib::Checksum checksum(Glib::Checksum::ChecksumType::CHECKSUM_MD5);
+    Glib::Checksum checksum(md5ChecksumType());
     checksum.update(data);
     return checksum.get_string();
 }

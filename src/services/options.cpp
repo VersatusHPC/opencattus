@@ -7,6 +7,10 @@
 #include <set>
 #include <vector>
 
+#ifdef BUILD_TESTING
+#include <doctest/doctest.h>
+#endif
+
 namespace opencattus::services {
 using std::ifstream;
 
@@ -53,7 +57,7 @@ std::unique_ptr<Options> options::factory(int argc, const char** argv)
     app.add_option(
            "--beegfs-version", opt.beegfsVersion, "BeeGFS default version")
         ->default_str("beegfs_7.3.3");
-    app.add_option("--xcat-version", opt.beegfsVersion, "xCAT default version")
+    app.add_option("--xcat-version", opt.xcatVersion, "xCAT default version")
         ->default_str("latest");
     app.add_option(
            "--zabbix-version", opt.zabbixVersion, "Zabbix default version")
@@ -125,14 +129,6 @@ std::unique_ptr<Options> options::factory(int argc, const char** argv)
         }
     }
 
-    // Initialize sets with default values if not provided
-    if (opt.ohpcPackages.empty()) {
-        opt.ohpcPackages = { "openmpi4-gnu12-ohpc", "mpich-ofi-gnu12-ohpc",
-            "mpich-ucx-gnu12-ohpc", "mvapich2-gnu12-ohpc",
-            "lmod-defaults-gnu12-openmpi4-ohpc", "ohpc-autotools", "hwloc-ohpc",
-            "spack-ohpc", "valgrind-ohpc" };
-    }
-
     return std::make_unique<Options>(std::move(opt));
 }
 
@@ -153,5 +149,18 @@ void Options::maybeStopAfterStep(const std::string& step) const
         std::exit(0);
     }
 }
+
+#ifdef BUILD_TESTING
+TEST_CASE("options::factory keeps xcat and beegfs versions independent")
+{
+    const char* argv[] = { "opencattus", "--xcat-version", "el10-fork",
+        "--beegfs-version", "beegfs_8.0.0" };
+    auto options = options::factory(5, argv);
+
+    REQUIRE(options != nullptr);
+    CHECK(options->xcatVersion == "el10-fork");
+    CHECK(options->beegfsVersion == "beegfs_8.0.0");
+}
+#endif
 
 } // namespace opencattus::services

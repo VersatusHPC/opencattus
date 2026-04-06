@@ -110,16 +110,65 @@ function(opencattus_setup_dependencies)
   if(NOT TARGET glibmm)
     # Using pkg_check_modules to link against the host glibmm
     # instead of using conan
-    pkg_check_modules(GLIBMM REQUIRED glibmm-2.4)
+    set(GLIBMM_PKG_NAMES glibmm-2.68 glibmm-2.4)
+    unset(GLIBMM_FOUND)
+    unset(GLIBMM_LIBRARIES)
+    unset(GLIBMM_INCLUDE_DIRS)
+    unset(GLIBMM_CFLAGS)
+    unset(GLIBMM_LDFLAGS)
+    unset(GLIBMM_STATIC_LIBRARIES)
+    unset(GLIBMM_STATIC_INCLUDE_DIRS)
+    unset(GLIBMM_STATIC_LDFLAGS)
+    foreach(GLIBMM_PKG_NAME IN LISTS GLIBMM_PKG_NAMES)
+      string(MAKE_C_IDENTIFIER "${GLIBMM_PKG_NAME}" GLIBMM_CANDIDATE_PREFIX)
+      string(TOUPPER "${GLIBMM_CANDIDATE_PREFIX}" GLIBMM_CANDIDATE_PREFIX)
+      pkg_check_modules(${GLIBMM_CANDIDATE_PREFIX} QUIET ${GLIBMM_PKG_NAME})
+      if(${GLIBMM_CANDIDATE_PREFIX}_FOUND)
+        set(GLIBMM_FOUND TRUE)
+        set(GLIBMM_LIBRARIES
+            ${${GLIBMM_CANDIDATE_PREFIX}_LIBRARIES})
+        set(GLIBMM_INCLUDE_DIRS
+            ${${GLIBMM_CANDIDATE_PREFIX}_INCLUDE_DIRS})
+        set(GLIBMM_CFLAGS
+            ${${GLIBMM_CANDIDATE_PREFIX}_CFLAGS})
+        set(GLIBMM_LDFLAGS
+            ${${GLIBMM_CANDIDATE_PREFIX}_LDFLAGS})
+        set(GLIBMM_STATIC_LIBRARIES
+            ${${GLIBMM_CANDIDATE_PREFIX}_STATIC_LIBRARIES})
+        set(GLIBMM_STATIC_INCLUDE_DIRS
+            ${${GLIBMM_CANDIDATE_PREFIX}_STATIC_INCLUDE_DIRS})
+        set(GLIBMM_STATIC_LDFLAGS
+            ${${GLIBMM_CANDIDATE_PREFIX}_STATIC_LDFLAGS})
+        break()
+      endif()
+    endforeach()
+
+    if(NOT GLIBMM_FOUND)
+      message(FATAL_ERROR "Could not find a supported glibmm pkg-config package")
+    endif()
 
     message(STATUS "GLIBMM_LIBRARIES=${GLIBMM_LIBRARIES}")
     message(STATUS "GLIBMM_INCLUDE_DIRS=${GLIBMM_INCLUDE_DIRS}")
+    message(STATUS "GLIBMM_PKG_NAME=${GLIBMM_PKG_NAME}")
     find_package_handle_standard_args(glibmm
       DEFAULT_MSG
       GLIBMM_LIBRARIES
       GLIBMM_INCLUDE_DIRS)
 
     mark_as_advanced(GLIBMM_INCLUDE_DIRS GLIBMM_LIBRARIES)
+
+    foreach(GLIBMM_VAR IN ITEMS
+        GLIBMM_FOUND
+        GLIBMM_PKG_NAME
+        GLIBMM_LIBRARIES
+        GLIBMM_INCLUDE_DIRS
+        GLIBMM_CFLAGS
+        GLIBMM_LDFLAGS
+        GLIBMM_STATIC_LIBRARIES
+        GLIBMM_STATIC_INCLUDE_DIRS
+        GLIBMM_STATIC_LDFLAGS)
+      set(${GLIBMM_VAR} "${${GLIBMM_VAR}}" PARENT_SCOPE)
+    endforeach()
   endif()
 
   # Set the variable ${STDC++FS} to the correct library

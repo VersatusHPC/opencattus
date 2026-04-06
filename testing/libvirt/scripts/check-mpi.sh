@@ -37,10 +37,78 @@ fi
 
 mkdir -p "${mpi_workdir}"
 
+init_module_command() {
+    if [[ -f /etc/profile.d/lmod.sh ]]; then
+        # Lmod from OpenHPC or distro packages.
+        # shellcheck disable=SC1091
+        source /etc/profile.d/lmod.sh
+        return 0
+    fi
+
+    if [[ -f /etc/profile.d/modules.sh ]]; then
+        # Fallback for environments that still provide environment-modules.
+        # shellcheck disable=SC1091
+        source /etc/profile.d/modules.sh
+        return 0
+    fi
+
+    echo "Could not find a shell init script for the module command" >&2
+    exit 1
+}
+
+first_module_match() {
+    local prefix=$1
+
+    module -t avail "${prefix}" 2>&1 | awk -v prefix="${prefix}" '
+        /:$/ { next }
+        NF == 0 { next }
+        $0 ~ ("^" prefix "(/|$)") { print; exit }
+    '
+}
+
+resolve_mpi_modules() {
+    local compiler_prefix
+    local mpi_prefix
+    local compiler_module
+    local mpi_module
+
+    for compiler_prefix in gnu15 gnu14 gnu13 gnu12 gnu9; do
+        compiler_module=$(first_module_match "${compiler_prefix}") || true
+        if [[ -z "${compiler_module}" ]]; then
+            continue
+        fi
+
+        if ! module load "${compiler_module}" >/dev/null 2>&1; then
+            module purge >/dev/null 2>&1 || true
+            continue
+        fi
+
+        for mpi_prefix in openmpi5-pmix openmpi5 openmpi4; do
+            mpi_module=$(first_module_match "${mpi_prefix}") || true
+            if [[ -z "${mpi_module}" ]]; then
+                continue
+            fi
+
+            module purge >/dev/null 2>&1 || true
+            if module load "${compiler_module}" "${mpi_module}" >/dev/null 2>&1 &&
+                command -v mpicc >/dev/null 2>&1; then
+                printf '%s %s\n' "${compiler_module}" "${mpi_module}"
+                return 0
+            fi
+        done
+
+        module purge >/dev/null 2>&1 || true
+    done
+
+    echo "Could not find a supported OpenHPC compiler/MPI module pair" >&2
+    exit 1
+}
+
 set +u
-source /etc/profile.d/lmod.sh
+init_module_command
 module purge >/dev/null 2>&1 || true
-module load gnu12 openmpi4
+read -r -a mpi_modules <<<"$(resolve_mpi_modules)"
+module load "${mpi_modules[@]}"
 set -u
 
 cat >"${mpi_workdir}/mpi_hello.c" <<'EOF'

@@ -61,6 +61,98 @@ std::string getOSImageDistroVersion(const OS& nodeOS)
     return osimage;
 }
 
+std::string getEnterpriseLinuxTemplateVersion(const OS& nodeOS)
+{
+    switch (nodeOS.getPlatform()) {
+        case OS::Platform::el8:
+            return "rhels8";
+        case OS::Platform::el9:
+            return "rhels9";
+        case OS::Platform::el10:
+            throw std::invalid_argument(
+                "xCAT template aliases are not supported on EL10");
+        default:
+            std::unreachable();
+    }
+}
+
+std::vector<std::pair<std::string, std::string>> getEnterpriseLinuxCloneAliases(
+    const OS& nodeOS)
+{
+    switch (nodeOS.getPlatform()) {
+        case OS::Platform::el8:
+            return { { "rocky", "rocky8" }, { "ol", "ol8" },
+                { "alma", "alma8" } };
+        case OS::Platform::el9:
+            return { { "rocky", "rocky9" }, { "ol", "ol9" },
+                { "alma", "alma9" } };
+        case OS::Platform::el10:
+            throw std::invalid_argument(
+                "xCAT distro aliases are not supported on EL10");
+        default:
+            std::unreachable();
+    }
+}
+
+std::vector<std::string> buildEnterpriseLinuxTemplateAliasCommands(
+    const OS& nodeOS)
+{
+    const auto templateVersion = getEnterpriseLinuxTemplateVersion(nodeOS);
+    const auto cloneAliases = getEnterpriseLinuxCloneAliases(nodeOS);
+    std::vector<std::string> commands;
+
+    auto createSymlinkCommand = [&](const std::string& folder,
+                                     const std::string& version) {
+        return fmt::format(
+            "ln -sf "
+            "/opt/xcat/share/xcat/netboot/rh/compute.{2}.x86_64.exlist "
+            "/opt/xcat/share/xcat/netboot/{0}/compute.{1}.x86_64.exlist,"
+            "ln -sf "
+            "/opt/xcat/share/xcat/netboot/rh/compute.{2}.x86_64.pkglist "
+            "/opt/xcat/share/xcat/netboot/{0}/compute.{1}.x86_64.pkglist,"
+            "ln -sf "
+            "/opt/xcat/share/xcat/netboot/rh/compute.{2}.x86_64.postinstall "
+            "/opt/xcat/share/xcat/netboot/{0}/compute.{1}.x86_64.postinstall,"
+            "ln -sf "
+            "/opt/xcat/share/xcat/netboot/rh/service.{2}.x86_64.exlist "
+            "/opt/xcat/share/xcat/netboot/{0}/service.{1}.x86_64.exlist,"
+            "ln -sf "
+            "/opt/xcat/share/xcat/netboot/rh/"
+            "service.{2}.x86_64.otherpkgs.pkglist "
+            "/opt/xcat/share/xcat/netboot/{0}/"
+            "service.{1}.x86_64.otherpkgs.pkglist,"
+            "ln -sf "
+            "/opt/xcat/share/xcat/netboot/rh/service.{2}.x86_64.pkglist "
+            "/opt/xcat/share/xcat/netboot/{0}/service.{1}.x86_64.pkglist,"
+            "ln -sf "
+            "/opt/xcat/share/xcat/netboot/rh/service.{2}.x86_64.postinstall "
+            "/opt/xcat/share/xcat/netboot/{0}/service.{1}.x86_64.postinstall,"
+            "ln -sf /opt/xcat/share/xcat/install/rh/compute.{2}.pkglist "
+            "/opt/xcat/share/xcat/install/{0}/compute.{1}.pkglist,"
+            "ln -sf /opt/xcat/share/xcat/install/rh/compute.{2}.tmpl "
+            "/opt/xcat/share/xcat/install/{0}/compute.{1}.tmpl,"
+            "ln -sf /opt/xcat/share/xcat/install/rh/service.{2}.pkglist "
+            "/opt/xcat/share/xcat/install/{0}/service.{1}.pkglist,"
+            "ln -sf /opt/xcat/share/xcat/install/rh/service.{2}.tmpl "
+            "/opt/xcat/share/xcat/install/{0}/service.{1}.tmpl,"
+            "ln -sf "
+            "/opt/xcat/share/xcat/install/rh/"
+            "service.{2}.x86_64.otherpkgs.pkglist "
+            "/opt/xcat/share/xcat/install/{0}/"
+            "service.{1}.x86_64.otherpkgs.pkglist",
+            folder, version, templateVersion);
+    };
+
+    for (const auto& [folder, version] : cloneAliases) {
+        std::vector<std::string> temp;
+        boost::split(temp, createSymlinkCommand(folder, version),
+            boost::is_any_of(","));
+        commands.insert(commands.end(), temp.begin(), temp.end());
+    }
+
+    return commands;
+}
+
 std::filesystem::path getLocalOtherPkgRepoPath(const OS& nodeOS)
 {
     return std::filesystem::path("/install/post/otherpkgs")
@@ -734,67 +826,26 @@ void XCAT::customizeImage(
     };
 }
 
+void XCAT::configureEL8()
+{
+    auto runner = opencattus::utils::singleton::runner();
+    const auto nodeOS = cluster()->getNodes().front().getOS();
+    for (const auto& command : buildEnterpriseLinuxTemplateAliasCommands(
+             nodeOS)) {
+        runner->executeCommand(command);
+    }
+}
+
 /* This is necessary to avoid problems with EL9-based distros.
  * The xCAT team has discontinued the project and distros based on EL9 are not
  * officially supported by default.
  */
 void XCAT::configureEL9()
 {
-    auto createSymlinkCommand = [](const std::string& folder,
-                                    const std::string& version) {
-        return fmt::format(
-            "ln -sf "
-            "/opt/xcat/share/xcat/netboot/rh/compute.rhels9.x86_64.exlist "
-            "/opt/xcat/share/xcat/netboot/{0}/compute.{1}.x86_64.exlist,"
-            "ln -sf "
-            "/opt/xcat/share/xcat/netboot/rh/compute.rhels9.x86_64.pkglist "
-            "/opt/xcat/share/xcat/netboot/{0}/compute.{1}.x86_64.pkglist,"
-            "ln -sf "
-            "/opt/xcat/share/xcat/netboot/rh/compute.rhels9.x86_64.postinstall "
-            "/opt/xcat/share/xcat/netboot/{0}/compute.{1}.x86_64.postinstall,"
-            "ln -sf "
-            "/opt/xcat/share/xcat/netboot/rh/service.rhels9.x86_64.exlist "
-            "/opt/xcat/share/xcat/netboot/{0}/service.{1}.x86_64.exlist,"
-            "ln -sf "
-            "/opt/xcat/share/xcat/netboot/rh/"
-            "service.rhels9.x86_64.otherpkgs.pkglist "
-            "/opt/xcat/share/xcat/netboot/{0}/"
-            "service.{1}.x86_64.otherpkgs.pkglist,"
-            "ln -sf "
-            "/opt/xcat/share/xcat/netboot/rh/service.rhels9.x86_64.pkglist "
-            "/opt/xcat/share/xcat/netboot/{0}/service.{1}.x86_64.pkglist,"
-            "ln -sf "
-            "/opt/xcat/share/xcat/netboot/rh/service.rhels9.x86_64.postinstall "
-            "/opt/xcat/share/xcat/netboot/{0}/service.{1}.x86_64.postinstall,"
-            "ln -sf /opt/xcat/share/xcat/install/rh/compute.rhels9.pkglist "
-            "/opt/xcat/share/xcat/install/{0}/compute.{1}.pkglist,"
-            "ln -sf /opt/xcat/share/xcat/install/rh/compute.rhels9.tmpl "
-            "/opt/xcat/share/xcat/install/{0}/compute.{1}.tmpl,"
-            "ln -sf /opt/xcat/share/xcat/install/rh/service.rhels9.pkglist "
-            "/opt/xcat/share/xcat/install/{0}/service.{1}.pkglist,"
-            "ln -sf /opt/xcat/share/xcat/install/rh/service.rhels9.tmpl "
-            "/opt/xcat/share/xcat/install/{0}/service.{1}.tmpl,"
-            "ln -sf "
-            "/opt/xcat/share/xcat/install/rh/"
-            "service.rhels9.x86_64.otherpkgs.pkglist "
-            "/opt/xcat/share/xcat/install/{0}/"
-            "service.{1}.x86_64.otherpkgs.pkglist",
-            folder, version);
-    };
-
-    std::vector<std::string> commands;
-    std::vector<std::pair<std::string, std::string>> commandPairs
-        = { { "rocky", "rocky9" }, { "ol", "ol9" }, { "alma", "alma9" } };
-
-    for (const auto& pair : commandPairs) {
-        std::vector<std::string> temp;
-        boost::split(temp, createSymlinkCommand(pair.first, pair.second),
-            boost::is_any_of(","));
-        commands.insert(commands.end(), temp.begin(), temp.end());
-    }
-
     auto runner = opencattus::utils::singleton::runner();
-    for (const auto& command : commands) {
+    const auto nodeOS = cluster()->getNodes().front().getOS();
+    for (const auto& command : buildEnterpriseLinuxTemplateAliasCommands(
+             nodeOS)) {
         runner->executeCommand(command);
     }
 }
@@ -817,7 +868,18 @@ opencattus::services::XCAT::ImageInstallArgs XCAT::getImageInstallArgs(
 void XCAT::createImage(ImageType imageType, NodeType nodeType,
     const std::vector<ScriptBuilder>& customizations)
 {
-    configureEL9();
+    switch (cluster()->getNodes().front().getOS().getPlatform()) {
+        case OS::Platform::el8:
+            configureEL8();
+            break;
+        case OS::Platform::el9:
+            configureEL9();
+            break;
+        case OS::Platform::el10:
+            throw std::logic_error("xCAT image generation is unsupported on EL10");
+        default:
+            std::unreachable();
+    }
 
     generateOSImageName(imageType, nodeType);
 
@@ -1103,12 +1165,37 @@ void XCAT::install()
 
 TEST_CASE("getOSImageDistroVersion uses node OS metadata")
 {
+    CHECK(getOSImageDistroVersion(OS(OS::Distro::Rocky, OS::Platform::el8, 10))
+        == "rocky8.10");
+    CHECK(getOSImageDistroVersion(OS(OS::Distro::RHEL, OS::Platform::el8, 10))
+        == "rhels8.10");
+    CHECK(getOSImageDistroVersion(OS(OS::Distro::OL, OS::Platform::el8, 10))
+        == "ol8.10.0");
     CHECK(getOSImageDistroVersion(OS(OS::Distro::Rocky, OS::Platform::el9, 7))
         == "rocky9.7");
     CHECK(getOSImageDistroVersion(OS(OS::Distro::RHEL, OS::Platform::el9, 7))
         == "rhels9.7");
     CHECK(getOSImageDistroVersion(OS(OS::Distro::OL, OS::Platform::el9, 7))
         == "ol9.7.0");
+}
+
+TEST_CASE("buildEnterpriseLinuxTemplateAliasCommands uses explicit EL releases")
+{
+    const auto el8Commands = buildEnterpriseLinuxTemplateAliasCommands(
+        OS(OS::Distro::Rocky, OS::Platform::el8, 10));
+    const auto el9Commands = buildEnterpriseLinuxTemplateAliasCommands(
+        OS(OS::Distro::Rocky, OS::Platform::el9, 7));
+
+    CHECK_FALSE(el8Commands.empty());
+    CHECK_FALSE(el9Commands.empty());
+    CHECK(std::ranges::any_of(el8Commands, [](const auto& command) {
+        return command.contains("compute.rhels8.x86_64.pkglist")
+            && command.contains("compute.rocky8.x86_64.pkglist");
+    }));
+    CHECK(std::ranges::any_of(el9Commands, [](const auto& command) {
+        return command.contains("compute.rhels9.x86_64.pkglist")
+            && command.contains("compute.rocky9.x86_64.pkglist");
+    }));
 }
 
 TEST_CASE("formatDHCPInterfaces uses a plain interface selector")
@@ -1140,6 +1227,11 @@ TEST_CASE("buildIpmitoolCommand quotes BMC credentials")
 
 TEST_CASE("getLocalOtherPkgRepoPath matches xCAT local repo layout")
 {
+    const OS el8NodeOS(
+        OS::Distro::Rocky, OS::Platform::el8, 10, OS::Arch::x86_64);
+    CHECK(getLocalOtherPkgRepoPath(el8NodeOS)
+        == "/install/post/otherpkgs/rocky8.10/x86_64");
+
     const OS nodeOS(OS::Distro::Rocky, OS::Platform::el9, 7, OS::Arch::x86_64);
     CHECK(getLocalOtherPkgRepoPath(nodeOS)
         == "/install/post/otherpkgs/rocky9.7/x86_64");

@@ -166,6 +166,33 @@ namespace {
         return ostr;
     };
 
+    auto parseRepoBoolean(const KeyFile& file, const std::string& group,
+        const std::string& key, const bool defaultValue) -> bool
+    {
+        const auto value = file.getStringOpt(group, key);
+        if (!value.has_value()) {
+            return defaultValue;
+        }
+
+        auto normalized = value.value();
+        boost::algorithm::trim(normalized);
+        boost::algorithm::to_lower(normalized);
+
+        if (normalized == "1" || normalized == "true"
+            || normalized == "yes") {
+            return true;
+        }
+
+        if (normalized == "0" || normalized == "false"
+            || normalized == "no") {
+            return false;
+        }
+
+        throw std::runtime_error(fmt::format(
+            "Keyfile Error, invalid boolean [{}].{}={}", group, key,
+            normalized));
+    }
+
     template <typename T> std::string toString(const T& input)
     {
         std::ostringstream strm;
@@ -193,9 +220,10 @@ public:
 
             auto metalink = file.getStringOpt(repogroup, "metalink");
             auto baseurl = file.getStringOpt(repogroup, "baseurl");
-            auto enabled = file.getBoolean(repogroup, "enabled");
-            auto gpgcheck = file.getBoolean(repogroup, "gpgcheck");
             auto gpgkey = file.getStringOpt(repogroup, "gpgkey");
+            auto enabled = parseRepoBoolean(file, repogroup, "enabled", true);
+            auto gpgcheck = parseRepoBoolean(
+                file, repogroup, "gpgcheck", gpgkey.has_value());
 
             RPMRepository repo;
             repo.group(repogroup);
@@ -860,6 +888,22 @@ public:
     }
 };
 
+std::string defaultOpenHPCVersionFor(const OS& osinfo)
+{
+    switch (osinfo.getPlatform()) {
+        case OS::Platform::el8:
+            return "2";
+        case OS::Platform::el9:
+            return "3";
+        case OS::Platform::el10:
+            return "4";
+        default:
+            throw std::runtime_error(fmt::format(
+                "Unsupported OpenHPC repository baseline for EL{}",
+                osinfo.getMajorVersion()));
+    }
+}
+
 TEST_CASE("RepoConfigParser")
 {
 #ifdef BUILD_TESTING
@@ -875,7 +919,60 @@ TEST_CASE("RepoConfigParser")
     CHECK(epel.upstream.repo
         == "https://download.fedoraproject.org/pub/epel/9/Everything/"
            "x86_64/");
+
+    const auto el10Conf = RepoConfigParser::parseTest("repos/repos.conf",
+        RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.4.0",
+            .ohpcVersion = "4",
+            .osversion = "10.1",
+            .releasever = "10",
+            .xcatVersion = "latest",
+            .zabbixVersion = "7.0",
+            .ofedVersion = "latest-2.9-LTS",
+        });
+    const auto ohpcOpt = el10Conf.find("OpenHPC");
+    REQUIRE(ohpcOpt.has_value() == true);
+    CHECK(ohpcOpt->upstream.repo
+        == "https://repos.openhpc.community/OpenHPC/4/EL_10/");
 #endif
+}
+
+TEST_CASE("RPMRepositoryParser tolerates repo files that omit gpgcheck")
+{
+#ifdef BUILD_TESTING
+    const auto repoPath = std::filesystem::temp_directory_path()
+        / "opencattus-lenovo-hpc-test.repo";
+    opencattus::services::files::write(repoPath,
+        "[lenovo-hpc]\n"
+        "name=Lenovo packages for HPC\n"
+        "baseurl=https://hpc.lenovo.com/yum/latest/el10/x86_64/\n"
+        "enabled=1\n"
+        "gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-LENOVO\n");
+
+    std::map<std::string, std::shared_ptr<RPMRepository>> repos;
+    REQUIRE_NOTHROW(RPMRepositoryParser::parse(repoPath, repos));
+    REQUIRE(repos.contains("lenovo-hpc"));
+    CHECK(repos.at("lenovo-hpc")->enabled() == true);
+    CHECK(repos.at("lenovo-hpc")->gpgcheck() == true);
+    CHECK(repos.at("lenovo-hpc")->gpgkey().value()
+        == "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-LENOVO");
+
+    std::filesystem::remove(repoPath);
+#endif
+}
+
+TEST_CASE("defaultOpenHPCVersionFor maps the supported EL releases")
+{
+    CHECK(defaultOpenHPCVersionFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el8, 10))
+        == "2");
+    CHECK(defaultOpenHPCVersionFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el9, 7))
+        == "3");
+    CHECK(defaultOpenHPCVersionFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el10, 1))
+        == "4");
 }
 
 // Installs and enable/disable RPM repositories
@@ -1120,13 +1217,32 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
     static std::string resolveCodeReadyBuilderName(const OS& osinfo)
     {
         auto distro = osinfo.getDistro();
+        auto platform = osinfo.getPlatform();
         auto majorVersion = osinfo.getMajorVersion();
         std::string arch = opencattus::utils::enums::toString(osinfo.getArch());
 
         switch (distro) {
             case OS::Distro::AlmaLinux:
+                switch (platform) {
+                    case OS::Platform::el8:
+                        return "\"AlmaLinux 8 - PowerTools\"";
+                    case OS::Platform::el9:
+                    case OS::Platform::el10:
+                        return fmt::format("\"AlmaLinux {} - CRB\"",
+                            majorVersion);
+                    default:
+                        throw std::runtime_error("Unsupported platform");
+                }
             case OS::Distro::Rocky:
-                return "crb";
+                switch (platform) {
+                    case OS::Platform::el8:
+                        return "powertools";
+                    case OS::Platform::el9:
+                    case OS::Platform::el10:
+                        return "crb";
+                    default:
+                        throw std::runtime_error("Unsupported platform");
+                }
             case OS::Distro::RHEL:
                 return fmt::format("codeready-builder-for-rhel-{}-{}-rpms",
                     majorVersion, arch);
@@ -1153,8 +1269,7 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
         switch (distro) {
             case OS::Distro::AlmaLinux:
                 addToOutput("AlmaLinuxBaseOS");
-                addToOutput("\"AlmaLinux {releasever} - CRB\"",
-                    fmt::arg("releasever", majorVersion));
+                addToOutput("{}", resolveCodeReadyBuilderName(osinfo));
                 break;
             case OS::Distro::Rocky: {
                 addToOutput("appstream");
@@ -1181,7 +1296,18 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
         addToOutput("OpenHPC-Updates");
         addToOutput("rpmfusion");
         addToOutput("elrepo");
-        addToOutput("beegfs");
+        switch (osinfo.getPlatform()) {
+            case OS::Platform::el8:
+                addToOutput("beegfs");
+                break;
+            case OS::Platform::el9:
+                addToOutput("beegfs");
+                break;
+            case OS::Platform::el10:
+                break;
+            default:
+                throw std::runtime_error("Unsupported platform");
+        }
         return output;
     }
 
@@ -1206,6 +1332,15 @@ TEST_CASE("RepoNames")
         .ohpcVersion = "3",
         .osversion = "9.4",
         .releasever = "9",
+        .xcatVersion = "latest",
+        .zabbixVersion = "6.4",
+    };
+    const RepoConfigVars& varsEl8 = RepoConfigVars {
+        .arch = "x86_64",
+        .beegfsVersion = "beegfs_7.3.3",
+        .ohpcVersion = "2",
+        .osversion = "8.10",
+        .releasever = "8",
         .xcatVersion = "latest",
         .zabbixVersion = "6.4",
     };
@@ -1241,6 +1376,74 @@ TEST_CASE("RepoNames")
             == std::vector<std::string> {
                 "AlmaLinuxBaseOS",
                 "\"AlmaLinux 9 - CRB\"",
+                "epel",
+                "OpenHPC",
+                "OpenHPC-Updates",
+                "rpmfusion",
+                "elrepo",
+                "beegfs",
+            });
+    }
+
+    // AlmaLinux EL8
+    {
+        const auto osinfo
+            = OS(models::OS::Distro::AlmaLinux, OS::Platform::el8, 10);
+        const auto conffiles = RepoConfigParser::load<ShouldUseVaultService>(
+            "repos/", osinfo, varsEl8);
+        const auto enabledRepos = enabler.resolveReposNames(osinfo, conffiles);
+        CHECK(enabledRepos
+            == std::vector<std::string> {
+                "AlmaLinuxBaseOS",
+                "\"AlmaLinux 8 - PowerTools\"",
+                "epel",
+                "OpenHPC",
+                "OpenHPC-Updates",
+                "rpmfusion",
+                "elrepo",
+                "beegfs",
+            });
+    }
+
+    // Rocky EL10
+    {
+        const auto osinfo = OS(models::OS::Distro::Rocky, OS::Platform::el10, 1);
+        const auto el10Vars = RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.4.0",
+            .ohpcVersion = "4",
+            .osversion = "10.1",
+            .releasever = "10",
+            .xcatVersion = "latest",
+            .zabbixVersion = "7.0",
+        };
+        const auto conffiles = RepoConfigParser::load<ShouldUseVaultService>(
+            "repos/", osinfo, el10Vars);
+        const auto enabledRepos = enabler.resolveReposNames(osinfo, conffiles);
+        CHECK(enabledRepos
+            == std::vector<std::string> {
+                "appstream",
+                "baseos",
+                "crb",
+                "epel",
+                "OpenHPC",
+                "OpenHPC-Updates",
+                "rpmfusion",
+                "elrepo",
+            });
+    }
+
+    // Rocky EL8
+    {
+        const auto osinfo = OS(models::OS::Distro::Rocky, OS::Platform::el8, 10);
+        const auto conffiles = RepoConfigParser::load<ShouldUseVaultService>(
+            "repos/", osinfo, varsEl8);
+        const auto enabledRepos = enabler.resolveReposNames(osinfo, conffiles);
+        CHECK(enabledRepos
+            == std::vector<std::string> {
+                "appstream",
+                "baseos",
+                "powertools",
                 "epel",
                 "OpenHPC",
                 "OpenHPC-Updates",
@@ -1548,7 +1751,7 @@ void RepoManager::initializeDefaultRepositories()
     const auto vars = RepoConfigVars {
         .arch = opencattus::utils::enums::toString(osinfo.getArch()),
         .beegfsVersion = opts->beegfsVersion,
-        .ohpcVersion = osinfo.getMajorVersion() == 8 ? "2" : "3",
+        .ohpcVersion = defaultOpenHPCVersionFor(osinfo),
         .osversion = osinfo.getVersion(),
         .releasever = fmt::format("{}", osinfo.getMajorVersion()),
         .xcatVersion = opts->xcatVersion,

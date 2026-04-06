@@ -441,6 +441,25 @@ auto& getNetworkField(AnswerFile& answerfile, Network::Profile profile)
     }
 }
 
+void validateProvisionerSupport(const OS& os, Cluster::Provisioner provisioner)
+{
+    switch (os.getPlatform()) {
+        case OS::Platform::el10:
+            if (provisioner == Cluster::Provisioner::xCAT) {
+                throw std::runtime_error(fmt::format(
+                    "xCAT is not supported on EL{}; use confluent instead",
+                    os.getMajorVersion()));
+            }
+            return;
+        case OS::Platform::el8:
+            return;
+        case OS::Platform::el9:
+            return;
+        default:
+            std::unreachable();
+    }
+}
+
 void Cluster::dumpData(const std::filesystem::path& answerfilePath)
 {
     AnswerFile answerfil(answerfilePath, false);
@@ -487,6 +506,11 @@ void Cluster::dumpData(const std::filesystem::path& answerfilePath)
     }
     answerfil.system.provisioner
         = getProvisioner() == Provisioner::xCAT ? "xcat" : "confluent";
+    answerfil.slurm.mariadb_root_password = slurmMariaDBRootPassword;
+    answerfil.slurm.slurmdb_password = slurmDBPassword;
+    answerfil.slurm.storage_password = slurmStoragePassword;
+    answerfil.slurm.partition_name
+        = std::string(m_queueSystem.value()->getDefaultQueue());
 
     answerfil.information.cluster_name = getName();
     answerfil.information.company_name = getCompanyName();
@@ -501,6 +525,22 @@ void Cluster::dumpData(const std::filesystem::path& answerfilePath)
 
     answerfil.hostname.hostname = getHeadnode().getHostname();
     answerfil.hostname.domain_name = getDomainName();
+
+    AFNode genericNode;
+    genericNode.prefix = nodePrefix;
+    genericNode.padding = std::to_string(nodePadding);
+    genericNode.start_ip = nodeStartIP;
+    genericNode.root_password = nodeRootPassword;
+    genericNode.sockets = std::to_string(nodeSockets);
+    genericNode.cores_per_socket = std::to_string(nodeCoresPerSocket);
+    genericNode.cpus_per_node = std::to_string(nodeCPUsPerNode);
+    genericNode.threads_per_core = std::to_string(nodeThreadsPerCore);
+    genericNode.real_memory = std::to_string(nodeRealMemory);
+    genericNode.bmc_username = nodeBMCUsername;
+    genericNode.bmc_password = nodeBMCPassword;
+    genericNode.bmc_serialport = std::to_string(nodeBMCSerialPort);
+    genericNode.bmc_serialspeed = std::to_string(nodeBMCSerialSpeed);
+    answerfil.nodes.generic = std::move(genericNode);
 
     for (const auto& node : this->m_nodes) {
         AFNode afNode;
@@ -807,13 +847,20 @@ void Cluster::fillData(const AnswerFile& answerfil)
     setUpdateSystem(true);
 
     const auto provisioner = utils::string::lower(answerfil.system.provisioner);
-    if (provisioner == "xcat") {
-        setProvisioner(Provisioner::xCAT);
-    } else if (provisioner == "confluent") {
-        setProvisioner(Provisioner::Confluent);
-    } else {
+    const auto selectedProvisioner = [&]() {
+        if (provisioner == "xcat") {
+            return Provisioner::xCAT;
+        }
+
+        if (provisioner == "confluent") {
+            return Provisioner::Confluent;
+        }
+
         opencattus::functions::abort("Invalid provisioner {}", provisioner);
-    }
+    }();
+
+    validateProvisionerSupport(nodeOS, selectedProvisioner);
+    setProvisioner(selectedProvisioner);
 
     // FIXME: This should come from /etc/os-release
     m_headnode.setOS(nodeOS);
@@ -961,8 +1008,26 @@ void Cluster::fillData(const AnswerFile& answerfil)
     }
 
     /* Bad and old data - @TODO Must improve */
+    nodePrefix = answerfil.nodes.generic->prefix.value();
+    nodePadding = std::stoul(answerfil.nodes.generic->padding.value());
     nodeStartIP = answerfil.nodes.generic->start_ip.value();
     nodeRootPassword = answerfil.nodes.generic->root_password.value();
+    nodeSockets = std::stoul(answerfil.nodes.generic->sockets.value());
+    nodeCoresPerSocket
+        = std::stoul(answerfil.nodes.generic->cores_per_socket.value());
+    nodeThreadsPerCore
+        = std::stoul(answerfil.nodes.generic->threads_per_core.value());
+    nodeCPUsPerNode = std::stoul(answerfil.nodes.generic->cpus_per_node.value());
+    nodeRealMemory = std::stoul(answerfil.nodes.generic->real_memory.value());
+    nodeBMCUsername = answerfil.nodes.generic->bmc_username.value();
+    nodeBMCPassword = answerfil.nodes.generic->bmc_password.value();
+    nodeBMCSerialPort
+        = std::stoul(answerfil.nodes.generic->bmc_serialport.value());
+    nodeBMCSerialSpeed
+        = std::stoul(answerfil.nodes.generic->bmc_serialspeed.value());
+    slurmMariaDBRootPassword = answerfil.slurm.mariadb_root_password;
+    slurmDBPassword = answerfil.slurm.slurmdb_password;
+    slurmStoragePassword = answerfil.slurm.storage_password;
 }
 
 }; // namespace opencattus::models {
