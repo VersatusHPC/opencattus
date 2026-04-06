@@ -127,7 +127,7 @@ The default config also assumes a single active lab on the host. If you want mul
 | Dedicated application network / OFED path | Not yet validated | Not yet validated | Still outside the recovered EL9 baseline. |
 | Multi-node cluster | Validated | Validated | Two compute nodes boot, join the cluster, and complete the MPI smoke test. |
 | TUI-driven install | Not yet validated | Not yet validated | Recovery work has focused on unattended answerfile installs first. |
-| `--dump-answerfile` round-trip | Not yet validated | Validated | Rocky Linux 9.7 + Confluent now completes a full dump-regenerate-install cycle in the EL9 libvirt/KVM lab. EL9 xCAT is still outside the validated round-trip baseline. |
+| `--dump-answerfile` round-trip | Validated | Validated | Rocky Linux 9.7 now completes a full dump-regenerate-install cycle in the EL9 libvirt/KVM lab for both xCAT and Confluent. |
 
 ## EL10 bootstrap target
 
