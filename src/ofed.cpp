@@ -216,6 +216,15 @@ void OFED::install() const
                 runner->checkCommand("dnf makecache --repo=epel");
                 runner->checkCommand(buildDocaDkmsPrereqCommand(
                     std::optional<std::string_view>(runningKernel)));
+                runner->checkCommand(
+                    "dnf -y --nogpg install doca-extra tar");
+
+                LOG_INFO("Staging DOCA kernel artifacts for diskless node "
+                         "images");
+                if (!opts->shouldSkip("compile-doca-driver")) {
+                    runner->checkCommand(
+                        "/opt/mellanox/doca/tools/doca-kernel-support");
+                }
             }
 
             runner->checkCommand("dnf makecache --repo=doca*");
