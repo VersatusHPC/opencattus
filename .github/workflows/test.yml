@@ -130,6 +130,7 @@ jobs:
               python3 -m venv /tmp/conan-venv
               /tmp/conan-venv/bin/pip install conan
               export PATH="/tmp/conan-venv/bin:${PATH}"
+              conan profile detect
               git config --global --add safe.directory "${{ github.workspace }}"
               VERSION=$(awk "/Version:/ {print \$2}" rpmspecs/opencattus.spec)
               rpmdev-setuptree

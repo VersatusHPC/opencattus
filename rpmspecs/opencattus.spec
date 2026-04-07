@@ -31,6 +31,9 @@ Requires: newt
 %global _enable_debug_package 0
 %global debug_package %{nil}
 
+# Conan libraries are linked from its cache; skip rpath validation
+%define __brp_check_rpaths %{nil}
+
 %description
 Use OpenCATTUS installer to setup a HPC cluster from scratch.
 
