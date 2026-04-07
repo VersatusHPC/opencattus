@@ -40,10 +40,10 @@ echo "PREP: $PWD"
 %if 0%{?el8} || 0%{?el9}
 bash -c '
 	source /opt/rh/gcc-toolset-14/enable
-	cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -G Ninja
+	cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -Dopencattus_ENABLE_CONAN=OFF -G Ninja
 '
 %else
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -G Ninja
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -Dopencattus_ENABLE_CONAN=OFF -G Ninja
 %endif
 
 %build

@@ -81,8 +81,10 @@ jobs:
       matrix:
         include:
           - el: EL8
-            image: registry.access.redhat.com/ubi8/ubi:latest
-            epel: https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+            image: docker.io/library/rockylinux:8
+            setup: >-
+              dnf install -y dnf-plugins-core epel-release &&
+              dnf config-manager --set-enabled powertools
             extra_pkgs: >-
               gcc-toolset-14
               gcc-toolset-14-libubsan-devel
@@ -90,7 +92,8 @@ jobs:
               glibmm24-devel
           - el: EL9
             image: registry.access.redhat.com/ubi9/ubi:latest
-            epel: https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+            setup: >-
+              dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
             extra_pkgs: >-
               gcc-toolset-14
               gcc-toolset-14-libubsan-devel
@@ -98,7 +101,8 @@ jobs:
               glibmm24-devel
           - el: EL10
             image: registry.access.redhat.com/ubi10/ubi:latest
-            epel: https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
+            setup: >-
+              dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
             extra_pkgs: >-
               gcc-c++
               glibmm2.4-devel
@@ -116,7 +120,7 @@ jobs:
             ${{ matrix.image }} \
             bash -lc '
               set -euo pipefail
-              dnf install -y ${{ matrix.epel }}
+              ${{ matrix.setup }}
               dnf install -y git rpmdevtools rpm-build tar gzip \
                 make cmake ninja-build newt-devel systemd-devel \
                 ${{ matrix.extra_pkgs }}
