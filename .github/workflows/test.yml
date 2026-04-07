@@ -130,6 +130,9 @@ jobs:
               python3 -m venv /tmp/conan-venv
               /tmp/conan-venv/bin/pip install conan
               export PATH="/tmp/conan-venv/bin:${PATH}"
+              if [ -f /opt/rh/gcc-toolset-14/enable ]; then
+                source /opt/rh/gcc-toolset-14/enable
+              fi
               conan profile detect
               git config --global --add safe.directory "${{ github.workspace }}"
               VERSION=$(awk "/Version:/ {print \$2}" rpmspecs/opencattus.spec)
@@ -137,6 +140,7 @@ jobs:
               cp rpmspecs/opencattus.spec ~/rpmbuild/SPECS/
               git archive -o ~/rpmbuild/SOURCES/opencattus-${VERSION}.tar.gz \
                 --format tgz HEAD --prefix opencattus-${VERSION}/
+              export QA_RPATHS=$((0x0002|0x0010))
               rpmbuild -ba ~/rpmbuild/SPECS/opencattus.spec
               ls -l ~/rpmbuild/RPMS/*/opencattus-installer*.rpm
             '
