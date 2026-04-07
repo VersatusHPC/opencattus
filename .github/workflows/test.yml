@@ -125,6 +125,7 @@ jobs:
               dnf install -y git rpmdevtools rpm-build tar gzip \
                 make cmake ninja-build newt-devel systemd-devel \
                 python3 python3-pip \
+                autoconf automake libtool meson perl-core \
                 ${{ matrix.extra_pkgs }}
               python3 -m venv /tmp/conan-venv
               /tmp/conan-venv/bin/pip install conan
