@@ -5,7 +5,26 @@ Summary: OpenCATTUS Installer
 License: Apache 2.0
 URL: https://versatushpc.com.br/opencattus/
 Source0: opencattus-%{VERSION}.tar.gz
-BuildRequires: make,cmake,cppcheck,ninja-build,newt-devel,gcc-toolset-14,gcc-toolset-14-libubsan-devel,gcc-toolset-14-libasan-devel
+
+BuildRequires: make
+BuildRequires: cmake
+BuildRequires: ninja-build
+BuildRequires: newt-devel
+BuildRequires: systemd-devel
+BuildRequires: git
+
+%if 0%{?el8} || 0%{?el9}
+BuildRequires: gcc-toolset-14
+BuildRequires: gcc-toolset-14-libubsan-devel
+BuildRequires: gcc-toolset-14-libasan-devel
+BuildRequires: glibmm24-devel
+%endif
+
+%if 0%{?el10}
+BuildRequires: gcc-c++
+BuildRequires: glibmm2.4-devel
+%endif
+
 Requires: newt
 
 # Disable debug package for now
@@ -18,14 +37,25 @@ Use OpenCATTUS installer to setup a HPC cluster from scratch.
 %prep
 echo "PREP: $PWD"
 %autosetup -n opencattus-%{VERSION}
+%if 0%{?el8} || 0%{?el9}
 bash -c '
-	source rhel-gcc-toolset-14.sh;
+	source /opt/rh/gcc-toolset-14/enable
 	cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -G Ninja
 '
+%else
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -G Ninja
+%endif
 
 %build
 echo "BUILD: $PWD"
+%if 0%{?el8} || 0%{?el9}
+bash -c '
+	source /opt/rh/gcc-toolset-14/enable
+	cmake --build build
+'
+%else
 cmake --build build
+%endif
 
 %install
 echo "INSTALL: $PWD"
@@ -49,12 +79,12 @@ install -m 644 repos/rocky-vault.conf %{buildroot}/opt/opencattus/conf/repos/roc
 /opt/opencattus/conf/repos/rocky-vault.conf
 
 %changelog
-* Thu Sep 16 2025  Daniel Hilst <daniel@versatushpc.com.br> - 1.0-6 - xCAT bugfixes
+* Tue Sep 16 2025  Daniel Hilst <daniel@versatushpc.com.br> - 1.0-6 - xCAT bugfixes
 - Fix xCAT installation after adding Confluent
-* Thu Sep 16 2025  Daniel Hilst <daniel@versatushpc.com.br> - 1.0-5 - Support Confluent
+* Tue Sep 16 2025  Daniel Hilst <daniel@versatushpc.com.br> - 1.0-5 - Support Confluent
 - Add support to the Lenovo HPC Confluent provisioner
 - Add --roles command line
-* Thu Aug 14 2025  Daniel Hilst <daniel@versatushpc.com.br> - 1.0-4 - Bugfix 
+* Thu Aug 14 2025  Daniel Hilst <daniel@versatushpc.com.br> - 1.0-4 - Bugfix
 - Update OFED
 - Dump configuration
 - Add support for Rocky Linux 9.6

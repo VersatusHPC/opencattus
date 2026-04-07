@@ -178,19 +178,17 @@ namespace {
         boost::algorithm::trim(normalized);
         boost::algorithm::to_lower(normalized);
 
-        if (normalized == "1" || normalized == "true"
-            || normalized == "yes") {
+        if (normalized == "1" || normalized == "true" || normalized == "yes") {
             return true;
         }
 
-        if (normalized == "0" || normalized == "false"
-            || normalized == "no") {
+        if (normalized == "0" || normalized == "false" || normalized == "no") {
             return false;
         }
 
-        throw std::runtime_error(fmt::format(
-            "Keyfile Error, invalid boolean [{}].{}={}", group, key,
-            normalized));
+        throw std::runtime_error(
+            fmt::format("Keyfile Error, invalid boolean [{}].{}={}", group, key,
+                normalized));
     }
 
     template <typename T> std::string toString(const T& input)
@@ -898,9 +896,9 @@ std::string defaultOpenHPCVersionFor(const OS& osinfo)
         case OS::Platform::el10:
             return "4";
         default:
-            throw std::runtime_error(fmt::format(
-                "Unsupported OpenHPC repository baseline for EL{}",
-                osinfo.getMajorVersion()));
+            throw std::runtime_error(
+                fmt::format("Unsupported OpenHPC repository baseline for EL{}",
+                    osinfo.getMajorVersion()));
     }
 }
 
@@ -1228,8 +1226,8 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
                         return "\"AlmaLinux 8 - PowerTools\"";
                     case OS::Platform::el9:
                     case OS::Platform::el10:
-                        return fmt::format("\"AlmaLinux {} - CRB\"",
-                            majorVersion);
+                        return fmt::format(
+                            "\"AlmaLinux {} - CRB\"", majorVersion);
                     default:
                         throw std::runtime_error("Unsupported platform");
                 }
@@ -1406,7 +1404,8 @@ TEST_CASE("RepoNames")
     }
     // Rocky EL10
     {
-        const auto osinfo = OS(models::OS::Distro::Rocky, OS::Platform::el10, 1);
+        const auto osinfo
+            = OS(models::OS::Distro::Rocky, OS::Platform::el10, 1);
         const auto el10Vars = RepoConfigVars {
             .arch = "x86_64",
             .beegfsVersion = "beegfs_7.4.0",
@@ -1434,7 +1433,8 @@ TEST_CASE("RepoNames")
 
     // Rocky EL8
     {
-        const auto osinfo = OS(models::OS::Distro::Rocky, OS::Platform::el8, 10);
+        const auto osinfo
+            = OS(models::OS::Distro::Rocky, OS::Platform::el8, 10);
         const auto conffiles = RepoConfigParser::load<ShouldUseVaultService>(
             "repos/", osinfo, varsEl8);
         const auto enabledRepos = enabler.resolveReposNames(osinfo, conffiles);
