@@ -84,7 +84,9 @@ jobs:
             image: docker.io/library/rockylinux:8
             setup: >-
               dnf install -y dnf-plugins-core epel-release &&
-              dnf config-manager --set-enabled powertools
+              dnf config-manager --set-enabled powertools &&
+              dnf install -y python39 python39-pip &&
+              alternatives --set python3 /usr/bin/python3.9
             extra_pkgs: >-
               gcc-toolset-14
               gcc-toolset-14-libubsan-devel
