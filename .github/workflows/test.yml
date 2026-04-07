@@ -91,9 +91,10 @@ jobs:
               gcc-toolset-14-libasan-devel
               glibmm24-devel
           - el: EL9
-            image: registry.access.redhat.com/ubi9/ubi:latest
+            image: docker.io/library/rockylinux:9
             setup: >-
-              dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+              dnf install -y dnf-plugins-core epel-release &&
+              dnf config-manager --set-enabled crb
             extra_pkgs: >-
               gcc-toolset-14
               gcc-toolset-14-libubsan-devel
