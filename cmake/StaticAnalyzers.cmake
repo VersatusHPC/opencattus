@@ -53,12 +53,7 @@ macro(opencattus_enable_cppcheck WARNINGS_AS_ERRORS CPPCHECK_OPTIONS)
        STREQUAL
        "")
 
-      if ("${CMAKE_CXX_STANDARD}" STREQUAL "23")
-        # cppcheck does not support c++23 for some reason (in the opencattus dev server)
-        set(CMAKE_CXX_CPPCHECK ${CMAKE_CXX_CPPCHECK} --std=c++20)
-      else()
-        set(CMAKE_CXX_CPPCHECK ${CMAKE_CXX_CPPCHECK} --std=c++${CMAKE_CXX_STANDARD})
-      endif()
+      set(CMAKE_CXX_CPPCHECK ${CMAKE_CXX_CPPCHECK} --std=c++${CMAKE_CXX_STANDARD})
     endif()
     if(${WARNINGS_AS_ERRORS})
       list(APPEND CMAKE_CXX_CPPCHECK --error-exitcode=2)

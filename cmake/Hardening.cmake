@@ -73,7 +73,7 @@ macro(
   if(${ubsan_minimal_runtime})
     check_cxx_compiler_flag("-fsanitize=undefined -fno-sanitize-recover=undefined -fsanitize-minimal-runtime"
                             MINIMAL_RUNTIME)
-    if(MINIMAL_RUNTIME AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+    if(MINIMAL_RUNTIME)
       set(NEW_COMPILE_OPTIONS "${NEW_COMPILE_OPTIONS} -fsanitize=undefined -fsanitize-minimal-runtime")
       set(NEW_LINK_OPTIONS "${NEW_LINK_OPTIONS} -fsanitize=undefined -fsanitize-minimal-runtime")
 
