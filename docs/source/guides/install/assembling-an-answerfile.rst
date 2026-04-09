@@ -47,6 +47,16 @@ For the current EL10 bootstrap path, use ``distro=rocky`` with the exact
 EL10 minor version you are targeting and set ``provisioner=confluent``. The
 product now rejects ``provisioner=xcat`` on EL10 explicitly.
 
+Round-trip status
+~~~~~~~~~~~~~~~~~
+
+``--dump-answerfile`` is now validated as a real reinstall source for the
+Rocky Linux 8.10 + xCAT, Rocky Linux 8.10 + Confluent, Rocky Linux 9.7 +
+xCAT, Rocky Linux 9.7 + Confluent, and Rocky Linux 10.1 + Confluent
+libvirt/KVM lab paths. That means the dumped file is no longer just a
+reporting artifact in those validated paths; it can drive a fresh unattended
+install.
+
 Optional sections
 ~~~~~~~~~~~~~~~~~
 

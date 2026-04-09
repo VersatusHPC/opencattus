@@ -137,7 +137,7 @@ int main(int argc, const char** argv)
 #endif
     LOG_INFO("{} Started", productName)
 
-    if (optsMut->testCommand.empty()) {
+    if (optsMut->testCommand.empty() && optsMut->dumpAnswerfile.empty()) {
         // skip during tests, we do not want to run tests as root
         opencattus::checkEffectiveUserId();
     }
@@ -150,7 +150,7 @@ int main(int argc, const char** argv)
     if (optsMut->dryRun) {
         LOG_INFO("Dry run enabled.");
     } else {
-        while (!optsMut->unattended) {
+        while (!optsMut->unattended && optsMut->dumpAnswerfile.empty()) {
             char response = 'N';
             fmt::print("{} will now modify your system, do you want to "
                        "continue? [Y/N]\n",
@@ -198,16 +198,18 @@ int main(int argc, const char** argv)
     model->printData();
 #endif
 
+    if (!opts->dumpAnswerfile.empty()) {
+        model->dumpData(opts->dumpAnswerfile);
+        Log::shutdown();
+        return EXIT_SUCCESS;
+    }
+
     if (opts->enableTUI) {
         // Entrypoint; if the view is constructed it will start the TUI.
         auto view = std::make_unique<Newt>();
         auto presenter
             = std::make_unique<opencattus::presenter::PresenterInstall>(
                 model, view);
-    }
-
-    if (!opts->dumpAnswerfile.empty()) {
-        model->dumpData(opts->dumpAnswerfile);
     }
 
     initializeSingletonsModel(std::move(model), std::move(answerfile));

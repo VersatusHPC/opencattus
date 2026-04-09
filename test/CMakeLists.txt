@@ -34,6 +34,7 @@ message(STATUS "Source files found are: ${SOURCES}")
 
 add_library(opencattus_test_object OBJECT ${TEST_SOURCES} ${SOURCES})
 add_executable(${PROJECT_NAME} main.cpp)
+add_dependencies(${PROJECT_NAME} opencattus)
 
 # Enable BUILD_TESTING macro to compile the test shipped on the source files
 target_compile_definitions(opencattus_test_object PRIVATE BUILD_TESTING=1)
@@ -108,6 +109,14 @@ set_tests_properties(
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
         LABELS slow
         DISABLED TRUE)
+
+add_test(
+        NAME ${PROJECT_NAME}.cli_dump_answerfile
+        COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/files/check-dump-answerfile.sh" $<TARGET_FILE:opencattus>)
+set_tests_properties(
+        ${PROJECT_NAME}.cli_dump_answerfile
+        PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
 # ---- code coverage ----
 
