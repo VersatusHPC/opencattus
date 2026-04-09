@@ -11,7 +11,9 @@
 #include <opencattus/services/options.h>
 #include <opencattus/services/osservice.h>
 #include <opencattus/services/repos.h>
+#include <opencattus/utils/enums.h>
 #include <opencattus/utils/singleton.h>
+#include <stdexcept>
 #include <utility>
 
 #ifdef BUILD_TESTING
@@ -79,8 +81,10 @@ auto buildDocaLegacyPrereqCommand(
             fmt::arg("kernelVersion", kernelVersion.value()));
     }
 
-    return "dnf -y --nogpg install kernel kernel-devel kernel-headers "
-           "doca-extra tar";
+    return "bash -lc \"dnf -y --nogpg install "
+           "kernel-$(uname -r) kernel-devel-$(uname -r) "
+           "kernel-headers-$(uname -r) "
+           "doca-extra tar\"";
 }
 
 auto buildDocaDkmsPrereqCommand(
@@ -95,6 +99,180 @@ auto buildDocaDkmsPrereqCommand(
 
     return "dnf -y --nogpg install dkms gcc make perl mokutil "
            "kernel-devel-$(uname -r) kernel-headers-$(uname -r)";
+}
+
+auto buildDocaHostInstallCommand() -> std::string
+{
+    return "dnf install --nogpg -y "
+           "--exclude=kernel "
+           "--exclude=kernel-core "
+           "--exclude=kernel-modules "
+           "--exclude=kernel-modules-core "
+           "--exclude=kernel-devel\\* "
+           "--exclude=kernel-headers\\* "
+           "doca-ofed mlnx-fw-updater";
+}
+
+auto rockyKernelPackageRepositoryComponent(
+    const opencattus::models::OS& osinfo, std::string_view packageName)
+    -> std::string_view
+{
+    switch (osinfo.getPlatform()) {
+        case opencattus::models::OS::Platform::el8:
+            return "BaseOS";
+        case opencattus::models::OS::Platform::el9:
+        case opencattus::models::OS::Platform::el10:
+            if (packageName == "kernel-devel"
+                || packageName == "kernel-headers") {
+                return "AppStream";
+            }
+            return "BaseOS";
+        default:
+            std::unreachable();
+    }
+}
+
+auto buildRockyKernelPackageUrl(const opencattus::models::OS& osinfo,
+    std::string_view packageName, std::string_view kernelVersion)
+    -> std::optional<std::string>
+{
+    if (osinfo.getDistro() != opencattus::models::OS::Distro::Rocky) {
+        return std::nullopt;
+    }
+
+    return fmt::format(
+        "https://download.rockylinux.org/pub/rocky/{osversion}/{repo}/{arch}/"
+        "os/Packages/k/{packageName}-{kernelVersion}.rpm",
+        fmt::arg("osversion", osinfo.getVersion()),
+        fmt::arg("repo",
+            rockyKernelPackageRepositoryComponent(osinfo, packageName)),
+        fmt::arg("arch",
+            opencattus::utils::enums::toString(osinfo.getArch())),
+        fmt::arg("packageName", packageName),
+        fmt::arg("kernelVersion", kernelVersion));
+}
+
+auto buildRockyLegacyPrereqFallbackCommand(
+    const opencattus::models::OS& osinfo, std::string_view kernelVersion)
+    -> std::optional<std::string>
+{
+    const auto kernelUrl
+        = buildRockyKernelPackageUrl(osinfo, "kernel", kernelVersion);
+    const auto develUrl
+        = buildRockyKernelPackageUrl(osinfo, "kernel-devel", kernelVersion);
+    const auto headersUrl
+        = buildRockyKernelPackageUrl(osinfo, "kernel-headers", kernelVersion);
+
+    if (!kernelUrl.has_value() || !develUrl.has_value()
+        || !headersUrl.has_value()) {
+        return std::nullopt;
+    }
+
+    return fmt::format("dnf -y --nogpg install doca-extra tar {} {} {}",
+        kernelUrl.value(), develUrl.value(), headersUrl.value());
+}
+
+auto buildRockyDkmsPrereqFallbackCommand(
+    const opencattus::models::OS& osinfo, std::string_view kernelVersion)
+    -> std::optional<std::string>
+{
+    const auto develUrl
+        = buildRockyKernelPackageUrl(osinfo, "kernel-devel", kernelVersion);
+    const auto headersUrl
+        = buildRockyKernelPackageUrl(osinfo, "kernel-headers", kernelVersion);
+
+    if (!develUrl.has_value() || !headersUrl.has_value()) {
+        return std::nullopt;
+    }
+
+    return fmt::format("dnf -y --nogpg install dkms gcc make perl mokutil {} {}",
+        develUrl.value(), headersUrl.value());
+}
+
+auto installDocaPrereqsWithFallback(IRunner& runner,
+    std::string_view primaryCommand, std::optional<std::string> fallbackCommand,
+    std::string_view kernelVersion) -> void
+{
+    try {
+        runner.checkCommand(std::string(primaryCommand));
+    } catch (const std::runtime_error& error) {
+        if (!fallbackCommand.has_value()) {
+            throw;
+        }
+
+        LOG_WARN("Primary exact-kernel prerequisite install for {} failed "
+                 "({}); retrying with upstream Rocky package URLs",
+            kernelVersion, error.what());
+        runner.checkCommand(fallbackCommand.value());
+    }
+}
+
+auto latestInstalledKernelCore(IRunner& runner) -> std::string
+{
+    const auto kernels = runner.checkOutput(
+        "bash -lc \"rpm -q kernel-core --qf '%{INSTALLTIME} "
+        "%{VERSION}-%{RELEASE}.%{ARCH}\\n'\"");
+
+    auto newestKernel = std::string {};
+    long long newestInstallTime = 0;
+    auto foundKernel = false;
+
+    for (const auto& line : kernels) {
+        const auto separator = line.find(' ');
+        if (separator == std::string::npos || separator + 1 >= line.size()) {
+            continue;
+        }
+
+        const auto installTime = std::stoll(line.substr(0, separator));
+        if (!foundKernel || installTime > newestInstallTime) {
+            newestInstallTime = installTime;
+            newestKernel = line.substr(separator + 1);
+            foundKernel = true;
+        }
+    }
+
+    if (!foundKernel || newestKernel.empty()) {
+        throw std::runtime_error(
+            "Could not determine the latest installed kernel-core package");
+    }
+
+    return newestKernel;
+}
+
+auto shouldPrimeDocaDkmsForInstalledKernel(std::string_view installedKernel,
+    std::string_view runningKernel) -> bool
+{
+    return installedKernel != runningKernel;
+}
+
+auto primeDocaDkmsForInstalledKernel(IRunner& runner,
+    std::string_view runningKernel) -> void
+{
+    const auto installedKernel = latestInstalledKernelCore(runner);
+    if (!shouldPrimeDocaDkmsForInstalledKernel(installedKernel, runningKernel))
+    {
+        return;
+    }
+
+    LOG_WARN("DOCA installed a newer kernel {} while {} is still running; "
+             "skipping DKMS priming so current-stream installs remain bound "
+             "to the running kernel during validation",
+        installedKernel, runningKernel);
+}
+
+auto findLatestGeneratedDocaKernelRepoRpm(IRunner& runner) -> std::string
+{
+    const auto rpm = runner.checkOutput(
+        "bash -c \"find /tmp/DOCA*/ -name 'doca-kernel-repo-*.rpm' -printf "
+        "'%T@ %p\\n' | sort -nk1 | tail -1 | awk '{print $2}'\"");
+
+    if (rpm.empty() || rpm[0].empty()) {
+        throw std::runtime_error(
+            "Could not locate the generated DOCA kernel repo RPM under "
+            "/tmp/DOCA*/");
+    }
+
+    return rpm[0];
 }
 
 } // namespace
@@ -158,11 +336,11 @@ void OFED::install() const
             auto repoManager = opencattus::Singleton<
                 opencattus::services::repos::RepoManager>::get();
             const auto osservice = opencattus::utils::singleton::osservice();
+            const auto osinfo = opencattus::utils::singleton::os();
             const auto requestedKernel = requestedKernelForOFED();
             const auto runningKernel = osservice->getKernelRunning();
             const auto installMode
-                = selectDocaInstallMode(*this,
-                    opencattus::utils::singleton::os(),
+                = selectDocaInstallMode(*this, osinfo,
                     requestedKernel ? std::optional<std::string_view>(
                                           requestedKernel.value())
                                     : std::nullopt,
@@ -183,10 +361,13 @@ void OFED::install() const
                         getVersion(), runningKernel);
                 }
 
-                runner->checkCommand(buildDocaLegacyPrereqCommand(
-                    requestedKernel ? std::optional<std::string_view>(
-                                          requestedKernel.value())
-                                    : std::nullopt));
+                const auto kernelVersion = requestedKernel.value_or(runningKernel);
+                const auto prereqCommand = buildDocaLegacyPrereqCommand(
+                    std::optional<std::string_view>(kernelVersion));
+                installDocaPrereqsWithFallback(*runner, prereqCommand,
+                    buildRockyLegacyPrereqFallbackCommand(osinfo,
+                        kernelVersion),
+                    kernelVersion);
 
                 LOG_INFO("Compiling DOCA kernel support, this may take a "
                          "while, use `--skip compile-doca-driver` to skip");
@@ -202,19 +383,20 @@ void OFED::install() const
                     }
                 }
 
-                auto rpm = runner->checkOutput(
-                    "bash -c \"find /tmp/DOCA*/ -name '*.rpm' -printf '%T@ "
-                    "%p\n' | sort -nk1 | tail -1 | awk '{print $2}'\"");
-                assert(!rpm.empty());
-                runner->executeCommand(fmt::format("dnf install -y {}", rpm[0]));
+                runner->checkCommand(fmt::format(
+                    "dnf install -y {}",
+                    findLatestGeneratedDocaKernelRepoRpm(*runner)));
             } else {
                 LOG_INFO("Using the DOCA repo + DKMS installation path for "
                          "stream {} and running kernel {}",
                     getVersion(), runningKernel);
                 repoManager->enable("epel");
                 runner->checkCommand("dnf makecache --repo=epel");
-                runner->checkCommand(buildDocaDkmsPrereqCommand(
-                    std::optional<std::string_view>(runningKernel)));
+                const auto dkmsPrereqCommand = buildDocaDkmsPrereqCommand(
+                    std::optional<std::string_view>(runningKernel));
+                installDocaPrereqsWithFallback(*runner, dkmsPrereqCommand,
+                    buildRockyDkmsPrereqFallbackCommand(osinfo, runningKernel),
+                    runningKernel);
                 runner->checkCommand(
                     "dnf -y --nogpg install doca-extra tar");
 
@@ -223,12 +405,15 @@ void OFED::install() const
                 if (!opts->shouldSkip("compile-doca-driver")) {
                     runner->checkCommand(
                         "/opt/mellanox/doca/tools/doca-kernel-support");
+                    runner->checkCommand(fmt::format(
+                        "dnf install -y {}",
+                        findLatestGeneratedDocaKernelRepoRpm(*runner)));
                 }
             }
 
             runner->checkCommand("dnf makecache --repo=doca*");
-            runner->checkCommand(
-                "dnf install --nogpg -y doca-ofed mlnx-fw-updater");
+            runner->checkCommand(buildDocaHostInstallCommand());
+            primeDocaDkmsForInstalledKernel(*runner, runningKernel);
             runner->executeCommand("systemctl restart openibd || true");
             // runner->executeCommand("systemctl enable --now opensmd");
         } break;
@@ -312,4 +497,128 @@ TEST_CASE("buildDocaLegacyPrereqCommand keeps explicit kernel pinning")
            "kernel-devel-5.14.0-570.28.1.el9_6.x86_64 "
            "kernel-headers-5.14.0-570.28.1.el9_6.x86_64 "
            "doca-extra tar");
+}
+
+TEST_CASE("buildDocaLegacyPrereqCommand uses the running kernel by default")
+{
+    CHECK(buildDocaLegacyPrereqCommand(std::nullopt)
+        == "bash -lc \"dnf -y --nogpg install "
+           "kernel-$(uname -r) kernel-devel-$(uname -r) "
+           "kernel-headers-$(uname -r) "
+           "doca-extra tar\"");
+}
+
+TEST_CASE("buildDocaDkmsPrereqCommand keeps explicit installed kernel pinning")
+{
+    CHECK(buildDocaDkmsPrereqCommand(
+              std::optional<std::string_view>("5.14.0-611.41.1.el9_7.x86_64"))
+        == "dnf -y --nogpg install dkms gcc make perl mokutil "
+           "kernel-devel-5.14.0-611.41.1.el9_7.x86_64 "
+           "kernel-headers-5.14.0-611.41.1.el9_7.x86_64");
+}
+
+TEST_CASE("buildRockyDkmsPrereqFallbackCommand uses Rocky AppStream URLs on EL9")
+{
+    const auto fallback = buildRockyDkmsPrereqFallbackCommand(
+        opencattus::models::OS(opencattus::models::OS::Distro::Rocky,
+            opencattus::models::OS::Platform::el9, 7,
+            opencattus::models::OS::Arch::x86_64),
+        "5.14.0-611.41.1.el9_7.x86_64");
+
+    REQUIRE(fallback.has_value());
+    CHECK(fallback.value().contains(
+        "https://download.rockylinux.org/pub/rocky/9.7/AppStream/x86_64/os/Packages/k/"
+        "kernel-devel-5.14.0-611.41.1.el9_7.x86_64.rpm"));
+    CHECK(fallback.value().contains(
+        "https://download.rockylinux.org/pub/rocky/9.7/AppStream/x86_64/os/Packages/k/"
+        "kernel-headers-5.14.0-611.41.1.el9_7.x86_64.rpm"));
+}
+
+TEST_CASE("buildRockyLegacyPrereqFallbackCommand uses Rocky BaseOS and AppStream URLs")
+{
+    const auto fallback = buildRockyLegacyPrereqFallbackCommand(
+        opencattus::models::OS(opencattus::models::OS::Distro::Rocky,
+            opencattus::models::OS::Platform::el8, 10,
+            opencattus::models::OS::Arch::x86_64),
+        "4.18.0-553.el8_10.x86_64");
+
+    REQUIRE(fallback.has_value());
+    CHECK(fallback.value().contains("doca-extra tar"));
+    CHECK(fallback.value().contains(
+        "https://download.rockylinux.org/pub/rocky/8.10/BaseOS/x86_64/os/Packages/k/"
+        "kernel-4.18.0-553.el8_10.x86_64.rpm"));
+    CHECK(fallback.value().contains(
+        "https://download.rockylinux.org/pub/rocky/8.10/BaseOS/x86_64/os/Packages/k/"
+        "kernel-devel-4.18.0-553.el8_10.x86_64.rpm"));
+    CHECK(fallback.value().contains(
+        "https://download.rockylinux.org/pub/rocky/8.10/BaseOS/x86_64/os/Packages/k/"
+        "kernel-headers-4.18.0-553.el8_10.x86_64.rpm"));
+}
+
+TEST_CASE("buildDocaHostInstallCommand excludes kernel package upgrades")
+{
+    CHECK(buildDocaHostInstallCommand()
+        == "dnf install --nogpg -y "
+           "--exclude=kernel "
+           "--exclude=kernel-core "
+           "--exclude=kernel-modules "
+           "--exclude=kernel-modules-core "
+           "--exclude=kernel-devel\\* "
+           "--exclude=kernel-headers\\* "
+           "doca-ofed mlnx-fw-updater");
+}
+
+TEST_CASE("DOCA DKMS priming runs when a newer kernel is installed")
+{
+    CHECK(shouldPrimeDocaDkmsForInstalledKernel(
+        "5.14.0-611.41.1.el9_7.x86_64", "5.14.0-611.5.1.el9_7.x86_64"));
+}
+
+TEST_CASE("DOCA DKMS priming is skipped on the running kernel")
+{
+    CHECK_FALSE(shouldPrimeDocaDkmsForInstalledKernel(
+        "5.14.0-611.41.1.el9_7.x86_64", "5.14.0-611.41.1.el9_7.x86_64"));
+}
+
+TEST_CASE("latestInstalledKernelCore uses install time instead of version sort")
+{
+    class KernelQueryRunner final : public IRunner {
+    public:
+        std::string queriedCommand;
+
+        int executeCommand(const std::string&) override { return 0; }
+        int executeCommand(const std::string&, std::list<std::string>&) override
+        {
+            return 0;
+        }
+        opencattus::services::CommandProxy executeCommandIter(
+            const std::string&, opencattus::services::Stream) override
+        {
+            return {};
+        }
+        void checkCommand(const std::string&) override { }
+        std::vector<std::string> checkOutput(const std::string& command) override
+        {
+            queriedCommand = command;
+            return {
+                "1712441600 4.18.0-553.el8_10.x86_64",
+                "1712450000 4.18.0-553.111.1.el8_10.x86_64",
+            };
+        }
+        int downloadFile(const std::string&, const std::string&) override
+        {
+            return 0;
+        }
+        int run(const opencattus::services::ScriptBuilder&) override
+        {
+            return 0;
+        }
+    };
+
+    auto runner = KernelQueryRunner {};
+    CHECK(latestInstalledKernelCore(runner)
+        == "4.18.0-553.111.1.el8_10.x86_64");
+    CHECK(runner.queriedCommand
+        == "bash -lc \"rpm -q kernel-core --qf '%{INSTALLTIME} "
+           "%{VERSION}-%{RELEASE}.%{ARCH}\\n'\"");
 }

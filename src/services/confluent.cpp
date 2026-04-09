@@ -6,9 +6,11 @@
 #include <opencattus/models/os.h>
 #include <opencattus/services/confluent.h>
 #include <opencattus/services/runner.h>
+#include <opencattus/utils/enums.h>
 #include <opencattus/utils/network.h>
 #include <opencattus/utils/optional.h>
 #include <opencattus/utils/singleton.h>
+#include <opencattus/utils/string.h>
 #include <optional>
 #include <stdexcept>
 
@@ -93,6 +95,53 @@ grep -Fqx '{managementIp}	{fqdn} {hostname}' /etc/hosts || \
         fmt::arg("hostname", hostname));
 }
 
+std::string buildConfluentRepoRpmUrl(const models::OS& os)
+{
+    const auto arch = opencattus::utils::enums::toString(os.getArch());
+    const auto relativePath = fmt::format(
+        "lenovo-hpc/rpm/latest/el{releasever}/{arch}/"
+        "lenovo-hpc-yum-1-1.{arch}.rpm",
+        fmt::arg("releasever", os.getMajorVersion()),
+        fmt::arg("arch", arch));
+    const auto opts = opencattus::utils::singleton::options();
+
+    if (opts->enableMirrors) {
+        return fmt::format("{mirrorUrl}/{path}",
+            fmt::arg("mirrorUrl", string::rstrip(opts->mirrorBaseUrl, "/")),
+            fmt::arg("path", relativePath));
+    }
+
+    return fmt::format("https://hpc.lenovo.com/yum/latest/el{releasever}/"
+                       "{arch}/lenovo-hpc-yum-1-1.{arch}.rpm",
+        fmt::arg("releasever", os.getMajorVersion()),
+        fmt::arg("arch", arch));
+}
+
+std::string buildConfluentBootstrapCommands(const models::OS& os)
+{
+    return fmt::format(R"(
+# Add the Confluent repository
+rpm -q lenovo-hpc-yum >/dev/null 2>&1 || rpm -Uvh {repoRpmUrl}
+
+# Install required packages
+dnf install -y lenovo-confluent tftp-server dnsmasq
+systemctl enable confluent --now
+systemctl enable httpd --now
+systemctl enable tftp.socket --now
+systemctl enable dnsmasq --now
+
+# Enable the Confluent environment
+test -f /etc/profile.d/confluent_env.sh
+set +xeu # confluent_env.sh has undefined variables
+source /etc/profile.d/confluent_env.sh
+set -xeu
+command -v confluent2hosts >/dev/null
+command -v osdeploy >/dev/null
+command -v imgutil >/dev/null
+)",
+        fmt::arg("repoRpmUrl", buildConfluentRepoRpmUrl(os)));
+}
+
 std::string buildSpackModuleTree(const models::OS& os)
 {
     std::string distro;
@@ -173,8 +222,135 @@ std::string buildNodeImageInstallCommand(const models::OS& os)
     }
 }
 
-std::string buildNodeImageOFEDCommands(bool applicationNetworkConfigured,
-    const std::optional<OFED>& ofed)
+std::optional<std::string> selectConfluentImageKernelVersion(
+    const std::optional<OFED>& ofed,
+    std::optional<std::string_view> configuredKernel,
+    std::string_view runningKernel)
+{
+    if (configuredKernel.has_value()) {
+        return std::string(configuredKernel.value());
+    }
+
+    if (!ofed.has_value() || ofed->getKind() != OFED::Kind::Doca) {
+        return std::nullopt;
+    }
+
+    return std::string(runningKernel);
+}
+
+std::string buildConfluentKernelPackages(const models::OS& os,
+    std::string_view kernelVersion)
+{
+    switch (os.getPlatform()) {
+        case models::OS::Platform::el8:
+            return fmt::format(
+                "kernel-{0} "
+                "kernel-core-{0} "
+                "kernel-modules-{0} "
+                "kernel-modules-extra-{0}",
+                kernelVersion);
+        case models::OS::Platform::el9:
+        case models::OS::Platform::el10:
+            return fmt::format(
+                "kernel-{0} "
+                "kernel-core-{0} "
+                "kernel-modules-{0} "
+                "kernel-modules-core-{0} "
+                "kernel-modules-extra-{0}",
+                kernelVersion);
+        default:
+            std::unreachable();
+    }
+}
+
+std::optional<std::string> buildRockyKernelImageFallbackCommands(
+    const models::OS& os, std::string_view kernelVersionExpr)
+{
+    if (os.getDistro() != models::OS::Distro::Rocky) {
+        return std::nullopt;
+    }
+
+    const auto arch = opencattus::utils::enums::toString(os.getArch());
+    const auto packageBase = fmt::format(
+        "https://download.rockylinux.org/pub/rocky/{}/{}/{}/os/Packages/k",
+        os.getVersion(), "BaseOS", arch);
+
+    switch (os.getPlatform()) {
+        case models::OS::Platform::el8:
+            return fmt::format(R"(if ! dnf install --nogpg -y \
+    kernel-{kernelVersion} \
+    kernel-core-{kernelVersion} \
+    kernel-modules-{kernelVersion} \
+    kernel-modules-extra-{kernelVersion}; then
+    dnf install --nogpg -y \
+        {packageBase}/kernel-{kernelVersion}.rpm \
+        {packageBase}/kernel-core-{kernelVersion}.rpm \
+        {packageBase}/kernel-modules-{kernelVersion}.rpm \
+        {packageBase}/kernel-modules-extra-{kernelVersion}.rpm
+fi
+)",
+                fmt::arg("kernelVersion", kernelVersionExpr),
+                fmt::arg("packageBase", packageBase));
+        case models::OS::Platform::el9:
+        case models::OS::Platform::el10:
+            return fmt::format(R"(if ! dnf install --nogpg -y \
+    kernel-{kernelVersion} \
+    kernel-core-{kernelVersion} \
+    kernel-modules-{kernelVersion} \
+    kernel-modules-core-{kernelVersion} \
+    kernel-modules-extra-{kernelVersion}; then
+    dnf install --nogpg -y \
+        {packageBase}/kernel-{kernelVersion}.rpm \
+        {packageBase}/kernel-core-{kernelVersion}.rpm \
+        {packageBase}/kernel-modules-{kernelVersion}.rpm \
+        {packageBase}/kernel-modules-core-{kernelVersion}.rpm \
+        {packageBase}/kernel-modules-extra-{kernelVersion}.rpm
+fi
+)",
+                fmt::arg("kernelVersion", kernelVersionExpr),
+                fmt::arg("packageBase", packageBase));
+        default:
+            std::unreachable();
+    }
+}
+
+std::optional<std::string> buildRockyKernelSupportFallbackCommands(
+    const models::OS& os, std::string_view kernelVersionExpr)
+{
+    if (os.getDistro() != models::OS::Distro::Rocky) {
+        return std::nullopt;
+    }
+
+    const auto arch = opencattus::utils::enums::toString(os.getArch());
+    const auto repoComponent = [&]() -> std::string_view {
+        switch (os.getPlatform()) {
+            case models::OS::Platform::el8:
+                return "BaseOS";
+            case models::OS::Platform::el9:
+            case models::OS::Platform::el10:
+                return "AppStream";
+            default:
+                std::unreachable();
+        }
+    }();
+    const auto packageBase = fmt::format(
+        "https://download.rockylinux.org/pub/rocky/{}/{}/{}/os/Packages/k",
+        os.getVersion(), repoComponent, arch);
+
+    return fmt::format(R"(if ! dnf install --nogpg -y kernel-devel-{kernelVersion} kernel-headers-{kernelVersion}; then
+    dnf install --nogpg -y \
+        {packageBase}/kernel-devel-{kernelVersion}.rpm \
+        {packageBase}/kernel-headers-{kernelVersion}.rpm
+fi
+)",
+        fmt::arg("kernelVersion", kernelVersionExpr),
+        fmt::arg("packageBase", packageBase));
+}
+
+std::string buildNodeImageOFEDCommands(const models::OS& os,
+    bool applicationNetworkConfigured,
+    const std::optional<OFED>& ofed,
+    std::optional<std::string_view> kernelVersion)
 {
     if (!applicationNetworkConfigured || !ofed.has_value()) {
         return "";
@@ -188,23 +364,94 @@ dnf group install -y --nogpg "Infiniband Support"
 EOF
 )";
 
-        case OFED::Kind::Doca:
-            return R"(
+        case OFED::Kind::Doca: {
+            const auto kernelImageInstallCommands
+                = buildRockyKernelImageFallbackCommands(
+                      os, "${doca_image_kernel}")
+                      .value_or(fmt::format(R"(
+dnf install --nogpg -y \
+    {kernelPackages}
+)",
+                          fmt::arg("kernelPackages",
+                              buildConfluentKernelPackages(
+                                  os, "${doca_image_kernel}"))));
+            const auto kernelSupportInstallCommands
+                = buildRockyKernelSupportFallbackCommands(
+                      os, "${doca_image_kernel}")
+                      .value_or(std::string(R"(
+dnf install --nogpg -y kernel-devel-${doca_image_kernel} kernel-headers-${doca_image_kernel}
+)"));
+            const auto kernelSelectionCommands = kernelVersion.has_value()
+                ? fmt::format(
+                      R"(export doca_image_kernel={kernelVersion}
+imgutil exec $scratchdir <<EOF
+set -xeu -o pipefail
+{kernelImageInstallCommands}
+EOF
+)",
+                      fmt::arg("kernelVersion", kernelVersion.value()),
+                      fmt::arg("kernelImageInstallCommands",
+                          kernelImageInstallCommands))
+                : R"(export doca_image_kernel=$(rpm --root "$scratchdir" -q kernel-core --qf '%{INSTALLTIME} %{VERSION}-%{RELEASE}.%{ARCH}\n' | sort -n | tail -1 | cut -d' ' -f2-)
+)";
+
+            return std::string(R"(
 if ! test -f /etc/yum.repos.d/mlnx-doca.repo; then
     echo "Expected /etc/yum.repos.d/mlnx-doca.repo for DOCA node image staging" >&2
     exit 1
 fi
-if ! test -f /etc/yum.repos.d/doca-kernel-$(uname -r).repo; then
-    echo "Expected /etc/yum.repos.d/doca-kernel-$(uname -r).repo for DOCA node image staging" >&2
+)")
+                + kernelSelectionCommands
+                + R"(
+if test -z "$doca_image_kernel"; then
+    echo "Could not determine the Confluent node image kernel for DOCA staging" >&2
     exit 1
 fi
-export doca_repo_folder=$(perl -lane 'print $1 if /baseurl=file:\/\/(.*)/' /etc/yum.repos.d/doca-kernel-$(uname -r).repo)
+if ! rpm --root "$scratchdir" -q )"
+                + buildConfluentKernelPackages(os, "${doca_image_kernel}")
+                + R"( >/dev/null 2>&1; then
+    echo "Failed to stage the exact kernel payload ${doca_image_kernel} into the Confluent node image" >&2
+    exit 1
+fi
+if ! test -f /etc/yum.repos.d/doca-kernel-${doca_image_kernel}.repo; then
+)"
+                + kernelSupportInstallCommands
+                + R"(
+    /opt/mellanox/doca/tools/doca-kernel-support -k "${doca_image_kernel}"
+    export doca_repo_rpm=$(bash -c "find /tmp/DOCA*/ -name 'doca-kernel-repo-*.rpm' -printf '%T@ %p\n' | sort -nk1 | tail -1 | awk '{print \$2}'")
+    if test -z "$doca_repo_rpm"; then
+        echo "Failed to locate a generated DOCA kernel repo RPM for ${doca_image_kernel}" >&2
+        exit 1
+    fi
+    dnf install --nogpg -y "$doca_repo_rpm"
+fi
+export doca_repo_folder=$(perl -lane 'print $1 if /baseurl=file:\/\/(.*)/' /etc/yum.repos.d/doca-kernel-${doca_image_kernel}.repo)
+if test -z "$doca_repo_folder"; then
+    echo "Could not determine the DOCA repo folder for image kernel ${doca_image_kernel}" >&2
+    exit 1
+fi
 \cp -va /etc/yum.repos.d/mlnx-doca.repo $scratchdir/etc/yum.repos.d/
-\cp -va /etc/yum.repos.d/doca-kernel-$(uname -r).repo $scratchdir/etc/yum.repos.d/
+\cp -va /etc/yum.repos.d/doca-kernel-${doca_image_kernel}.repo $scratchdir/etc/yum.repos.d/
 imgutil exec -v $doca_repo_folder:$doca_repo_folder $scratchdir <<EOF
-dnf install --nogpg -y doca-ofed mlnx-ofa_kernel
+set -xeu -o pipefail
+)"
+                + kernelSupportInstallCommands
+                + R"(
+dnf install --nogpg -y \
+    --exclude=kernel \
+    --exclude=kernel-core \
+    --exclude=kernel-modules \
+    --exclude=kernel-modules-core \
+    --exclude=kernel-devel\* \
+    --exclude=kernel-headers\* \
+    doca-extra doca-ofed mlnx-ofa_kernel
 EOF
+if ! rpm --root "$scratchdir" -q doca-extra doca-ofed mlnx-ofa_kernel >/dev/null 2>&1; then
+    echo "Confluent DOCA image staging did not install doca-extra, doca-ofed, and mlnx-ofa_kernel into the scratch image" >&2
+    exit 1
+fi
 )";
+        }
 
         case OFED::Kind::Oracle:
             throw std::logic_error(
@@ -233,25 +480,31 @@ void Confluent::install()
 {
     using namespace utils::singleton;
 
+    const auto configuredKernel = answerfile()->system.kernel;
+    const auto nodeImageKernel = selectConfluentImageKernelVersion(
+        cluster()->getOFED(),
+        configuredKernel ? std::optional<std::string_view>(
+                               configuredKernel.value())
+                         : std::nullopt,
+        utils::singleton::osservice()->getKernelRunning());
+
+    if (configuredKernel.has_value()) {
+        LOG_WARN("Using kernel version from the answerfile: {} at "
+                 "[system].kernel in {}",
+            configuredKernel.value(), answerfile()->path());
+    } else if (nodeImageKernel.has_value()) {
+        LOG_WARN("Using the DOCA compute-node kernel version {} for "
+                 "Confluent node-image staging to keep the image aligned "
+                 "with the validated running kernel",
+            nodeImageKernel.value());
+    }
+
     const auto image = fmt::format("{distro}-{arch}",
         fmt::arg("arch", opencattus::utils::enums::toString(os().getArch())),
         fmt::arg("distro", os().getDistroString()));
 
     runner::shell::fmt(R"d(
-# Add the Confluent repository
-rpm -ivh https://hpc.lenovo.com/yum/latest/el{releasever}/{arch}/lenovo-hpc-yum-1-1.{arch}.rpm || :
-
-# Install required packages
-dnf install -y lenovo-confluent tftp-server dnsmasq || :
-systemctl enable confluent --now
-systemctl enable httpd --now 
-systemctl enable tftp.socket --now
-systemctl enable dnsmasq --now
-
-# Enable the Confluent environment
-set +xeu # confluent_env.sh has undefined variables
-source /etc/profile.d/confluent_env.sh
-set -xeu
+{confluentBootstrapCommands}
 
 # Configure SELinux to allow httpd to make connections
 setsebool -P httpd_can_network_connect=on
@@ -367,13 +620,21 @@ EOF
 
 # Pack the image from the temporary chroot and give a name
 imgutil pack /tmp/scratchdir/ {image}-diskless
+if test -n "${{doca_image_kernel:-}}"; then
+    osdeploy updateboot {image}-diskless
+    if ! file /var/lib/confluent/public/os/{image}-diskless/boot/kernel | grep -F "$doca_image_kernel" >/dev/null; then
+        echo "Published Confluent boot kernel for {image}-diskless does not match ${{doca_image_kernel}}" >&2
+        exit 1
+    fi
+fi
 
 # Remove the leftover files from the chroot
 rm -rf /tmp/scratchdir || :
 )d",
 
         fmt::arg("domain", cluster()->getDomainName()),
-        fmt::arg("releasever", os().getMajorVersion()),
+        fmt::arg(
+            "confluentBootstrapCommands", buildConfluentBootstrapCommands(os())),
         fmt::arg("spackModulePathExport", buildUserSpackModulePathExport(os())),
         fmt::arg("nodeImageInstallCommand", buildNodeImageInstallCommand(os())),
         fmt::arg("nodeImageRepoFiles", buildNodeImageRepoFiles(os())),
@@ -383,7 +644,6 @@ rm -rf /tmp/scratchdir || :
                 .getConnection(Network::Profile::Management)
                 .getAddress()
                 .to_string()),
-        fmt::arg("arch", opencattus::utils::enums::toString(os().getArch())),
         fmt::arg("distro", os().getDistroString()),
         fmt::arg("osversion", os().getVersion()),
         fmt::arg("isoPath", answerfile()->system.disk_image.string()),
@@ -396,9 +656,12 @@ rm -rf /tmp/scratchdir || :
                     "Internal interface not found in [network_management]"))),
         fmt::arg("image", image),
         fmt::arg("nodeImageOFEDCommands",
-            buildNodeImageOFEDCommands(
+            buildNodeImageOFEDCommands(os(),
                 answerfile()->application.con_interface.has_value(),
-                cluster()->getOFED())));
+                cluster()->getOFED(),
+                nodeImageKernel ? std::optional<std::string_view>(
+                                      nodeImageKernel.value())
+                                : std::nullopt)));
 
     addNodes(image);
 
@@ -493,6 +756,62 @@ TEST_CASE("buildHeadnodeHostsRepairScript restores the headnode management mappi
         "printf '192.168.33.1\\topencattus.cluster.example.com opencattus\\n' >> /etc/hosts"));
 }
 
+TEST_CASE("buildConfluentRepoRpmUrl uses upstream by default")
+{
+    using opencattus::models::OS;
+    using opencattus::services::Options;
+
+    opencattus::Singleton<const Options>::init(
+        std::make_unique<const Options>(Options {}));
+
+    CHECK(buildConfluentRepoRpmUrl(
+              OS(OS::Distro::Rocky, OS::Platform::el9, 7))
+        == "https://hpc.lenovo.com/yum/latest/el9/x86_64/"
+           "lenovo-hpc-yum-1-1.x86_64.rpm");
+}
+
+TEST_CASE("buildConfluentRepoRpmUrl uses the configured mirror when enabled")
+{
+    using opencattus::models::OS;
+    using opencattus::services::Options;
+
+    opencattus::Singleton<const Options>::init(
+        std::make_unique<const Options>(Options {
+            .enableMirrors = true,
+            .mirrorBaseUrl = "http://mirror.local.versatushpc.com.br/",
+        }));
+
+    CHECK(buildConfluentRepoRpmUrl(
+              OS(OS::Distro::Rocky, OS::Platform::el10, 1))
+        == "http://mirror.local.versatushpc.com.br/lenovo-hpc/rpm/latest/"
+           "el10/x86_64/lenovo-hpc-yum-1-1.x86_64.rpm");
+}
+
+TEST_CASE("buildConfluentBootstrapCommands validates Confluent tools before image work")
+{
+    using opencattus::models::OS;
+    using opencattus::services::Options;
+
+    opencattus::Singleton<const Options>::init(
+        std::make_unique<const Options>(Options {
+            .enableMirrors = true,
+            .mirrorBaseUrl = "http://mirror.local.versatushpc.com.br",
+        }));
+
+    const auto script = buildConfluentBootstrapCommands(
+        OS(OS::Distro::Rocky, OS::Platform::el9, 7));
+
+    CHECK(script.contains("rpm -q lenovo-hpc-yum >/dev/null 2>&1 || rpm -Uvh "
+                          "http://mirror.local.versatushpc.com.br/lenovo-hpc/"
+                          "rpm/latest/el9/x86_64/lenovo-hpc-yum-1-1.x86_64.rpm"));
+    CHECK(script.contains("dnf install -y lenovo-confluent tftp-server dnsmasq"));
+    CHECK(script.contains("test -f /etc/profile.d/confluent_env.sh"));
+    CHECK(script.contains("command -v confluent2hosts >/dev/null"));
+    CHECK(script.contains("command -v osdeploy >/dev/null"));
+    CHECK(script.contains("command -v imgutil >/dev/null"));
+    CHECK_FALSE(script.contains("lenovo-confluent tftp-server dnsmasq || :"));
+}
+
 TEST_CASE("buildSpackModuleTree matches Spack's Enterprise Linux module naming")
 {
     using opencattus::models::OS;
@@ -582,31 +901,132 @@ TEST_CASE("buildNodeImageInstallCommand keeps EL8, EL9, and EL10 explicit")
 
 TEST_CASE("buildNodeImageOFEDCommands skips OFED runtime staging without an application network")
 {
-    CHECK(buildNodeImageOFEDCommands(false,
-              std::optional<OFED>(OFED(OFED::Kind::Doca, "latest")))
+    using opencattus::models::OS;
+
+    CHECK(buildNodeImageOFEDCommands(
+              OS(OS::Distro::Rocky, OS::Platform::el9, 7),
+              false,
+              std::optional<OFED>(OFED(OFED::Kind::Doca, "latest")),
+              std::nullopt)
         .empty());
-    CHECK(buildNodeImageOFEDCommands(false,
-              std::optional<OFED>(OFED(OFED::Kind::Inbox, "")))
+    CHECK(buildNodeImageOFEDCommands(
+              OS(OS::Distro::Rocky, OS::Platform::el9, 7),
+              false,
+              std::optional<OFED>(OFED(OFED::Kind::Inbox, "")),
+              std::nullopt)
         .empty());
 }
 
 TEST_CASE("buildNodeImageOFEDCommands uses inbox packages for inbox OFED")
 {
-    const auto script = buildNodeImageOFEDCommands(true,
-        std::optional<OFED>(OFED(OFED::Kind::Inbox, "")));
+    using opencattus::models::OS;
+
+    const auto script = buildNodeImageOFEDCommands(
+        OS(OS::Distro::Rocky, OS::Platform::el9, 7),
+        true,
+        std::optional<OFED>(OFED(OFED::Kind::Inbox, "")), std::nullopt);
 
     CHECK(script.contains("dnf group install -y --nogpg \"Infiniband Support\""));
     CHECK_FALSE(script.contains("mlnx-doca.repo"));
     CHECK_FALSE(script.contains("doca-ofed"));
 }
 
-TEST_CASE("buildNodeImageOFEDCommands stages DOCA repos for DOCA OFED")
+TEST_CASE("selectConfluentImageKernelVersion keeps DOCA images on the staged kernel")
 {
-    const auto script = buildNodeImageOFEDCommands(true,
-        std::optional<OFED>(OFED(OFED::Kind::Doca, "latest")));
+    const auto kernelVersion = selectConfluentImageKernelVersion(
+        std::optional<OFED>(OFED(OFED::Kind::Doca, "latest")),
+        std::nullopt, "5.14.0-611.41.1.el9_7.x86_64");
+
+    REQUIRE(kernelVersion.has_value());
+    CHECK(kernelVersion.value() == "5.14.0-611.41.1.el9_7.x86_64");
+}
+
+TEST_CASE("selectConfluentImageKernelVersion stays empty without OFED or a pin")
+{
+    const auto kernelVersion = selectConfluentImageKernelVersion(
+        std::nullopt, std::nullopt, "5.14.0-611.41.1.el9_7.x86_64");
+
+    CHECK_FALSE(kernelVersion.has_value());
+}
+
+TEST_CASE("buildConfluentKernelPackages includes kernel-modules-extra")
+{
+    using opencattus::models::OS;
+
+    CHECK(buildConfluentKernelPackages(
+              OS(OS::Distro::Rocky, OS::Platform::el9, 7),
+              "5.14.0-611.41.1.el9_7.x86_64")
+        == "kernel-5.14.0-611.41.1.el9_7.x86_64 "
+           "kernel-core-5.14.0-611.41.1.el9_7.x86_64 "
+           "kernel-modules-5.14.0-611.41.1.el9_7.x86_64 "
+           "kernel-modules-core-5.14.0-611.41.1.el9_7.x86_64 "
+           "kernel-modules-extra-5.14.0-611.41.1.el9_7.x86_64");
+}
+
+TEST_CASE("buildConfluentKernelPackages omits kernel-modules-core on EL8")
+{
+    using opencattus::models::OS;
+
+    CHECK(buildConfluentKernelPackages(
+              OS(OS::Distro::Rocky, OS::Platform::el8, 10),
+              "4.18.0-553.75.1.el8_10.x86_64")
+        == "kernel-4.18.0-553.75.1.el8_10.x86_64 "
+           "kernel-core-4.18.0-553.75.1.el8_10.x86_64 "
+           "kernel-modules-4.18.0-553.75.1.el8_10.x86_64 "
+           "kernel-modules-extra-4.18.0-553.75.1.el8_10.x86_64");
+}
+
+TEST_CASE("buildNodeImageOFEDCommands stages DOCA repos for a selected DOCA kernel")
+{
+    using opencattus::models::OS;
+
+    const auto script = buildNodeImageOFEDCommands(
+        OS(OS::Distro::Rocky, OS::Platform::el9, 7),
+        true,
+        std::optional<OFED>(OFED(OFED::Kind::Doca, "latest")),
+        std::optional<std::string_view>("5.14.0-611.41.1.el9_7.x86_64"));
 
     CHECK(script.contains("/etc/yum.repos.d/mlnx-doca.repo"));
-    CHECK(script.contains("/etc/yum.repos.d/doca-kernel-$(uname -r).repo"));
-    CHECK(script.contains("dnf install --nogpg -y doca-ofed mlnx-ofa_kernel"));
+    CHECK(script.contains(
+        "export doca_image_kernel=5.14.0-611.41.1.el9_7.x86_64"));
+    CHECK(script.contains(
+        "kernel-${doca_image_kernel}"));
+    CHECK(script.contains(
+        "kernel-core-${doca_image_kernel}"));
+    CHECK(script.contains(
+        "kernel-modules-${doca_image_kernel}"));
+    CHECK(script.contains(
+        "kernel-modules-core-${doca_image_kernel}"));
+    CHECK(script.contains(
+        "https://download.rockylinux.org/pub/rocky/9.7/BaseOS/x86_64/os/Packages/k/"
+        "kernel-${doca_image_kernel}.rpm"));
+    CHECK(script.contains("/etc/yum.repos.d/doca-kernel-${doca_image_kernel}.repo"));
+    CHECK(script.contains(
+        "/opt/mellanox/doca/tools/doca-kernel-support -k \"${doca_image_kernel}\""));
+    CHECK(script.contains(
+        "kernel-devel-${doca_image_kernel}"));
+    CHECK(script.contains(
+        "kernel-headers-${doca_image_kernel}"));
+    CHECK(script.contains(
+        "https://download.rockylinux.org/pub/rocky/9.7/AppStream/x86_64/os/Packages/k/"
+        "kernel-devel-${doca_image_kernel}.rpm"));
+    CHECK(script.contains(
+        "Failed to stage the exact kernel payload ${doca_image_kernel} into the Confluent node image"));
+    CHECK_FALSE(script.contains("--exclude=kernel-modules-extra"));
+    CHECK(script.contains("doca-extra doca-ofed mlnx-ofa_kernel"));
     CHECK_FALSE(script.contains("Infiniband Support"));
+}
+
+TEST_CASE("buildNodeImageOFEDCommands can fall back to the detected image kernel")
+{
+    using opencattus::models::OS;
+
+    const auto script = buildNodeImageOFEDCommands(
+        OS(OS::Distro::Rocky, OS::Platform::el9, 7),
+        true,
+        std::optional<OFED>(OFED(OFED::Kind::Doca, "latest")),
+        std::nullopt);
+
+    CHECK(script.contains(
+        "rpm --root \"$scratchdir\" -q kernel-core --qf '%{INSTALLTIME} %{VERSION}-%{RELEASE}.%{ARCH}\\n'"));
 }

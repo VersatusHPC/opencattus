@@ -1248,12 +1248,6 @@ public:
 template <typename MChecker = DefaultMirrorExistenceChecker,
     typename UChecker = DefaultMirrorExistenceChecker>
 struct RepoConfAdapter final {
-    static constexpr bool shouldForceUpstream(const RepoId& repoid)
-    {
-        return repoid.id == "epel" || repoid.id == "epel-debuginfo"
-            || repoid.id == "epel-source";
-    }
-
     static RPMRepository fromConfig(const RepoConfig& config)
     {
         const RepoId& repoid = config.repoId;
@@ -1264,7 +1258,7 @@ struct RepoConfAdapter final {
             .paths = config.upstream,
         };
         return RepoAssembler::assemble<MChecker, UChecker>(
-            repoid, mirror, upstream, false, shouldForceUpstream(repoid));
+            repoid, mirror, upstream);
     };
 
     static RPMRepositoryFile fromConfigs(const std::string& filename,
@@ -1323,9 +1317,9 @@ TEST_CASE("RepoAdapter")
     const auto epelRepo = RepoConfAdapter<TrueMirrorExistenceChecker,
         TrueMirrorExistenceChecker>::fromConfig(epelOpt.value());
     REQUIRE(epelRepo.baseurl().has_value() == true);
-    CHECK(epelOpt->upstream.repo.starts_with(epelRepo.baseurl().value()));
+    CHECK(epelRepo.baseurl().value().starts_with(opts.mirrorBaseUrl));
     REQUIRE(epelRepo.gpgkey().has_value() == true);
-    CHECK(epelRepo.gpgkey().value() == epelOpt->upstream.gpgkey.value());
+    CHECK(epelRepo.gpgkey().value().starts_with(opts.mirrorBaseUrl));
 
     const auto ohpcOpt = conffile.find("OpenHPC");
     REQUIRE(ohpcOpt.has_value() == true);
@@ -1333,6 +1327,17 @@ TEST_CASE("RepoAdapter")
         TrueMirrorExistenceChecker>::fromConfig(ohpcOpt.value());
     REQUIRE(ohpcRepo.baseurl().has_value() == true);
     CHECK(ohpcRepo.baseurl().value().starts_with(opts.mirrorBaseUrl));
+
+    initializeSingletonsOptions(std::make_unique<const Options>(Options {
+        .enableMirrors = false,
+        .mirrorBaseUrl = opts.mirrorBaseUrl,
+    }));
+    const auto epelRepoUpstream = RepoConfAdapter<TrueMirrorExistenceChecker,
+        TrueMirrorExistenceChecker>::fromConfig(epelOpt.value());
+    REQUIRE(epelRepoUpstream.baseurl().has_value() == true);
+    CHECK(epelOpt->upstream.repo.starts_with(epelRepoUpstream.baseurl().value()));
+    REQUIRE(epelRepoUpstream.gpgkey().has_value() == true);
+    CHECK(epelRepoUpstream.gpgkey().value() == epelOpt->upstream.gpgkey.value());
 #endif
 };
 
@@ -1634,21 +1639,14 @@ struct RepoGenerator final {
     static std::size_t generate(const RepoConfFiles& conffiles,
         const OS& osinfo, const std::filesystem::path& path)
     {
-        const auto existingRepoFiles
-            = opencattus::functions::getFilesByExtension(path, ".repo");
         const auto& distroRepos = conffiles.distroRepos.filesnames();
         const auto& nonDistroRepos = conffiles.nonDistroRepos.filesnames();
         std::vector<std::string> reposToGenerate;
-        for (const auto& repo : distroRepos) {
-            if (!opencattus::functions::isIn(existingRepoFiles, repo)) {
-                reposToGenerate.push_back(repo);
-            }
-        }
-        for (const auto& repo : nonDistroRepos) {
-            if (!opencattus::functions::isIn(existingRepoFiles, repo)) {
-                reposToGenerate.push_back(repo);
-            }
-        }
+        reposToGenerate.reserve(distroRepos.size() + nonDistroRepos.size());
+        reposToGenerate.insert(
+            reposToGenerate.end(), distroRepos.begin(), distroRepos.end());
+        reposToGenerate.insert(reposToGenerate.end(), nonDistroRepos.begin(),
+            nonDistroRepos.end());
 
         std::vector<RPMRepositoryFile> repofiles
             = RepoConfAdapter<MChecker, UChecker>::fromConfFile(
@@ -1720,14 +1718,17 @@ TEST_CASE("RepoGenerator")
 
     const auto generatedCount2
         = generator.generate(conffiles, osinfo, upstreamPath);
-    // It does not re-generate the files in the second run
-    CHECK(generatedCount2 == 0);
+    CHECK(generatedCount2 == 17);
 
     // Generate the other files so we can look at them
     const auto generatorMirror
         = RepoGenerator<TrueMirrorExistenceChecker, // mirror
             TrueMirrorExistenceChecker // upstream
             >();
+    generatorMirror.generate(conffiles, osinfo, upstreamPath);
+    CHECK(opencattus::services::files::read(
+              std::filesystem::path(upstreamPath) / "epel.repo")
+            .contains("https://mirror.example.com/epel/9/Everything/x86_64"));
     generatorMirror.generate(conffiles, osinfo, mirrorPath);
     opts.mirrorBaseUrl = "file:///var/run/repos";
     opencattus::Singleton<const Options>::init(

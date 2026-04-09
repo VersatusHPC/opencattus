@@ -98,6 +98,12 @@ default_headnode_service_mac() {
         "$(token_hex_byte 2)"
 }
 
+default_headnode_application_mac() {
+    printf '52:54:%s:%s:40:01' \
+        "$(token_hex_byte 0)" \
+        "$(token_hex_byte 2)"
+}
+
 is_distro_major_el8() {
     [[ "${DISTRO_MAJOR}" == "8" ]]
 }
@@ -238,10 +244,18 @@ load_defaults() {
     SERVICE_PREFIX=${SERVICE_PREFIX:-24}
     SERVICE_HOST_IP=${SERVICE_HOST_IP:-192.168.40.253}
 
+    APPLICATION_NETWORK_ENABLED=${APPLICATION_NETWORK_ENABLED:-0}
+    APPLICATION_NETWORK_NAME=${APPLICATION_NETWORK_NAME:-${LAB_NAME}-app}
+    APPLICATION_BRIDGE=${APPLICATION_BRIDGE:-oc${BRIDGE_TOKEN}a0}
+    APPLICATION_GATEWAY_IP=${APPLICATION_GATEWAY_IP:-172.26.0.254}
+    APPLICATION_NETMASK=${APPLICATION_NETMASK:-255.255.0.0}
+    APPLICATION_PREFIX=${APPLICATION_PREFIX:-16}
+
     HEADNODE_NAME=${HEADNODE_NAME:-${LAB_NAME}-headnode}
     HEADNODE_EXT_MAC=${HEADNODE_EXT_MAC:-$(default_headnode_ext_mac)}
     HEADNODE_MGMT_MAC=${HEADNODE_MGMT_MAC:-$(default_headnode_mgmt_mac)}
     HEADNODE_SERVICE_MAC=${HEADNODE_SERVICE_MAC:-$(default_headnode_service_mac)}
+    HEADNODE_APPLICATION_MAC=${HEADNODE_APPLICATION_MAC:-$(default_headnode_application_mac)}
     HEADNODE_MEMORY_MB=${HEADNODE_MEMORY_MB:-16384}
     HEADNODE_VCPUS=${HEADNODE_VCPUS:-4}
     HEADNODE_DISK_GB=${HEADNODE_DISK_GB:-220}
@@ -262,10 +276,15 @@ load_defaults() {
     EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN:-cluster.external.example.com}
     MANAGEMENT_DOMAIN=${MANAGEMENT_DOMAIN:-cluster.management.example.com}
     SERVICE_DOMAIN=${SERVICE_DOMAIN:-cluster.service.example.com}
+    APPLICATION_DOMAIN=${APPLICATION_DOMAIN:-cluster.application.example.com}
 
     TIMEZONE=${TIMEZONE:-UTC}
     TIMESERVER=${TIMESERVER:-pool.ntp.org}
     LOCALE=${LOCALE:-en_US.utf8}
+
+    OFED_ENABLED=${OFED_ENABLED:-0}
+    OFED_KIND=${OFED_KIND:-doca}
+    OFED_VERSION=${OFED_VERSION:-latest}
 
     NODE_PREFIX=${NODE_PREFIX:-n}
     NODE_PADDING=${NODE_PADDING:-2}
@@ -311,11 +330,13 @@ load_defaults() {
     REMOTE_CHECK_HEADNODE=${REMOTE_CHECK_HEADNODE:-${HEADNODE_DATA_DIR}/check-headnode.sh}
     REMOTE_CHECK_CLUSTER=${REMOTE_CHECK_CLUSTER:-${HEADNODE_DATA_DIR}/check-cluster.sh}
     REMOTE_CHECK_MPI=${REMOTE_CHECK_MPI:-${HEADNODE_DATA_DIR}/check-mpi.sh}
+    REMOTE_CHECK_OFED=${REMOTE_CHECK_OFED:-${HEADNODE_DATA_DIR}/check-ofed.sh}
     LOCAL_REPO_CONFIG_DIR=${LOCAL_REPO_CONFIG_DIR:-${REPO_ROOT}/repos}
     REMOTE_REPO_CONFIG_STAGING=${REMOTE_REPO_CONFIG_STAGING:-${HEADNODE_DATA_DIR}/repos}
     REMOTE_INSTALL_ROOT=${REMOTE_INSTALL_ROOT:-/opt/opencattus}
     REMOTE_INSTALL_CONF_DIR=${REMOTE_INSTALL_CONF_DIR:-${REMOTE_INSTALL_ROOT}/conf}
     REMOTE_INSTALL_REPO_DIR=${REMOTE_INSTALL_REPO_DIR:-${REMOTE_INSTALL_CONF_DIR}/repos}
+    OPENCATTUS_MIRROR_URL=${OPENCATTUS_MIRROR_URL:-}
 
     MPI_SMOKE_TEST=${MPI_SMOKE_TEST:-1}
     MPI_SMOKE_NODES=${MPI_SMOKE_NODES:-${COMPUTE_COUNT}}
@@ -357,6 +378,12 @@ node_ip() {
     local index=$1
     printf '%s.%d' "$(management_subnet_prefix)" \
         $((NODE_IP_BASE_OCTET + index - 1))
+}
+
+application_subnet_prefix() {
+    local octet1 octet2 octet3 octet4
+    IFS=. read -r octet1 octet2 octet3 octet4 <<<"${APPLICATION_GATEWAY_IP}"
+    printf '%s.%s.%s' "${octet1}" "${octet2}" "${octet3}"
 }
 
 service_subnet_prefix() {
@@ -631,6 +658,18 @@ EOF
     optional: true
 EOF
     fi
+
+    if [[ "${APPLICATION_NETWORK_ENABLED}" == "1" ]]; then
+        cat >>"$(headnode_network_config_path)" <<EOF
+  application:
+    match:
+      macaddress: "${HEADNODE_APPLICATION_MAC}"
+    set-name: "oc-app0"
+    dhcp4: false
+    dhcp6: false
+    optional: true
+EOF
+    fi
 }
 
 ensure_ssh_key() {
@@ -681,6 +720,16 @@ check_config() {
         "SERVICE_NETWORK_ENABLED must be 0 or 1"
     [[ "${ANSWERFILE_ROUNDTRIP}" == "0" || "${ANSWERFILE_ROUNDTRIP}" == "1" ]] || die \
         "ANSWERFILE_ROUNDTRIP must be 0 or 1"
+    [[ "${APPLICATION_NETWORK_ENABLED}" == "0" || "${APPLICATION_NETWORK_ENABLED}" == "1" ]] || die \
+        "APPLICATION_NETWORK_ENABLED must be 0 or 1"
+    [[ "${OFED_ENABLED}" == "0" || "${OFED_ENABLED}" == "1" ]] || die \
+        "OFED_ENABLED must be 0 or 1"
+    if [[ "${OFED_ENABLED}" == "1" ]]; then
+        [[ "${OFED_KIND}" == "doca" || "${OFED_KIND}" == "inbox" ]] || die \
+            "OFED_KIND must be doca or inbox"
+        [[ "${APPLICATION_NETWORK_ENABLED}" == "1" ]] || die \
+            "OFED_ENABLED=1 requires APPLICATION_NETWORK_ENABLED=1"
+    fi
     if is_distro_major_el8; then
         [[ "${DISTRO_ID}" == "rocky" ]] || die \
             "The current EL8 validation lab only targets Rocky Linux 8"
@@ -877,6 +926,15 @@ write_service_network_xml() {
 EOF
 }
 
+write_application_network_xml() {
+    cat >"${LAB_DIR}/application-network.xml" <<EOF
+<network>
+  <name>${APPLICATION_NETWORK_NAME}</name>
+  <bridge name='${APPLICATION_BRIDGE}' stp='on' delay='0'/>
+</network>
+EOF
+}
+
 create_networks() {
     ensure_lab_dirs
 
@@ -885,16 +943,25 @@ create_networks() {
     if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
         write_service_network_xml
     fi
+    if [[ "${APPLICATION_NETWORK_ENABLED}" == "1" ]]; then
+        write_application_network_xml
+    fi
 
     destroy_network_if_exists "${EXTERNAL_NETWORK_NAME}"
     destroy_network_if_exists "${MANAGEMENT_NETWORK_NAME}"
     if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
         destroy_network_if_exists "${SERVICE_NETWORK_NAME}"
     fi
+    if [[ "${APPLICATION_NETWORK_ENABLED}" == "1" ]]; then
+        destroy_network_if_exists "${APPLICATION_NETWORK_NAME}"
+    fi
     destroy_bridge_if_exists "${EXTERNAL_BRIDGE}"
     destroy_bridge_if_exists "${MANAGEMENT_BRIDGE}"
     if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
         destroy_bridge_if_exists "${SERVICE_BRIDGE}"
+    fi
+    if [[ "${APPLICATION_NETWORK_ENABLED}" == "1" ]]; then
+        destroy_bridge_if_exists "${APPLICATION_BRIDGE}"
     fi
 
     as_root virsh net-define "${LAB_DIR}/external-network.xml"
@@ -906,6 +973,10 @@ create_networks() {
     if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
         as_root virsh net-define "${LAB_DIR}/service-network.xml"
         start_network_with_recovery "${SERVICE_NETWORK_NAME}" "${SERVICE_BRIDGE}"
+    fi
+    if [[ "${APPLICATION_NETWORK_ENABLED}" == "1" ]]; then
+        as_root virsh net-define "${LAB_DIR}/application-network.xml"
+        start_network_with_recovery "${APPLICATION_NETWORK_NAME}" "${APPLICATION_BRIDGE}"
     fi
 }
 
@@ -931,6 +1002,9 @@ create_headnode() {
 
     if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
         network_args+=(--network "network=${SERVICE_NETWORK_NAME},model=virtio,mac=${HEADNODE_SERVICE_MAC}")
+    fi
+    if [[ "${APPLICATION_NETWORK_ENABLED}" == "1" ]]; then
+        network_args+=(--network "network=${APPLICATION_NETWORK_NAME},model=virtio,mac=${HEADNODE_APPLICATION_MAC}")
     fi
 
     destroy_domain_if_exists "${HEADNODE_NAME}"
@@ -1154,6 +1228,26 @@ domain_name=${SERVICE_DOMAIN}
 EOF
     fi
 
+    if [[ "${APPLICATION_NETWORK_ENABLED}" == "1" ]]; then
+        cat >>"${workfile}" <<EOF
+
+[network_application]
+interface=oc-app0
+ip_address=${APPLICATION_GATEWAY_IP}
+subnet_mask=${APPLICATION_NETMASK}
+domain_name=${APPLICATION_DOMAIN}
+EOF
+    fi
+
+    if [[ "${OFED_ENABLED}" == "1" ]]; then
+        cat >>"${workfile}" <<EOF
+
+[ofed]
+kind=${OFED_KIND}
+version=${OFED_VERSION}
+EOF
+    fi
+
     for (( index = 1; index <= COMPUTE_COUNT; index++ )); do
         cat >>"${workfile}" <<EOF
 
@@ -1208,6 +1302,7 @@ sync_repo_to_remote() {
 build_binary_in_guest() {
     local build_log="${LOG_DIR}/build.log"
     local compiler_setup_cmd
+    local local_mirror_setup_cmd=
     local remote_build_dir="${REMOTE_SOURCE_DIR}/out/build/${REMOTE_BUILD_PRESET}"
     local remote_build_type="Release"
     local remote_cmd
@@ -1237,9 +1332,62 @@ EOF
 )
     fi
 
+    if [[ -n "${OPENCATTUS_MIRROR_URL}" && "${DISTRO_ID}" == "rocky" ]]; then
+        local local_mirror_crb_path=
+        case "${DISTRO_MAJOR}" in
+            8)
+                local_mirror_crb_path="PowerTools"
+                ;;
+            9|10)
+                local_mirror_crb_path="CRB"
+                ;;
+            *)
+                die "Unsupported distro major ${DISTRO_MAJOR} for local mirror bootstrap"
+                ;;
+        esac
+
+        local_mirror_setup_cmd=$(cat <<EOF
+echo "Configuring local package mirror ${OPENCATTUS_MIRROR_URL} for source bootstrap" &&
+sudo tee /etc/yum.repos.d/opencattus-local-mirror.repo >/dev/null <<'EOF_REPO'
+[opencattus-baseos]
+name=OpenCATTUS local Rocky ${DISTRO_MAJOR} BaseOS
+baseurl=${OPENCATTUS_MIRROR_URL}/rocky/linux/${DISTRO_MAJOR}/BaseOS/\$basearch/os/
+enabled=1
+gpgcheck=0
+
+[opencattus-appstream]
+name=OpenCATTUS local Rocky ${DISTRO_MAJOR} AppStream
+baseurl=${OPENCATTUS_MIRROR_URL}/rocky/linux/${DISTRO_MAJOR}/AppStream/\$basearch/os/
+enabled=1
+gpgcheck=0
+
+[opencattus-extras]
+name=OpenCATTUS local Rocky ${DISTRO_MAJOR} Extras
+baseurl=${OPENCATTUS_MIRROR_URL}/rocky/linux/${DISTRO_MAJOR}/extras/\$basearch/os/
+enabled=1
+gpgcheck=0
+
+[opencattus-crb]
+name=OpenCATTUS local Rocky ${DISTRO_MAJOR} CRB
+baseurl=${OPENCATTUS_MIRROR_URL}/rocky/linux/${DISTRO_MAJOR}/${local_mirror_crb_path}/\$basearch/os/
+enabled=1
+gpgcheck=0
+
+[opencattus-epel]
+name=OpenCATTUS local EPEL ${DISTRO_MAJOR}
+baseurl=${OPENCATTUS_MIRROR_URL}/epel/${DISTRO_MAJOR}/Everything/\$basearch/
+enabled=1
+gpgcheck=0
+EOF_REPO
+sudo dnf config-manager --set-disabled appstream baseos extras powertools crb epel epel-modular >/dev/null 2>&1 || true &&
+EOF
+)
+    fi
+
     remote_cmd=$(cat <<EOF
 export PATH="\$HOME/.local/bin:\$PATH" &&
 cd '${REMOTE_SOURCE_DIR}' &&
+${local_mirror_setup_cmd}
 ${compiler_setup_cmd}
 conan profile detect --force &&
 cmake -S . -B '${remote_build_dir}' \
@@ -1287,9 +1435,10 @@ copy_lab_assets() {
     scp_to_remote "${SCRIPT_DIR}/scripts/check-headnode.sh" "${REMOTE_CHECK_HEADNODE}"
     scp_to_remote "${SCRIPT_DIR}/scripts/check-cluster.sh" "${REMOTE_CHECK_CLUSTER}"
     scp_to_remote "${SCRIPT_DIR}/scripts/check-mpi.sh" "${REMOTE_CHECK_MPI}"
+    scp_to_remote "${SCRIPT_DIR}/scripts/check-ofed.sh" "${REMOTE_CHECK_OFED}"
     sync_to_remote "${LOCAL_REPO_CONFIG_DIR}/" "${REMOTE_REPO_CONFIG_STAGING}/"
 
-    ssh_remote "chmod +x '${REMOTE_CHECK_HEADNODE}' '${REMOTE_CHECK_CLUSTER}' '${REMOTE_CHECK_MPI}' &&
+    ssh_remote "chmod +x '${REMOTE_CHECK_HEADNODE}' '${REMOTE_CHECK_CLUSTER}' '${REMOTE_CHECK_MPI}' '${REMOTE_CHECK_OFED}' &&
         sudo mkdir -p '${REMOTE_INSTALL_REPO_DIR}' &&
         sudo rsync -a --delete '${REMOTE_REPO_CONFIG_STAGING}/' '${REMOTE_INSTALL_REPO_DIR}/'"
 }
@@ -1316,11 +1465,22 @@ prepare_roundtrip_answerfile() {
 
 run_installer() {
     local install_log="${LOG_DIR}/install.log"
+    local -a installer_args=(-l 6 -a "$(active_remote_answerfile_path)" -u)
+    local installer_args_quoted
     local remote_cmd
 
+    if [[ -n "${OPENCATTUS_MIRROR_URL}" ]]; then
+        log "Using OpenCATTUS mirror ${OPENCATTUS_MIRROR_URL}"
+        # Current OpenCATTUS releases still gate mirror selection behind the
+        # legacy --disable-mirrors switch. Keep the workaround in the harness
+        # until the product CLI grows an explicit enable-mirrors option.
+        installer_args+=(--disable-mirrors --mirror-url "${OPENCATTUS_MIRROR_URL}")
+    fi
+
+    printf -v installer_args_quoted '%q ' "${installer_args[@]}"
     remote_cmd=$(cat <<EOF
 cd '${HEADNODE_DATA_DIR}' &&
-sudo '${REMOTE_BINARY_PATH}' -l 6 -a '$(active_remote_answerfile_path)' -u
+sudo '${REMOTE_BINARY_PATH}' ${installer_args_quoted}
 EOF
 )
 
@@ -1389,6 +1549,20 @@ verify_mpi() {
         "env OPENCATTUS_NODE_LIST='$(join_by_space "${node_names[@]}")' OPENCATTUS_MPI_SMOKE_NODES='${MPI_SMOKE_NODES}' OPENCATTUS_MPI_SMOKE_TASKS='${MPI_SMOKE_TASKS}' OPENCATTUS_MPI_SMOKE_WORKDIR='${MPI_SMOKE_WORKDIR}' OPENCATTUS_MPI_SMOKE_OUTPUT='${MPI_SMOKE_OUTPUT}' '${REMOTE_CHECK_MPI}'"
 }
 
+verify_ofed() {
+    local node_names=()
+    local index
+
+    [[ "${OFED_ENABLED}" == "1" ]] || return 0
+
+    for (( index = 1; index <= COMPUTE_COUNT; index++ )); do
+        node_names+=("$(node_name "${index}")")
+    done
+
+    ssh_remote \
+        "env OPENCATTUS_PROVISIONER='${PROVISIONER}' OPENCATTUS_NODE_LIST='$(join_by_space "${node_names[@]}")' OPENCATTUS_OFED_KIND='${OFED_KIND}' OPENCATTUS_OFED_VERSION='${OFED_VERSION}' OPENCATTUS_VERIFY_TIMEOUT_SECONDS='${VERIFY_TIMEOUT_SECONDS}' '${REMOTE_CHECK_OFED}'"
+}
+
 collect_logs() {
     local headnode_log_dir="${LOG_DIR}/headnode"
     local index
@@ -1429,6 +1603,9 @@ collect_logs() {
     if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]] && network_exists "${SERVICE_NETWORK_NAME}"; then
         as_root virsh net-dumpxml "${SERVICE_NETWORK_NAME}" >"${LOG_DIR}/${SERVICE_NETWORK_NAME}.xml"
     fi
+    if [[ "${APPLICATION_NETWORK_ENABLED}" == "1" ]] && network_exists "${APPLICATION_NETWORK_NAME}"; then
+        as_root virsh net-dumpxml "${APPLICATION_NETWORK_NAME}" >"${LOG_DIR}/${APPLICATION_NETWORK_NAME}.xml"
+    fi
 
     if ssh "${SSH_OPTIONS[@]}" "$(remote_host)" 'true' >/dev/null 2>&1; then
         ssh_remote "sudo journalctl -b --no-pager" >"${headnode_log_dir}/journal.txt" || true
@@ -1438,6 +1615,8 @@ collect_logs() {
         ssh_remote "test -f '${MPI_SMOKE_OUTPUT}' && cat '${MPI_SMOKE_OUTPUT}'" >"${headnode_log_dir}/mpi-smoke.txt" || true
         ssh_remote "test -f '${REMOTE_ANSWERFILE_PATH}' && cat '${REMOTE_ANSWERFILE_PATH}'" >"${headnode_log_dir}/answerfile.input.ini" || true
         ssh_remote "test -f '${REMOTE_ROUNDTRIP_ANSWERFILE_PATH}' && cat '${REMOTE_ROUNDTRIP_ANSWERFILE_PATH}'" >"${headnode_log_dir}/answerfile.roundtrip.ini" || true
+        ssh_remote "if [[ '${OFED_ENABLED}' == '1' ]]; then env OPENCATTUS_PROVISIONER='${PROVISIONER}' OPENCATTUS_NODE_LIST='$(for (( index = 1; index <= COMPUTE_COUNT; index++ )); do printf '%s ' "$(node_name "${index}")"; done)' OPENCATTUS_OFED_KIND='${OFED_KIND}' OPENCATTUS_OFED_VERSION='${OFED_VERSION}' OPENCATTUS_VERIFY_TIMEOUT_SECONDS='${VERIFY_TIMEOUT_SECONDS}' '${REMOTE_CHECK_OFED}'; fi" >"${headnode_log_dir}/ofed.txt" || true
+        ssh_remote "if [[ '${OFED_ENABLED}' == '1' ]]; then env OPENCATTUS_PROVISIONER='${PROVISIONER}' OPENCATTUS_NODE_LIST='$(for (( index = 1; index <= COMPUTE_COUNT; index++ )); do printf '%s ' "$(node_name "${index}")"; done)' OPENCATTUS_OFED_KIND='${OFED_KIND}' OPENCATTUS_OFED_VERSION='${OFED_VERSION}' OPENCATTUS_VERIFY_TIMEOUT_SECONDS='${VERIFY_TIMEOUT_SECONDS}' '${REMOTE_CHECK_OFED}'; fi" >"${headnode_log_dir}/ofed.txt" || true
         ssh_remote "sudo tar -C /var/log -czf - messages secure dnf.log slurm 2>/dev/null" >"${headnode_log_dir}/var-log.tar.gz" || true
     fi
 }
@@ -1458,10 +1637,16 @@ destroy_lab() {
     if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
         destroy_network_if_exists "${SERVICE_NETWORK_NAME}"
     fi
+    if [[ "${APPLICATION_NETWORK_ENABLED}" == "1" ]]; then
+        destroy_network_if_exists "${APPLICATION_NETWORK_NAME}"
+    fi
     destroy_bridge_if_exists "${EXTERNAL_BRIDGE}"
     destroy_bridge_if_exists "${MANAGEMENT_BRIDGE}"
     if [[ "${SERVICE_NETWORK_ENABLED}" == "1" ]]; then
         destroy_bridge_if_exists "${SERVICE_BRIDGE}"
+    fi
+    if [[ "${APPLICATION_NETWORK_ENABLED}" == "1" ]]; then
+        destroy_bridge_if_exists "${APPLICATION_BRIDGE}"
     fi
 
     as_root rm -rf "${LAB_DIR}"
@@ -1506,6 +1691,7 @@ verify_lab() {
     check_host_prereqs
     verify_headnode
     verify_cluster
+    verify_ofed
     verify_mpi
 }
 
