@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdlib> // setenv / getenv
+#include <optional>
 #include <ranges>
 
 #include <filesystem>
@@ -19,7 +20,9 @@
 #include <opencattus/services/repos.h>
 #include <opencattus/services/runner.h>
 #include <opencattus/services/xcat.h>
+#include <opencattus/utils/enums.h>
 #include <opencattus/utils/singleton.h>
+#include <opencattus/utils/string.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -102,7 +105,7 @@ std::vector<std::string> buildEnterpriseLinuxTemplateAliasCommands(
     std::vector<std::string> commands;
 
     auto createSymlinkCommand = [&](const std::string& folder,
-                                     const std::string& version) {
+                                    const std::string& version) {
         return fmt::format(
             "ln -sf "
             "/opt/xcat/share/xcat/netboot/rh/compute.{2}.x86_64.exlist "
@@ -145,8 +148,8 @@ std::vector<std::string> buildEnterpriseLinuxTemplateAliasCommands(
 
     for (const auto& [folder, version] : cloneAliases) {
         std::vector<std::string> temp;
-        boost::split(temp, createSymlinkCommand(folder, version),
-            boost::is_any_of(","));
+        boost::split(
+            temp, createSymlinkCommand(folder, version), boost::is_any_of(","));
         commands.insert(commands.end(), temp.begin(), temp.end());
     }
 
@@ -192,6 +195,362 @@ std::vector<std::string> getKernelPackagesForGenimage(
     }
 }
 
+struct XcatInfinibandPlan final {
+    std::vector<std::string_view> otherPackages;
+    std::optional<std::string> kernelVersion;
+    std::optional<std::string> localRepoName;
+};
+
+XcatInfinibandPlan buildXcatInfinibandPlan(const OFED& ofed, const OS& nodeOS,
+    std::optional<std::string_view> configuredKernel,
+    std::string_view runningKernel)
+{
+    switch (nodeOS.getPlatform()) {
+        case OS::Platform::el8:
+        case OS::Platform::el9:
+            break;
+        case OS::Platform::el10:
+            throw std::invalid_argument(
+                "xCAT compute-node OFED staging is unsupported on EL10");
+        default:
+            std::unreachable();
+    }
+
+    switch (ofed.getKind()) {
+        case OFED::Kind::Inbox:
+            return XcatInfinibandPlan {
+                .otherPackages = { "@infiniband" },
+                .kernelVersion = std::nullopt,
+                .localRepoName = std::nullopt,
+            };
+
+        case OFED::Kind::Doca: {
+            const auto kernelVersion = configuredKernel.has_value()
+                ? std::string(configuredKernel.value())
+                : std::string(runningKernel);
+            return XcatInfinibandPlan {
+                .otherPackages = {},
+                .kernelVersion = kernelVersion,
+                .localRepoName = fmt::format("doca-kernel-{}", kernelVersion),
+            };
+        }
+
+        case OFED::Kind::Oracle:
+            throw std::logic_error("Oracle RDMA release is not yet supported");
+    }
+
+    std::unreachable();
+}
+
+std::optional<std::string> selectXcatImageKernelVersion(
+    const std::optional<OFED>& ofed, const OS& nodeOS,
+    std::optional<std::string_view> configuredKernel,
+    std::string_view runningKernel)
+{
+    if (configuredKernel.has_value()) {
+        return std::string(configuredKernel.value());
+    }
+
+    if (!ofed.has_value()) {
+        return std::nullopt;
+    }
+
+    return buildXcatInfinibandPlan(
+        ofed.value(), nodeOS, std::nullopt, runningKernel)
+        .kernelVersion;
+}
+
+std::vector<std::string_view> buildXcatKernelPackageNames(const OS& nodeOS)
+{
+    switch (nodeOS.getPlatform()) {
+        case OS::Platform::el8:
+            return { "kernel", "kernel-devel", "kernel-headers", "kernel-core",
+                "kernel-modules", "kernel-modules-extra" };
+        case OS::Platform::el9:
+            return { "kernel", "kernel-devel", "kernel-headers", "kernel-core",
+                "kernel-modules", "kernel-modules-core",
+                "kernel-modules-extra" };
+        case OS::Platform::el10:
+            throw std::invalid_argument(
+                "xCAT kernel package staging is unsupported on EL10");
+        default:
+            std::unreachable();
+    }
+}
+
+std::string buildXcatKernelPackages(
+    const OS& nodeOS, std::string_view kernelVersion)
+{
+    auto output = std::string {};
+    for (const auto packageName : buildXcatKernelPackageNames(nodeOS)) {
+        if (!output.empty()) {
+            output += " ";
+        }
+
+        output += fmt::format("{}-{}", packageName, kernelVersion);
+    }
+
+    return output;
+}
+
+std::string_view rockyKernelPackageRepositoryComponent(
+    const OS& nodeOS, std::string_view packageName)
+{
+    switch (nodeOS.getPlatform()) {
+        case OS::Platform::el8:
+            return "BaseOS";
+        case OS::Platform::el9:
+            if (packageName == "kernel-devel"
+                || packageName == "kernel-headers") {
+                return "AppStream";
+            }
+            return "BaseOS";
+        case OS::Platform::el10:
+            throw std::invalid_argument(
+                "xCAT Rocky kernel package URLs are unsupported on EL10");
+        default:
+            std::unreachable();
+    }
+}
+
+std::optional<std::string> buildRockyKernelPackageUrl(const OS& nodeOS,
+    std::string_view packageName, std::string_view kernelVersion)
+{
+    if (nodeOS.getDistro() != OS::Distro::Rocky) {
+        return std::nullopt;
+    }
+
+    return fmt::format(
+        "https://download.rockylinux.org/pub/rocky/{version}/{repo}/{arch}/"
+        "os/Packages/k/{packageName}-{kernelVersion}.rpm",
+        fmt::arg("version", nodeOS.getVersion()),
+        fmt::arg(
+            "repo", rockyKernelPackageRepositoryComponent(nodeOS, packageName)),
+        fmt::arg("arch", opencattus::utils::enums::toString(nodeOS.getArch())),
+        fmt::arg("packageName", packageName),
+        fmt::arg("kernelVersion", kernelVersion));
+}
+
+std::optional<std::string> buildRockyXcatKernelDownloadFallbackCommand(
+    const OS& nodeOS, std::string_view kernelVersion,
+    std::string_view destinationDirectory)
+{
+    if (nodeOS.getDistro() != OS::Distro::Rocky) {
+        return std::nullopt;
+    }
+
+    auto fallbackDownloads = std::string {};
+    for (const auto packageName : buildXcatKernelPackageNames(nodeOS)) {
+        const auto packageUrl
+            = buildRockyKernelPackageUrl(nodeOS, packageName, kernelVersion);
+        if (!packageUrl.has_value()) {
+            return std::nullopt;
+        }
+
+        fallbackDownloads += fmt::format(
+            "    curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused "
+            "-o {destdir}/{packageName}-{kernelVersion}.rpm {packageUrl}\n",
+            fmt::arg("destdir", destinationDirectory),
+            fmt::arg("packageName", packageName),
+            fmt::arg("kernelVersion", kernelVersion),
+            fmt::arg("packageUrl", packageUrl.value()));
+    }
+
+    return fmt::format(R"(
+if ! dnf download {kernelPackages} --destdir {destinationDirectory}; then
+    rm -f {destinationDirectory}/*.rpm
+{fallbackDownloads}fi
+)",
+        fmt::arg(
+            "kernelPackages", buildXcatKernelPackages(nodeOS, kernelVersion)),
+        fmt::arg("destinationDirectory", destinationDirectory),
+        fmt::arg("fallbackDownloads", fallbackDownloads));
+}
+
+std::optional<std::string> buildRockyXcatRepoUpstreamUrl(
+    const OS& osinfo, std::string_view repoId)
+{
+    if (osinfo.getDistro() != OS::Distro::Rocky) {
+        return std::nullopt;
+    }
+
+    const auto root = fmt::format(
+        "https://dl.rockylinux.org/pub/rocky/{}", osinfo.getMajorVersion());
+    const auto arch = opencattus::utils::enums::toString(osinfo.getArch());
+
+    if (repoId == "appstream") {
+        return fmt::format("{}/AppStream/{}/os/", root, arch);
+    }
+    if (repoId == "baseos") {
+        return fmt::format("{}/BaseOS/{}/os/", root, arch);
+    }
+    if (repoId == "powertools") {
+        return fmt::format("{}/PowerTools/{}/os/", root, arch);
+    }
+    if (repoId == "crb") {
+        return fmt::format("{}/CRB/{}/os/", root, arch);
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::string> extractOpenHpcVersionFromMirrorUrl(
+    std::string_view currentUri)
+{
+    constexpr auto marker = std::string_view("/openhpc/");
+    const auto begin = currentUri.find(marker);
+    if (begin == std::string_view::npos) {
+        return std::nullopt;
+    }
+
+    const auto versionBegin = begin + marker.size();
+    const auto versionEnd = currentUri.find('/', versionBegin);
+    if (versionEnd == std::string_view::npos) {
+        return std::nullopt;
+    }
+
+    return std::string(
+        currentUri.substr(versionBegin, versionEnd - versionBegin));
+}
+
+std::optional<std::string> buildXcatRepoUpstreamUrl(
+    std::string_view repoId, std::string_view currentUri, const OS& osinfo)
+{
+    if (const auto rockyUpstream
+        = buildRockyXcatRepoUpstreamUrl(osinfo, repoId)) {
+        return rockyUpstream;
+    }
+
+    const auto arch = opencattus::utils::enums::toString(osinfo.getArch());
+    if (repoId == "epel") {
+        return fmt::format(
+            "https://download.fedoraproject.org/pub/epel/{}/Everything/{}/",
+            osinfo.getMajorVersion(), arch);
+    }
+
+    if (repoId != "OpenHPC" && repoId != "OpenHPC-Updates") {
+        return std::nullopt;
+    }
+
+    const auto ohpcVersion = extractOpenHpcVersionFromMirrorUrl(currentUri);
+    if (!ohpcVersion.has_value()) {
+        return std::nullopt;
+    }
+
+    if (repoId == "OpenHPC") {
+        return fmt::format("https://repos.openhpc.community/OpenHPC/{}/EL_{}/",
+            ohpcVersion.value(), osinfo.getMajorVersion());
+    }
+
+    return fmt::format(
+        "https://repos.openhpc.community/OpenHPC/{}/updates/EL_{}/",
+        ohpcVersion.value(), osinfo.getMajorVersion());
+}
+
+std::string resolveXcatOsImageRepoUrl(
+    const opencattus::services::repos::IRepository& repo, const OS& osinfo)
+{
+    const auto uri = opencattus::utils::optional::unwrap(repo.uri(),
+        "Expecting value for repository URI {}, found None, check {}",
+        repo.id(), repo.source());
+    const auto opts = opencattus::utils::singleton::options();
+    const auto mirrorBaseUrl
+        = opencattus::utils::string::rstrip(opts->mirrorBaseUrl, "/");
+
+    if (!opts->enableMirrors || mirrorBaseUrl.empty()
+        || !uri.starts_with(mirrorBaseUrl)) {
+        return uri;
+    }
+
+    const auto metadataUrl = fmt::format(
+        "{}/repodata/repomd.xml", opencattus::utils::string::rstrip(uri, "/"));
+    const auto metadataStatus
+        = opencattus::functions::getHttpStatus(metadataUrl, 1);
+    if (metadataStatus.starts_with("2")) {
+        return uri;
+    }
+
+    const auto upstreamUrl = buildXcatRepoUpstreamUrl(repo.id(), uri, osinfo);
+    if (!upstreamUrl.has_value()) {
+        LOG_WARN("xCAT osimage repo {} at {} returned HTTP {} and has no "
+                 "upstream fallback, keeping the configured URL",
+            repo.id(), uri, metadataStatus);
+        return uri;
+    }
+
+    LOG_WARN("xCAT osimage repo {} at {} returned HTTP {}; falling back to {}",
+        repo.id(), uri, metadataStatus, upstreamUrl.value());
+    return upstreamUrl.value();
+}
+
+std::string buildXcatDocaPostInstallScript(std::string_view kernelVersion,
+    std::string_view docaRepoUrl, std::string_view localRepoUrl)
+{
+    return fmt::format(R"(dnf -y --nogpgcheck \
+  --installroot=$IMG_ROOTIMGDIR \
+  --disablerepo='*' \
+  --enablerepo=appstream \
+  --enablerepo=baseos \
+  --enablerepo=crb \
+  --repofrompath=kernelpin,file:///install/kernels/{kernelVersion} \
+  install \
+  kernel-devel-{kernelVersion} \
+  kernel-headers-{kernelVersion} \
+  kernel-modules-extra-{kernelVersion}
+install -d -m 0755 $IMG_ROOTIMGDIR/lib/modules/{kernelVersion}
+if [ -d $IMG_ROOTIMGDIR/usr/src/kernels/{kernelVersion} ]; then
+  ln -sfn /usr/src/kernels/{kernelVersion} $IMG_ROOTIMGDIR/lib/modules/{kernelVersion}/build
+  ln -sfn /usr/src/kernels/{kernelVersion} $IMG_ROOTIMGDIR/lib/modules/{kernelVersion}/source
+fi
+if [ ! -e $IMG_ROOTIMGDIR/lib/modules/{kernelVersion}/build ]; then
+  echo "Expected kernel build tree for {kernelVersion} inside the xCAT root image" >&2
+  exit 1
+fi
+dnf -y --nogpgcheck \
+  --installroot=$IMG_ROOTIMGDIR \
+  --disablerepo='*' \
+  --enablerepo=appstream \
+  --enablerepo=baseos \
+  --enablerepo=crb \
+  --repofrompath=docaimage,{docaRepoUrl} \
+  --repofrompath=dockernelimg,{localRepoUrl} \
+  install \
+  --exclude=kernel \
+  --exclude=kernel-core \
+  --exclude=kernel-modules \
+  --exclude=kernel-modules-core \
+  --exclude=kernel-devel\* \
+  --exclude=kernel-headers\* \
+  doca-extra doca-ofed mlnx-ofa_kernel
+if ! chroot $IMG_ROOTIMGDIR rpm -q doca-extra doca-ofed mlnx-ofa_kernel >/dev/null 2>&1; then
+  echo "Expected the xCAT DOCA postinstall to install doca-extra, doca-ofed, and mlnx-ofa_kernel" >&2
+  exit 1
+fi
+cleanup_doca_chroot() {{
+  mountpoint -q $IMG_ROOTIMGDIR/dev && umount -R -l $IMG_ROOTIMGDIR/dev || :
+  mountpoint -q $IMG_ROOTIMGDIR/sys && umount -R -l $IMG_ROOTIMGDIR/sys || :
+  mountpoint -q $IMG_ROOTIMGDIR/proc && umount -l $IMG_ROOTIMGDIR/proc || :
+}}
+trap cleanup_doca_chroot EXIT
+install -d -m 0755 $IMG_ROOTIMGDIR/proc $IMG_ROOTIMGDIR/sys $IMG_ROOTIMGDIR/dev
+mount -t proc proc $IMG_ROOTIMGDIR/proc
+mount --rbind /sys $IMG_ROOTIMGDIR/sys
+mount --make-rslave $IMG_ROOTIMGDIR/sys
+mount --rbind /dev $IMG_ROOTIMGDIR/dev
+mount --make-rslave $IMG_ROOTIMGDIR/dev
+if chroot $IMG_ROOTIMGDIR rpm -q mlnx-ofa_kernel-dkms >/dev/null 2>&1; then
+  chroot $IMG_ROOTIMGDIR dkms autoinstall -k {kernelVersion}
+fi
+chroot $IMG_ROOTIMGDIR depmod -a {kernelVersion}
+chroot $IMG_ROOTIMGDIR dracut --force /boot/initramfs-{kernelVersion}.img {kernelVersion}
+cleanup_doca_chroot
+trap - EXIT
+)",
+        fmt::arg("kernelVersion", kernelVersion),
+        fmt::arg("docaRepoUrl", docaRepoUrl),
+        fmt::arg("localRepoUrl", localRepoUrl));
+}
+
 std::string formatDHCPInterfaces(std::string_view interface)
 {
     // xCAT expects either a plain interface list or a real hostname selector
@@ -211,8 +570,8 @@ std::string buildDHCPInterfacesCommand(std::string_view interface)
 
 std::string buildPrecreateMyPostscriptsCommand(bool enabled)
 {
-    return fmt::format("chdef -t site precreatemypostscripts={}",
-        enabled ? "YES" : "NO");
+    return fmt::format(
+        "chdef -t site precreatemypostscripts={}", enabled ? "YES" : "NO");
 }
 
 std::string shellSingleQuote(std::string_view value)
@@ -247,8 +606,8 @@ std::string getStatelessNodeRootPassword()
         const auto nodePassword = node.getNodeRootPassword();
         opencattus::functions::abortif(!nodePassword.has_value(),
             "Node {} is missing a root password", node.getHostname());
-        opencattus::functions::abortif(nodePassword.value()
-                != firstPassword.value(),
+        opencattus::functions::abortif(
+            nodePassword.value() != firstPassword.value(),
             "xCAT stateless images require the same node_root_password for "
             "all compute nodes; {} differs",
             node.getHostname());
@@ -266,8 +625,8 @@ std::string buildIpmitoolCommand(std::string_view address,
         shellSingleQuote(password), subcommand);
 }
 
-int runDirectIpmiCommand(std::string_view description,
-    std::string_view subcommand)
+int runDirectIpmiCommand(
+    std::string_view description, std::string_view subcommand)
 {
     std::string script = "rc=0\n";
     bool hasBMC = false;
@@ -280,9 +639,9 @@ int runDirectIpmiCommand(std::string_view description,
 
         hasBMC = true;
         script += fmt::format("echo {}\n",
-            shellSingleQuote(fmt::format(
-                "Trying direct IPMI fallback for {} on {}",
-                description, node.getHostname())));
+            shellSingleQuote(
+                fmt::format("Trying direct IPMI fallback for {} on {}",
+                    description, node.getHostname())));
         script += fmt::format("{} || rc=$?\n",
             buildIpmitoolCommand(bmc->getAddress(), bmc->getUsername(),
                 bmc->getPassword(), subcommand));
@@ -296,9 +655,8 @@ int runDirectIpmiCommand(std::string_view description,
     return opencattus::services::runner::shell::unsafe::cmd(script);
 }
 
-void runIpmiCommandWithFallback(
-    std::string_view xcatCommand, std::string_view subcommand,
-    std::string_view description)
+void runIpmiCommandWithFallback(std::string_view xcatCommand,
+    std::string_view subcommand, std::string_view description)
 {
     auto runner = opencattus::utils::singleton::runner();
     const auto exitCode = runner->executeCommand(std::string(xcatCommand));
@@ -347,14 +705,14 @@ XCAT::Image XCAT::getImage() const { return m_stateless; }
 
 void XCAT::installPackages()
 {
-    auto osservice = opencattus::utils::singleton::osservice();
-    osservice->install("xCAT");
+    auto runner = opencattus::utils::singleton::runner();
+    runner->checkCommand("dnf -y install xCAT");
     // xCAT's embedded Perl IPMI stack does not interoperate cleanly with
     // VirtualBMC on EL9, so keep ipmitool available as a fallback path.
-    osservice->install("ipmitool");
+    runner->checkCommand("dnf -y install ipmitool");
     // xCAT always prepends a local file:// otherpkgdir for osimages; ensure we
     // can publish metadata there even when we do not ship custom RPMs.
-    osservice->install("createrepo_c");
+    runner->checkCommand("dnf -y install createrepo_c");
 }
 
 void XCAT::patchInstall()
@@ -440,6 +798,11 @@ void XCAT::setDomain(std::string_view domain)
 }
 
 namespace {
+    constexpr bool shouldReuseExistingImage(bool imageExists, bool skipCopycds)
+    {
+        return imageExists && !skipCopycds;
+    }
+
     constexpr bool imageExists(const std::string& image)
     {
         LOG_ASSERT(
@@ -483,27 +846,54 @@ void XCAT::copycds(const std::filesystem::path& diskImage)
 void XCAT::genimage() const
 {
     using namespace runner;
-    const auto kernelVersionOpt = answerfile()->system.kernel;
+    const auto osinfo
+        = opencattus::utils::singleton::cluster()->getNodes()[0].getOS();
+    const auto configuredKernel = answerfile()->system.kernel;
+    const auto runningKernel
+        = opencattus::utils::singleton::osservice()->getKernelRunning();
+    const auto kernelVersionOpt
+        = selectXcatImageKernelVersion(cluster()->getOFED(), osinfo,
+            configuredKernel
+                ? std::optional<std::string_view>(configuredKernel.value())
+                : std::nullopt,
+            runningKernel);
+
     if (!kernelVersionOpt) {
         shell::fmt("genimage {} ", m_stateless.osimage);
         return;
     }
+
     const auto& kernelVersion = kernelVersionOpt.value();
     const auto& nodeOS = cluster()->getNodes().front().getOS();
 
-    LOG_WARN(
-        "Using kernel version from the answerfile: {} at [system].kernel in {}",
-        kernelVersion, answerfile()->path());
-    LOG_INFO("Customizing the kernel image");
-    const auto kernelPackages = fmt::format("{}",
-        fmt::join(getKernelPackagesForGenimage(nodeOS, kernelVersion), " "));
+    if (configuredKernel.has_value()) {
+        LOG_WARN("Using kernel version from the answerfile: {} at "
+                 "[system].kernel in {}",
+            kernelVersion, answerfile()->path());
+    } else {
+        LOG_WARN("Using the DOCA compute-node kernel version {} for genimage "
+                 "to keep the node image aligned with staged OFED modules",
+            kernelVersion);
+    }
 
-    shell::fmt("mkdir -p /install/kernels/{}", kernelVersion);
-    shell::fmt("dnf download {} --destdir /install/kernels/{}", kernelPackages,
-        kernelVersion);
-    shell::fmt("createrepo /install/kernels/{}", kernelVersion);
-    shell::fmt("chdef -t osimage {} -p pkgdir=/install/kernels/{}",
-        m_stateless.osimage, kernelVersion);
+    LOG_INFO("Customizing the kernel image");
+    const auto kernelPackages = buildXcatKernelPackages(osinfo, kernelVersion);
+    const auto kernelDirectory
+        = fmt::format("/install/kernels/{}", kernelVersion);
+
+    shell::fmt("mkdir -p {}", kernelDirectory);
+    if (const auto fallbackCommand
+        = buildRockyXcatKernelDownloadFallbackCommand(
+            osinfo, kernelVersion, kernelDirectory);
+        fallbackCommand.has_value()) {
+        shell::cmd(fallbackCommand.value());
+    } else {
+        shell::fmt(
+            "dnf download {} --destdir {}", kernelPackages, kernelDirectory);
+    }
+    shell::fmt("createrepo {}", kernelDirectory);
+    shell::fmt("chdef -t osimage {} -p pkgdir={}", m_stateless.osimage,
+        kernelDirectory);
     shell::fmt("genimage {} -k {}", m_stateless.osimage, kernelVersion);
 }
 
@@ -570,33 +960,33 @@ void XCAT::configureRemoteAccess()
     // postbootscripts populate SSH material. Seed the authorized key and host
     // keys into the image so sshd can come up on the first boot.
     m_stateless.postinstall.emplace_back(
-        fmt::format("printf 'root:%s\\n' {} | chroot $IMG_ROOTIMGDIR chpasswd\n",
+        fmt::format(
+            "printf 'root:%s\\n' {} | chroot $IMG_ROOTIMGDIR chpasswd\n",
             nodeRootPassword)
-        +
-        "install -d -m 0700 $IMG_ROOTIMGDIR/root/.ssh\n"
-        "if [ -f /install/postscripts/_ssh/authorized_keys ]; then\n"
-        "  install -m 0600 /install/postscripts/_ssh/authorized_keys "
-        "$IMG_ROOTIMGDIR/root/.ssh/authorized_keys\n"
-        "fi\n"
-        "ssh_group=root\n"
-        "if getent group ssh_keys >/dev/null 2>&1; then\n"
-        "  ssh_group=ssh_keys\n"
-        "fi\n"
-        "for key_type in rsa ecdsa ed25519; do\n"
-        "  key_path=$IMG_ROOTIMGDIR/etc/ssh/ssh_host_${key_type}_key\n"
-        "  if [ ! -s $key_path ]; then\n"
-        "    ssh-keygen -q -t ${key_type} -N '' -f $key_path\n"
-        "  fi\n"
-        "  chown root:${ssh_group} $key_path $key_path.pub\n"
-        "  chmod 0640 $key_path\n"
-        "  chmod 0644 $key_path.pub\n"
-        "done\n"
-        "install -d $IMG_ROOTIMGDIR/usr/lib/tmpfiles.d\n"
-        "cat > $IMG_ROOTIMGDIR/usr/lib/tmpfiles.d/opencattus-sshd.conf "
-        "<<'EOF'\n"
-        "d /run/sshd 0755 root root -\n"
-        "EOF\n"
-        "\n");
+        + "install -d -m 0700 $IMG_ROOTIMGDIR/root/.ssh\n"
+          "if [ -f /install/postscripts/_ssh/authorized_keys ]; then\n"
+          "  install -m 0600 /install/postscripts/_ssh/authorized_keys "
+          "$IMG_ROOTIMGDIR/root/.ssh/authorized_keys\n"
+          "fi\n"
+          "ssh_group=root\n"
+          "if getent group ssh_keys >/dev/null 2>&1; then\n"
+          "  ssh_group=ssh_keys\n"
+          "fi\n"
+          "for key_type in rsa ecdsa ed25519; do\n"
+          "  key_path=$IMG_ROOTIMGDIR/etc/ssh/ssh_host_${key_type}_key\n"
+          "  if [ ! -s $key_path ]; then\n"
+          "    ssh-keygen -q -t ${key_type} -N '' -f $key_path\n"
+          "  fi\n"
+          "  chown root:${ssh_group} $key_path $key_path.pub\n"
+          "  chmod 0640 $key_path\n"
+          "  chmod 0644 $key_path.pub\n"
+          "done\n"
+          "install -d $IMG_ROOTIMGDIR/usr/lib/tmpfiles.d\n"
+          "cat > $IMG_ROOTIMGDIR/usr/lib/tmpfiles.d/opencattus-sshd.conf "
+          "<<'EOF'\n"
+          "d /run/sshd 0755 root root -\n"
+          "EOF\n"
+          "\n");
 }
 
 void XCAT::configureInfiniband()
@@ -605,71 +995,60 @@ void XCAT::configureInfiniband()
         = opencattus::utils::singleton::cluster()->getNodes()[0].getOS();
     LOG_INFO("[xCAT] Configuring infiniband");
     if (const auto& ofed = cluster()->getOFED()) {
-        switch (ofed->getKind()) {
-            case OFED::Kind::Inbox:
-                m_stateless.otherpkgs.emplace_back("@infiniband");
-
-                break;
-
-            case OFED::Kind::Mellanox: {
-                auto repoManager = opencattus::utils::singleton::repos();
-                auto runner = opencattus::utils::singleton::runner();
-                auto opts = opencattus::utils::singleton::options();
-                auto osservice = opencattus::utils::singleton::osservice();
-
-                // Add the rpm to the image
-                m_stateless.otherpkgs.emplace_back("mlnx-ofa_kernel");
-                m_stateless.otherpkgs.emplace_back("doca-ofed");
-
-                // The kernel modules are build by the OFED.cpp module, see
-                // OFED.cpp
-                const auto kernelVersion = [&]() -> std::string {
-                    const auto kernelOpt = osinfo.getKernel();
-                    if (kernelOpt) {
-                        return std::string(kernelOpt.value());
-                    }
-                    const auto kernel = osservice->getKernelRunning();
-                    LOG_WARN("Kernel version ommited in configuration, using "
-                             "the running kernel {}",
-                        kernel);
-                    return kernel;
-                }();
-                osinfo.getKernel().value_or(osservice->getKernelInstalled());
-                ;
-                // Configure Apache to serve the RPM repository
-                const auto repoName
-                    = fmt::format("doca-kernel-{}", kernelVersion);
-                const auto localRepo = functions::createHTTPRepo(repoName);
-
-                // Create the RPM repository
-                runner->checkCommand(
-                    fmt::format("bash -c \"cp -v "
-                                "/usr/share/doca-host-*/Modules/{}/*.rpm {}\"",
-                        kernelVersion, localRepo.directory.string()));
-                runner->checkCommand(
-                    fmt::format("createrepo {}", localRepo.directory.string()));
-
-                // dryRun does not initialize the repositories
-                if (!opts->dryRun) {
-                    auto docaUrl = repoManager->repo("doca")->uri().value();
-                    runner->checkCommand(fmt::format(
-                        "bash -c \"chdef -t osimage {} --plus otherpkgdir={}\"",
-                        m_stateless.osimage, docaUrl));
-                }
-
-                // Add the local repository to the stateless image
-                runner->checkCommand(fmt::format(
-                    "bash -c \"chdef -t osimage {} --plus otherpkgdir={}\"",
-                    m_stateless.osimage, localRepo.url));
-
-            } break;
-
-            case OFED::Kind::Oracle:
-                throw std::logic_error(
-                    "Oracle RDMA release is not yet supported");
-
-                break;
+        auto runner = opencattus::utils::singleton::runner();
+        auto osservice = opencattus::utils::singleton::osservice();
+        const auto configuredKernel = osinfo.getKernel();
+        const auto runningKernel = osservice->getKernelRunning();
+        if (!configuredKernel.has_value()) {
+            LOG_WARN("Kernel version ommited in configuration, using "
+                     "the running kernel {}",
+                runningKernel);
         }
+        const auto plan = buildXcatInfinibandPlan(*ofed, osinfo,
+            configuredKernel
+                ? std::optional<std::string_view>(configuredKernel.value())
+                : std::nullopt,
+            runningKernel);
+
+        for (const auto& package : plan.otherPackages) {
+            m_stateless.otherpkgs.emplace_back(package);
+        }
+
+        if (!plan.localRepoName.has_value()) {
+            return;
+        }
+
+        auto repoManager = opencattus::utils::singleton::repos();
+        auto opts = opencattus::utils::singleton::options();
+
+        // Configure Apache to serve the staged DOCA kernel repository.
+        const auto localRepo
+            = functions::createHTTPRepo(plan.localRepoName.value());
+
+        // Create the RPM repository.
+        runner->checkCommand(
+            fmt::format("bash -c \"cp -v "
+                        "/usr/share/doca-host-*/Modules/{}/*.rpm {}\"",
+                plan.kernelVersion.value(), localRepo.directory.string()));
+        runner->checkCommand(
+            fmt::format("createrepo {}", localRepo.directory.string()));
+
+        const auto docaUrl = repoManager->repo("doca")->uri().value();
+
+        // dryRun does not initialize the repositories
+        if (!opts->dryRun) {
+            runner->checkCommand(fmt::format(
+                "bash -c \"chdef -t osimage {} --plus otherpkgdir={}\"",
+                m_stateless.osimage, docaUrl));
+        }
+
+        // Add the local repository to the stateless image
+        runner->checkCommand(
+            fmt::format("bash -c \"chdef -t osimage {} --plus otherpkgdir={}\"",
+                m_stateless.osimage, localRepo.url));
+
+        m_stateless.postinstall.emplace_back(buildXcatDocaPostInstallScript(
+            plan.kernelVersion.value(), docaUrl, localRepo.url));
     }
 }
 
@@ -742,7 +1121,8 @@ void XCAT::generatePostinstallFile()
         "if [ ! -e $IMG_ROOTIMGDIR/etc/init.d ]; then\n"
         "  ln -s rc.d/init.d $IMG_ROOTIMGDIR/etc/init.d\n"
         "fi\n"
-        "cat > $IMG_ROOTIMGDIR/etc/udev/rules.d/99-opencattus-placeholder.rules "
+        "cat > "
+        "$IMG_ROOTIMGDIR/etc/udev/rules.d/99-opencattus-placeholder.rules "
         "<<'EOF'\n"
         "# Placeholder file for xCAT EL9 image generation.\n"
         "EOF\n"
@@ -793,10 +1173,10 @@ void XCAT::configureOSImageDefinition() const
     auto runner = opencattus::utils::singleton::runner();
     const auto localOtherPkgDir
         = getLocalOtherPkgRepoPath(cluster()->getNodes().front().getOS());
-    opencattus::services::runner::shell::cmd(fmt::format(
-        "mkdir -p {} && createrepo_c --update {}",
-        shellSingleQuote(localOtherPkgDir.string()),
-        shellSingleQuote(localOtherPkgDir.string())));
+    opencattus::services::runner::shell::cmd(
+        fmt::format("mkdir -p {} && createrepo_c --update {}",
+            shellSingleQuote(localOtherPkgDir.string()),
+            shellSingleQuote(localOtherPkgDir.string())));
 
     runner->executeCommand(
         fmt::format("chdef -t osimage {} --plus otherpkglist="
@@ -857,8 +1237,8 @@ void XCAT::configureEL8()
 {
     auto runner = opencattus::utils::singleton::runner();
     const auto nodeOS = cluster()->getNodes().front().getOS();
-    for (const auto& command : buildEnterpriseLinuxTemplateAliasCommands(
-             nodeOS)) {
+    for (const auto& command :
+        buildEnterpriseLinuxTemplateAliasCommands(nodeOS)) {
         runner->executeCommand(command);
     }
 }
@@ -871,8 +1251,8 @@ void XCAT::configureEL9()
 {
     auto runner = opencattus::utils::singleton::runner();
     const auto nodeOS = cluster()->getNodes().front().getOS();
-    for (const auto& command : buildEnterpriseLinuxTemplateAliasCommands(
-             nodeOS)) {
+    for (const auto& command :
+        buildEnterpriseLinuxTemplateAliasCommands(nodeOS)) {
         runner->executeCommand(command);
     }
 }
@@ -903,7 +1283,8 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
             configureEL9();
             break;
         case OS::Platform::el10:
-            throw std::logic_error("xCAT image generation is unsupported on EL10");
+            throw std::logic_error(
+                "xCAT image generation is unsupported on EL10");
         default:
             std::unreachable();
     }
@@ -912,8 +1293,10 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
 
     const auto opts = opencattus::utils::singleton::options();
     const auto imageExists_ = imageExists(m_stateless.osimage);
+    const auto reuseExistingImage
+        = shouldReuseExistingImage(imageExists_, opts->shouldSkip("copycds"));
     const auto runner = opencattus::utils::singleton::runner();
-    if (!imageExists_ || opts->shouldSkip("copycds")) {
+    if (!reuseExistingImage) {
         if (opts->shouldSkip("copycds")) {
             // Remove rootfs and cleanup otherpkgs and postinstall scripts
             runner->executeCommand(
@@ -942,8 +1325,13 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
 
         customizeImage(customizations);
         genimage();
-        packimage();
+    } else {
+        LOG_INFO("Reusing xCAT image {}, skipping genimage and repacking the "
+                 "existing root image",
+            m_stateless.osimage);
     }
+
+    packimage();
 }
 
 void XCAT::addNode(const Node& node)
@@ -1011,8 +1399,8 @@ void XCAT::setNodesBoot()
 {
     // TODO: Do proper checking if a given node have BMC support, and then issue
     //  rsetboot only on the compatible machines instead of running in compute.
-    runIpmiCommandWithFallback(
-        "rsetboot compute net", "chassis bootdev pxe", "PXE boot configuration");
+    runIpmiCommandWithFallback("rsetboot compute net", "chassis bootdev pxe",
+        "PXE boot configuration");
 }
 
 void XCAT::resetNodes()
@@ -1092,10 +1480,7 @@ std::vector<std::string> XCAT::getxCATOSImageRepos()
     const auto addReposFromFile = [&](const std::string& filename) {
         for (auto& repo : repoManager->repoFile(filename)) {
             if (repo->enabled()) {
-                repos.emplace_back(utils::optional::unwrap(repo->uri(),
-                    "Expecting value for repository URI {}, found None, check "
-                    "{}",
-                    repo->id(), repo->source()));
+                repos.emplace_back(resolveXcatOsImageRepoUrl(*repo, osinfo));
             }
         }
     };
@@ -1267,7 +1652,8 @@ TEST_CASE("buildDHCPInterfacesCommand passes a raw site assignment")
         == "chdef -t site dhcpinterfaces=oc-mgmt0");
 }
 
-TEST_CASE("buildPrecreateMyPostscriptsCommand enables pre-generated postscripts")
+TEST_CASE(
+    "buildPrecreateMyPostscriptsCommand enables pre-generated postscripts")
 {
     CHECK(buildPrecreateMyPostscriptsCommand(true)
         == "chdef -t site precreatemypostscripts=YES");
@@ -1277,8 +1663,8 @@ TEST_CASE("buildPrecreateMyPostscriptsCommand enables pre-generated postscripts"
 
 TEST_CASE("buildIpmitoolCommand quotes BMC credentials")
 {
-    CHECK(buildIpmitoolCommand("192.0.2.10", "admin", "pa'ss",
-              "chassis power reset")
+    CHECK(buildIpmitoolCommand(
+              "192.0.2.10", "admin", "pa'ss", "chassis power reset")
         == "ipmitool -I lanplus -H '192.0.2.10' -U 'admin' -P "
            "'pa'\"'\"'ss' chassis power reset");
 }
@@ -1293,6 +1679,238 @@ TEST_CASE("getLocalOtherPkgRepoPath matches xCAT local repo layout")
     const OS nodeOS(OS::Distro::Rocky, OS::Platform::el9, 7, OS::Arch::x86_64);
     CHECK(getLocalOtherPkgRepoPath(nodeOS)
         == "/install/post/otherpkgs/rocky9.7/x86_64");
+}
+
+TEST_CASE("buildXcatInfinibandPlan uses inbox packages for EL8 compute nodes")
+{
+    const auto plan = buildXcatInfinibandPlan(OFED(OFED::Kind::Inbox, ""),
+        OS(OS::Distro::Rocky, OS::Platform::el8, 10, OS::Arch::x86_64),
+        std::nullopt, "4.18.0-553.75.1.el8_10.x86_64");
+    const std::vector<std::string_view> expectedPackages { "@infiniband" };
+
+    CHECK(plan.otherPackages == expectedPackages);
+    CHECK_FALSE(plan.kernelVersion.has_value());
+    CHECK_FALSE(plan.localRepoName.has_value());
+}
+
+TEST_CASE("buildXcatInfinibandPlan stages DOCA packages for EL8 compute nodes")
+{
+    const auto plan
+        = buildXcatInfinibandPlan(OFED(OFED::Kind::Doca, "latest-2.9-LTS"),
+            OS(OS::Distro::Rocky, OS::Platform::el8, 10, OS::Arch::x86_64),
+            std::nullopt, "4.18.0-553.75.1.el8_10.x86_64");
+    const std::vector<std::string_view> expectedPackages {};
+
+    CHECK(plan.otherPackages == expectedPackages);
+    REQUIRE(plan.kernelVersion.has_value());
+    CHECK(plan.kernelVersion.value() == "4.18.0-553.75.1.el8_10.x86_64");
+    REQUIRE(plan.localRepoName.has_value());
+    CHECK(plan.localRepoName.value()
+        == "doca-kernel-4.18.0-553.75.1.el8_10.x86_64");
+}
+
+TEST_CASE("buildXcatInfinibandPlan keeps explicit EL9 kernel pinning")
+{
+    const auto plan = buildXcatInfinibandPlan(OFED(OFED::Kind::Doca, "latest"),
+        OS(OS::Distro::Rocky, OS::Platform::el9, 7, OS::Arch::x86_64),
+        std::optional<std::string_view>("5.14.0-570.28.1.el9_6.x86_64"),
+        "5.14.0-570.24.1.el9_6.x86_64");
+
+    REQUIRE(plan.kernelVersion.has_value());
+    CHECK(plan.kernelVersion.value() == "5.14.0-570.28.1.el9_6.x86_64");
+    REQUIRE(plan.localRepoName.has_value());
+    CHECK(plan.localRepoName.value()
+        == "doca-kernel-5.14.0-570.28.1.el9_6.x86_64");
+}
+
+TEST_CASE("selectXcatImageKernelVersion keeps DOCA images on the staged kernel")
+{
+    const auto kernelVersion = selectXcatImageKernelVersion(
+        std::optional<OFED>(OFED(OFED::Kind::Doca, "latest")),
+        OS(OS::Distro::Rocky, OS::Platform::el9, 7, OS::Arch::x86_64),
+        std::nullopt, "5.14.0-611.41.1.el9_7.x86_64");
+
+    REQUIRE(kernelVersion.has_value());
+    CHECK(kernelVersion.value() == "5.14.0-611.41.1.el9_7.x86_64");
+}
+
+TEST_CASE("selectXcatImageKernelVersion stays empty without OFED or a pin")
+{
+    const auto kernelVersion = selectXcatImageKernelVersion(std::nullopt,
+        OS(OS::Distro::Rocky, OS::Platform::el9, 7, OS::Arch::x86_64),
+        std::nullopt, "5.14.0-611.41.1.el9_7.x86_64");
+
+    CHECK_FALSE(kernelVersion.has_value());
+}
+
+TEST_CASE("buildXcatKernelPackages omits kernel-modules-core on EL8")
+{
+    CHECK(buildXcatKernelPackages(
+              OS(OS::Distro::Rocky, OS::Platform::el8, 10, OS::Arch::x86_64),
+              "4.18.0-553.el8_10.x86_64")
+        == "kernel-4.18.0-553.el8_10.x86_64 "
+           "kernel-devel-4.18.0-553.el8_10.x86_64 "
+           "kernel-headers-4.18.0-553.el8_10.x86_64 "
+           "kernel-core-4.18.0-553.el8_10.x86_64 "
+           "kernel-modules-4.18.0-553.el8_10.x86_64 "
+           "kernel-modules-extra-4.18.0-553.el8_10.x86_64");
+}
+
+TEST_CASE("buildXcatKernelPackages includes kernel-modules-core on EL9")
+{
+    CHECK(buildXcatKernelPackages(
+              OS(OS::Distro::Rocky, OS::Platform::el9, 7, OS::Arch::x86_64),
+              "5.14.0-611.41.1.el9_7.x86_64")
+        == "kernel-5.14.0-611.41.1.el9_7.x86_64 "
+           "kernel-devel-5.14.0-611.41.1.el9_7.x86_64 "
+           "kernel-headers-5.14.0-611.41.1.el9_7.x86_64 "
+           "kernel-core-5.14.0-611.41.1.el9_7.x86_64 "
+           "kernel-modules-5.14.0-611.41.1.el9_7.x86_64 "
+           "kernel-modules-core-5.14.0-611.41.1.el9_7.x86_64 "
+           "kernel-modules-extra-5.14.0-611.41.1.el9_7.x86_64");
+}
+
+TEST_CASE(
+    "buildRockyXcatKernelDownloadFallbackCommand stages exact EL9 kernel RPMs")
+{
+    const auto fallbackCommand = buildRockyXcatKernelDownloadFallbackCommand(
+        OS(OS::Distro::Rocky, OS::Platform::el9, 7, OS::Arch::x86_64),
+        "5.14.0-611.41.1.el9_7.x86_64",
+        "/install/kernels/5.14.0-611.41.1.el9_7.x86_64");
+
+    REQUIRE(fallbackCommand.has_value());
+    CHECK(fallbackCommand->contains(
+        "if ! dnf download kernel-5.14.0-611.41.1.el9_7.x86_64"));
+    CHECK(fallbackCommand->contains(
+        "curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused -o "
+        "/install/kernels/5.14.0-611.41.1.el9_7.x86_64/"
+        "kernel-5.14.0-611.41.1.el9_7.x86_64.rpm "
+        "https://download.rockylinux.org/pub/rocky/9.7/BaseOS/x86_64/os/"
+        "Packages/k/"
+        "kernel-5.14.0-611.41.1.el9_7.x86_64.rpm"));
+    CHECK(fallbackCommand->contains(
+        "kernel-devel-5.14.0-611.41.1.el9_7.x86_64.rpm "
+        "https://download.rockylinux.org/pub/rocky/9.7/AppStream/x86_64/os/"
+        "Packages/k/"
+        "kernel-devel-5.14.0-611.41.1.el9_7.x86_64.rpm"));
+    CHECK(fallbackCommand->contains(
+        "kernel-modules-core-5.14.0-611.41.1.el9_7.x86_64.rpm "
+        "https://download.rockylinux.org/pub/rocky/9.7/BaseOS/x86_64/os/"
+        "Packages/k/"
+        "kernel-modules-core-5.14.0-611.41.1.el9_7.x86_64.rpm"));
+}
+
+TEST_CASE("buildRockyXcatKernelDownloadFallbackCommand is disabled for "
+          "non-Rocky distros")
+{
+    CHECK_FALSE(buildRockyXcatKernelDownloadFallbackCommand(
+        OS(OS::Distro::RHEL, OS::Platform::el9, 7, OS::Arch::x86_64),
+        "5.14.0-611.41.1.el9_7.x86_64",
+        "/install/kernels/5.14.0-611.41.1.el9_7.x86_64")
+            .has_value());
+}
+
+TEST_CASE("buildXcatRepoUpstreamUrl maps Rocky mirror repos back to upstream")
+{
+    const auto osinfo
+        = OS(OS::Distro::Rocky, OS::Platform::el9, 7, OS::Arch::x86_64);
+
+    CHECK(buildXcatRepoUpstreamUrl("appstream",
+              "http://mirror.local.versatushpc.com.br/rocky/linux/9/"
+              "AppStream/x86_64/os/",
+              osinfo)
+        == "https://dl.rockylinux.org/pub/rocky/9/AppStream/x86_64/os/");
+    CHECK(buildXcatRepoUpstreamUrl("baseos",
+              "http://mirror.local.versatushpc.com.br/rocky/linux/9/"
+              "BaseOS/x86_64/os/",
+              osinfo)
+        == "https://dl.rockylinux.org/pub/rocky/9/BaseOS/x86_64/os/");
+    CHECK(buildXcatRepoUpstreamUrl("crb",
+              "http://mirror.local.versatushpc.com.br/rocky/linux/9/"
+              "CRB/x86_64/os/",
+              osinfo)
+        == "https://dl.rockylinux.org/pub/rocky/9/CRB/x86_64/os/");
+}
+
+TEST_CASE("buildXcatRepoUpstreamUrl maps EPEL and OpenHPC mirror repos back to "
+          "upstream")
+{
+    const auto osinfo
+        = OS(OS::Distro::Rocky, OS::Platform::el9, 7, OS::Arch::x86_64);
+
+    CHECK(buildXcatRepoUpstreamUrl("epel",
+              "http://mirror.local.versatushpc.com.br/epel/9/Everything/"
+              "x86_64/",
+              osinfo)
+        == "https://download.fedoraproject.org/pub/epel/9/Everything/x86_64/");
+    CHECK(buildXcatRepoUpstreamUrl("OpenHPC",
+              "http://mirror.local.versatushpc.com.br/openhpc/3/EL_9/", osinfo)
+        == "https://repos.openhpc.community/OpenHPC/3/EL_9/");
+    CHECK(buildXcatRepoUpstreamUrl("OpenHPC-Updates",
+              "http://mirror.local.versatushpc.com.br/openhpc/3/updates/EL_9/",
+              osinfo)
+        == "https://repos.openhpc.community/OpenHPC/3/updates/EL_9/");
+}
+
+TEST_CASE("buildXcatDocaPostInstallScript finalizes DOCA modules in the image")
+{
+    const auto script
+        = buildXcatDocaPostInstallScript("5.14.0-611.41.1.el9_7.x86_64",
+            "https://linux.mellanox.com/public/repo/doca/latest/rhel9/x86_64",
+            "http://localhost/repos/doca-kernel-5.14.0-611.41.1.el9_7.x86_64");
+
+    CHECK(script.contains("--installroot=$IMG_ROOTIMGDIR"));
+    CHECK(script.contains("--enablerepo=appstream"));
+    CHECK(script.contains("--enablerepo=baseos"));
+    CHECK(script.contains("--enablerepo=crb"));
+    CHECK(script.contains("--repofrompath=kernelpin,file:///install/kernels/"
+                          "5.14.0-611.41.1.el9_7.x86_64"));
+    CHECK(script.contains("--repofrompath=docaimage,https://linux.mellanox.com/"
+                          "public/repo/doca/latest/rhel9/x86_64"));
+    CHECK(script.contains("--repofrompath=dockernelimg,http://localhost/repos/"
+                          "doca-kernel-5.14.0-611.41.1.el9_7.x86_64"));
+    CHECK_FALSE(script.contains("--enablerepo=epel"));
+    CHECK_FALSE(script.contains("--enablerepo=OpenHPC"));
+    CHECK_FALSE(script.contains("--enablerepo=OpenHPC-Updates"));
+    CHECK(script.contains("--exclude=kernel-devel\\*"));
+    CHECK(script.contains("--exclude=kernel-headers\\*"));
+    CHECK(script.contains("doca-extra doca-ofed mlnx-ofa_kernel"));
+    CHECK(script.contains("kernel-headers-5.14.0-611.41.1.el9_7.x86_64"));
+    CHECK(script.contains(
+        "ln -sfn /usr/src/kernels/5.14.0-611.41.1.el9_7.x86_64 "
+        "$IMG_ROOTIMGDIR/lib/modules/5.14.0-611.41.1.el9_7.x86_64/build"));
+    CHECK(script.contains("Expected the xCAT DOCA postinstall to install "
+                          "doca-extra, doca-ofed, and mlnx-ofa_kernel"));
+    CHECK(script.contains("mount -t proc proc $IMG_ROOTIMGDIR/proc"));
+    CHECK(script.contains("mount --rbind /sys $IMG_ROOTIMGDIR/sys"));
+    CHECK(script.contains("mount --make-rslave $IMG_ROOTIMGDIR/sys"));
+    CHECK(script.contains("mount --rbind /dev $IMG_ROOTIMGDIR/dev"));
+    CHECK(script.contains("mount --make-rslave $IMG_ROOTIMGDIR/dev"));
+    CHECK(script.contains("dkms autoinstall -k 5.14.0-611.41.1.el9_7.x86_64"));
+    CHECK(script.contains("depmod -a 5.14.0-611.41.1.el9_7.x86_64"));
+    CHECK(script.contains(
+        "dracut --force /boot/initramfs-5.14.0-611.41.1.el9_7.x86_64.img "
+        "5.14.0-611.41.1.el9_7.x86_64"));
+    CHECK_FALSE(script.contains("Expected xCAT otherpkg staging to install "
+                                "doca-extra, doca-ofed, and mlnx-ofa_kernel"));
+}
+
+TEST_CASE("shouldReuseExistingImage only skips genimage when copycds is active")
+{
+    CHECK(opencattus::services::shouldReuseExistingImage(true, false));
+    CHECK_FALSE(opencattus::services::shouldReuseExistingImage(false, false));
+    CHECK_FALSE(opencattus::services::shouldReuseExistingImage(true, true));
+}
+
+TEST_CASE("buildXcatInfinibandPlan rejects EL10 compute-node staging")
+{
+    CHECK_THROWS_WITH_AS(
+        [&] {
+            buildXcatInfinibandPlan(OFED(OFED::Kind::Doca, "latest"),
+                OS(OS::Distro::Rocky, OS::Platform::el10, 1, OS::Arch::x86_64),
+                std::nullopt, "6.12.0-65.el10_1.x86_64");
+        }(),
+        doctest::Contains("EL10"), std::invalid_argument);
 }
 
 TEST_CASE("shellSingleQuote escapes single quotes")

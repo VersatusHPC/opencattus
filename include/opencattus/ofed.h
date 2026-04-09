@@ -25,7 +25,7 @@ public:
      * @enum Kind
      * @brief Enumeration representing different kinds of OFED installations.
      */
-    enum class Kind { Inbox, Mellanox, Oracle };
+    enum class Kind { Inbox, Doca, Oracle };
 
 private:
     Kind m_kind { Kind::Inbox };

@@ -13,7 +13,19 @@
 
 #include <fmt/core.h>
 
+#include <cstring>
+
 namespace opencattus::services::ansible::roles::check {
+
+auto isNewerKernelAvailable(std::string_view availableKernel,
+    std::string_view runningKernel) -> bool
+{
+    if (availableKernel.empty() || availableKernel == runningKernel) {
+        return false;
+    }
+
+    return strverscmp(availableKernel.data(), runningKernel.data()) > 0;
+}
 
 void run(const Role& role)
 {
@@ -27,7 +39,8 @@ void run(const Role& role)
 
     if (!singleton::options()->shouldSkip("check-kernel")) {
         functions::abortif(
-            kernelAvailable != singleton::osservice()->getKernelRunning(),
+            isNewerKernelAvailable(
+                kernelAvailable, singleton::osservice()->getKernelRunning()),
             "New kernel available, run `dnf install -y kernel` and reboot "
             "before continue, use `--skip check-kernel` to skip (not "
             "recommended)");
@@ -39,6 +52,24 @@ void run(const Role& role)
     // - answerfile validation
     // - internet connection?
     // - no swap?
+}
+
+TEST_CASE("isNewerKernelAvailable ignores identical kernels")
+{
+    CHECK_FALSE(isNewerKernelAvailable("5.14.0-611.41.1.el9_7.x86_64",
+        "5.14.0-611.41.1.el9_7.x86_64"));
+}
+
+TEST_CASE("isNewerKernelAvailable ignores older available kernels")
+{
+    CHECK_FALSE(isNewerKernelAvailable("5.14.0-611.24.1.el9_7.x86_64",
+        "5.14.0-611.41.1.el9_7.x86_64"));
+}
+
+TEST_CASE("isNewerKernelAvailable detects newer available kernels")
+{
+    CHECK(isNewerKernelAvailable("5.14.0-611.50.1.el9_7.x86_64",
+        "5.14.0-611.41.1.el9_7.x86_64"));
 }
 
 } // namespace opencattus::services::ansible::roles::check
