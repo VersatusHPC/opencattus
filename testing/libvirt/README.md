@@ -5,8 +5,8 @@ OpenCATTUS on Enterprise Linux.
 
 Scope:
 
-- One EL8 or EL9 cloud-image headnode VM, or the current Rocky Linux 10 cloud
-  image for EL10 bootstrap work.
+- One EL8 or EL9 cloud-image headnode VM from the supported Enterprise Linux
+  family, or the current Rocky Linux 10 cloud image for EL10 bootstrap work.
 - One or more PXE-booted compute VMs.
 - Unattended answerfile-driven installation.
 - Headnode and cluster verification after provisioning.
@@ -14,10 +14,18 @@ Scope:
 
 The currently validated targets are `Rocky Linux 8.10 + xCAT`,
 `Rocky Linux 8.10 + Confluent`,
-`Rocky Linux 9.7 + xCAT`, `Rocky Linux 9.7 + Confluent`, and
-`Rocky Linux 10.1 + Confluent`. The current EL10 baseline is still narrower
-than the full EL9 recovery scope, and the EL8 baseline is narrower than EL9,
-but both now have real unattended lab coverage.
+`Rocky Linux 9.7 + xCAT`, `Rocky Linux 9.7 + Confluent`,
+`Rocky Linux 10.1 + Confluent`, `AlmaLinux 10.1 + Confluent`,
+`RHEL 10.1 + Confluent`, and `Oracle Linux 10.1 + Confluent`.
+The current EL10 baseline is still narrower than the full EL9 recovery scope,
+and the EL8 baseline is narrower than EL9, but both now have real unattended
+lab coverage.
+
+The expansion matrix now also has runnable lab scaffolding for
+`AlmaLinux 8/9`, `Oracle Linux 8/9`, and `RHEL 8/9` with both `xCAT` and
+`Confluent`. Those extra distro lanes are not yet validated; they exist so we
+can drive the next fixing and validation wave without inventing ad hoc lab
+configs each time.
 
 ## Host requirements
 
@@ -50,13 +58,20 @@ Keep the cloud image and ISO under `/var/lib/libvirt/images`, ideally in a dedic
 1. Copy one of these environment templates, then set `BASE_IMAGE`,
    `CLUSTER_ISO`, and either `OPENCATTUS_BINARY` or `OPENCATTUS_SOURCE_DIR`:
 
-   - `testing/libvirt/config/rocky8-xcat.env.example`
-   - `testing/libvirt/config/rocky8-confluent.env.example`
-   - `testing/libvirt/config/rocky9-xcat.env.example`
-   - `testing/libvirt/config/rocky9-confluent.env.example`
-   - `testing/libvirt/config/rocky9-confluent-service.env.example`
-   - `testing/libvirt/config/rocky10-confluent.env.example`
-   - `testing/libvirt/config/rocky10-confluent-service.env.example`
+   - validated Rocky baselines:
+     `testing/libvirt/config/rocky8-xcat.env.example`,
+     `testing/libvirt/config/rocky8-confluent.env.example`,
+     `testing/libvirt/config/rocky9-xcat.env.example`,
+     `testing/libvirt/config/rocky9-confluent.env.example`,
+     `testing/libvirt/config/rocky9-confluent-service.env.example`,
+     `testing/libvirt/config/rocky10-confluent.env.example`,
+      `testing/libvirt/config/rocky10-confluent-service.env.example`
+   - validated EL10 Confluent lanes:
+     `testing/libvirt/config/alma10-confluent.env.example`,
+     `testing/libvirt/config/ol10-confluent.env.example`,
+     `testing/libvirt/config/rhel10-confluent.env.example`
+   - candidate EL8/EL9 distro expansion lanes:
+     `testing/libvirt/config/{alma,ol,rhel}{8,9}-{xcat,confluent}.env.example`
 2. The Rocky 10 wrapper defaults to a one-node, two-rank MPI smoke. If you
    want the validated two-node MPI path on EL9 or EL10, also set:
 
@@ -90,6 +105,24 @@ For the EL10 bootstrap path, use:
 testing/libvirt/opencattus-el10-lab.sh -c /path/to/rocky10-confluent.env run
 ```
 
+For a mirror-backed `RHEL 10 + Confluent` attempt, use:
+
+```bash
+testing/libvirt/opencattus-el10-lab.sh -c /path/to/rhel10-confluent.env run
+```
+
+For an `AlmaLinux 10 + Confluent` attempt, use:
+
+```bash
+testing/libvirt/opencattus-el10-lab.sh -c /path/to/alma10-confluent.env run
+```
+
+For an `Oracle Linux 10 + Confluent` attempt, use:
+
+```bash
+testing/libvirt/opencattus-el10-lab.sh -c /path/to/ol10-confluent.env run
+```
+
 4. Inspect logs under `/var/tmp/opencattus-lab/<lab-name>/logs`.
 
 The harness also stores libvirt-owned disk artifacts under `/var/lib/libvirt/images/opencattus-lab/<lab-name>`.
@@ -99,7 +132,45 @@ The example config deliberately keeps `NODE_REAL_MEMORY_MB` below the VM's assig
 
 The default config also assumes a single active lab on the host. If you want multiple labs at once, override the external and management subnet settings in addition to changing `LAB_NAME`.
 
+The harness accepts these `DISTRO_ID` tokens:
+
+- `rocky`
+- `alma`
+- `ol`
+- `rhel`
+
+The rendered answerfile uses the product-facing distro spelling automatically,
+so the lab token does not need to match the answerfile enum name exactly.
+If there is no distro-specific answerfile template for a lane yet, the harness
+reuses the matching Rocky template and rewrites the distro, version, and
+provisioner fields during render.
+
+If you set `OPENCATTUS_MIRROR_URL`, the harness passes that mirror into the
+installer and also uses it to bootstrap unentitled `RHEL` headnodes during lab
+setup.
+
+## EL-family expansion matrix
+
+| Target | xCAT | Confluent | Notes |
+| --- | --- | --- | --- |
+| Rocky Linux 8.10 | Validated | Validated | Current EL8 baseline. |
+| AlmaLinux 8.10 | Planned | Planned | Candidate lab configs now exist; first unattended runs still pending. |
+| Oracle Linux 8.10 | Planned | Planned | Candidate lab configs now exist; expect media-specific tuning during first runs. |
+| RHEL 8.10 | Planned | Planned | Candidate lab configs now exist; requires entitled media and repo access. |
+| Rocky Linux 9.7 | Validated | Validated | Current EL9 baseline. |
+| AlmaLinux 9.7 | Planned | Planned | Candidate lab configs now exist; first unattended runs still pending. |
+| Oracle Linux 9 | Planned | Planned | Candidate config is scaffolded with a 9.4 example; adjust `DISTRO_VERSION` to match local media. |
+| RHEL 9.7 | Planned | Planned | Candidate lab configs now exist; requires entitled media and repo access. |
+| Rocky Linux 10.1 | Out of scope | Validated | Confluent-only EL10 bootstrap path. |
+| AlmaLinux 10.1 | Out of scope | Validated | Confluent-only EL10 cloud-image lane. Verified with the same headnode, deploy, and MPI smoke flow as Rocky Linux 10. |
+| RHEL 10.1 | Out of scope | Validated | Confluent-only EL10 mirror-backed lane. Uses a qcow2 headnode image plus local mirrored repos. |
+| Oracle Linux 10.1 | Out of scope | Validated | Confluent-only EL10 lane. Uses Oracle cloud media and forces the installed RHCK as the default kernel before reboot. |
+
 ## EL8 support matrix
+
+These capability tables still describe the currently validated Rocky baselines.
+The AlmaLinux, Oracle Linux, and RHEL EL8/EL9 lanes are scaffolded for
+validation, but they have not completed these checks yet.
 
 | Capability | xCAT | Confluent | Notes |
 | --- | --- | --- | --- |
@@ -143,16 +214,48 @@ The default config also assumes a single active lab on the host. If you want mul
 
 | Capability | Confluent | Notes |
 | --- | --- | --- |
-| Answerfile-driven unattended install | Validated | Verified from a clean Rocky 10.1 libvirt/KVM run. |
+| Answerfile-driven unattended install | Validated | Verified from clean Rocky Linux 10.1, AlmaLinux 10.1, RHEL 10.1, and Oracle Linux 10.1 libvirt/KVM runs. |
 | Headnode verification | Validated | `chronyd`, NFS, MariaDB, Munge, SLURM, and Confluent services checked after install. |
 | Single compute node boot and join | Validated | `sinfo -N` reaches `idle` on the deployed node. |
-| OpenHPC MPI hello world | Validated | Two MPI ranks run on the deployed Rocky 10 compute node through Slurm. |
+| OpenHPC MPI hello world | Validated | Two MPI ranks run through Slurm on all currently validated EL10 distro lanes. |
 | External + management network topology | Validated | This is the current EL10 lab topology. |
 | Multi-node cluster | Validated | Two compute nodes boot, join the cluster, and complete the MPI smoke test across nodes. |
 | Dedicated service network | Validated | Rocky 10.1 + Confluent now completes the unattended install, verify, and MPI smoke path with a dedicated `oc-svc0` headnode NIC and a populated `[network_service]` section. |
 | Dedicated application network / OFED path | Not yet validated | Still outside the initial EL10 baseline. |
 | TUI-driven install | Not yet validated | EL10 work has focused on unattended answerfile installs first. |
 | `--dump-answerfile` round-trip | Validated | Rocky Linux 10.1 + Confluent now completes a full dump-regenerate-install cycle in the EL10 libvirt/KVM lab. |
+
+## Release validation workflow
+
+Use this harness as the release gate for Enterprise Linux support instead of
+reconstructing ad hoc lab steps.
+
+1. Pick a dedicated lab name and non-overlapping bridges/subnets for each lane
+   you want to run in parallel.
+2. Copy the closest `testing/libvirt/config/*.env.example` file and set
+   `BASE_IMAGE`, `CLUSTER_ISO`, and either `OPENCATTUS_BINARY` or
+   `OPENCATTUS_SOURCE_DIR`.
+3. Set `OPENCATTUS_MIRROR_URL` whenever you want package resolution to stay on
+   the local mirror, especially for `RHEL` lanes.
+4. Run `testing/libvirt/opencattus-el8-lab.sh`, `testing/libvirt/opencattus-el9-lab.sh`,
+   or `testing/libvirt/opencattus-el10-lab.sh` with the `run` action.
+5. On success, keep the collected lab directory under
+   `/var/tmp/opencattus-lab/<lab-name>/` as the validation record for that
+   lane.
+6. On failure, inspect `logs/install.log` first, then the per-host logs under
+   `logs/headnode/` and the compute-node console captures.
+
+A lane counts as release-valid only when all of these are true:
+
+- the installer reaches `OpenCATTUS has successfully ended`
+- the headnode verification phase completes cleanly
+- `sinfo -N` shows the deployed compute node or nodes in a usable state
+- `showmount -e localhost` exports `/home`, `/opt/ohpc/pub`, and `/opt/spack`
+- the non-root MPI smoke passes through Slurm
+
+For long-running investigations, prefer keeping each rerun in a unique
+`LAB_NAME` instead of reusing the same one. That preserves the old logs and
+makes it obvious which exact artifact set corresponds to the current result.
 
 ## Self-hosted GitHub Actions
 

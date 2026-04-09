@@ -121,6 +121,50 @@ std::string buildUserSpackModulePathExport(const models::OS& os)
         buildSpackModuleTree(os));
 }
 
+std::string buildConfluentImageDistroString(const models::OS& os)
+{
+    std::string distro;
+    switch (os.getDistro()) {
+        case models::OS::Distro::RHEL:
+            distro = "rhel";
+            break;
+        case models::OS::Distro::AlmaLinux:
+            distro = "alma";
+            break;
+        case models::OS::Distro::Rocky:
+            distro = "rocky";
+            break;
+        case models::OS::Distro::OL:
+            distro = "oraclelinux";
+            break;
+        default:
+            std::unreachable();
+    }
+
+    return fmt::format("{}-{}", distro, os.getVersion());
+}
+
+std::string buildConfluentRepoRpmUrl(const models::OS& os)
+{
+    const auto opts = singleton::options();
+    const auto arch = opencattus::utils::enums::toString(os.getArch());
+
+    if (opts->enableMirrors) {
+        auto mirrorBaseUrl = opts->mirrorBaseUrl;
+        while (!mirrorBaseUrl.empty() && mirrorBaseUrl.back() == '/') {
+            mirrorBaseUrl.pop_back();
+        }
+
+        return fmt::format(
+            "{}/lenovo-hpc/rpm/latest/el{}/{}/lenovo-hpc-yum-1-1.{}.rpm",
+            mirrorBaseUrl, os.getMajorVersion(), arch, arch);
+    }
+
+    return fmt::format(
+        "https://hpc.lenovo.com/yum/latest/el{}/{}/lenovo-hpc-yum-1-1.{}.rpm",
+        os.getMajorVersion(), arch, arch);
+}
+
 std::string buildNodeImageRepoFiles(const models::OS& os)
 {
     switch (os.getDistro()) {
@@ -169,6 +213,40 @@ std::string buildNodeImageInstallCommand(const models::OS& os)
             std::unreachable();
     }
 }
+
+std::string buildConfluentAutofsImageCommands(std::string_view hnIp)
+{
+    return fmt::format(
+        R"(set -xeu -o pipefail
+dnf install -y --nogpg autofs nfs-utils
+mkdir -p /etc/auto.master.d /home /opt/ohpc/pub /opt/spack /opt/intel /opt/nvidia /scratch
+echo "/opt/ohpc/pub /etc/auto.ohpc" > /etc/auto.master.d/ohpc.autofs
+echo "* -nfsvers=4 {hnIp}:/opt/ohpc/pub/&" > /etc/auto.ohpc
+
+echo "/home /etc/auto.home" > /etc/auto.master.d/home.autofs
+echo "* -nfsvers=4 {hnIp}:/home/&" > /etc/auto.home
+
+echo "/opt/spack /etc/auto.spack" > /etc/auto.master.d/spack.autofs
+echo "* -nfsvers=4 {hnIp}:/opt/spack/&" > /etc/auto.spack
+
+echo "/opt/intel /etc/auto.intel" > /etc/auto.master.d/intel.autofs
+echo "* -nfsvers=4 {hnIp}:/opt/intel/&" > /etc/auto.intel
+
+echo "/opt/nvidia /etc/auto.nvidia" > /etc/auto.master.d/nvidia.autofs
+echo "* -nfsvers=4 {hnIp}:/opt/nvidia/&" > /etc/auto.nvidia
+
+# Configure scratch area
+echo "/scratch /etc/auto.scratch" > /etc/auto.master.d/scratch.autofs
+echo "local -fstype=xfs,rw :/dev/sda1" > /etc/auto.scratch
+
+# Check that the mounts are correct
+grep -H "{hnIp}" /etc/auto.{{home,ohpc,spack,intel,nvidia}} 2> /dev/null
+
+test -f /usr/lib/systemd/system/autofs.service
+systemctl enable autofs)",
+        fmt::arg("hnIp", hnIp));
+}
+
 void addNode(const models::Node& node, std::string_view image)
 {
     services::runner::shell::cmd(buildNodeDefinitionScript(node, image));
@@ -190,14 +268,14 @@ void Confluent::install()
 
     const auto image = fmt::format("{distro}-{arch}",
         fmt::arg("arch", opencattus::utils::enums::toString(os().getArch())),
-        fmt::arg("distro", os().getDistroString()));
+        fmt::arg("distro", buildConfluentImageDistroString(os())));
 
     runner::shell::fmt(R"d(
 # Add the Confluent repository
-rpm -ivh https://hpc.lenovo.com/yum/latest/el{releasever}/{arch}/lenovo-hpc-yum-1-1.{arch}.rpm || :
+rpm -ivh {confluentRepoRpmUrl} || :
 
 # Install required packages
-dnf install -y lenovo-confluent tftp-server dnsmasq || :
+dnf install -y lenovo-confluent tftp-server dnsmasq
 systemctl enable confluent --now
 systemctl enable httpd --now 
 systemctl enable tftp.socket --now
@@ -254,39 +332,17 @@ grep -HE '^server' /etc/chrony.conf
 systemctl enable chronyd
 EOF
 
+# Install the GPG keys & repos before any package installs in the image.
+\cp -va /etc/yum.repos.d/{nodeImageRepoFiles} $scratchdir/etc/yum.repos.d/
+
 # Install and configure nfs and autofs
 imgutil exec $scratchdir <<EOF
-dnf install -y autofs
-echo "/opt/ohpc/pub /etc/auto.ohpc" > /etc/auto.master.d/ohpc.autofs
-echo "* -nfsvers=4 {hnIp}:/opt/ohpc/pub/&" > /etc/auto.ohpc
-
-echo "/home /etc/auto.home" > /etc/auto.master.d/home.autofs
-echo "* -nfsvers=4 {hnIp}:/home/&" > /etc/auto.home
- 
-echo "/opt/spack /etc/auto.spack" > /etc/auto.master.d/spack.autofs
-echo "* -nfsvers=4 {hnIp}:/opt/spack/&" > /etc/auto.spack
-
-echo "/opt/intel /etc/auto.intel" > /etc/auto.master.d/intel.autofs
-echo "* -nfsvers=4 {hnIp}:/opt/intel/&" > /etc/auto.intel
- 
-echo "/opt/nvidia /etc/auto.nvidia" > /etc/auto.master.d/nvidia.autofs
-echo "* -nfsvers=4 {hnIp}:/opt/nvidia/&" > /etc/auto.nvidia
-
-# Configure scratch area 
-echo "/scratch /etc/auto.scratch" > /etc/auto.master.d/scratch.autofs
-echo "local -fstype=xfs,rw :/dev/sda1" > /etc/auto.scratch
-
-# Check that the mounts are correct
-grep -H "{hnIp}" /etc/auto.{{home,ohpc,spack,intel,nvidia}} 2> /dev/null
- 
-systemctl enable autofs
+{autofsCommands}
 EOF
 
 # Slurm node configuration
 \install -vD -m 0400 -o munge -g munge /etc/munge/munge.key       $scratchdir/etc/munge/munge.key
 \install -vD -m 0644 -o root  -g root  /etc/slurm/slurm.conf      $scratchdir/etc/slurm/slurm.conf
-# Install the GPG keys & repos
-\cp -va /etc/yum.repos.d/{nodeImageRepoFiles} $scratchdir/etc/yum.repos.d/
 imgutil exec $scratchdir <<EOF
 set -xeu -o pipefail
 {nodeImageInstallCommand}
@@ -337,9 +393,17 @@ rm -rf /tmp/scratchdir || :
 
         fmt::arg("domain", cluster()->getDomainName()),
         fmt::arg("releasever", os().getMajorVersion()),
+        fmt::arg("confluentRepoRpmUrl", buildConfluentRepoRpmUrl(os())),
         fmt::arg("spackModulePathExport", buildUserSpackModulePathExport(os())),
         fmt::arg("nodeImageInstallCommand", buildNodeImageInstallCommand(os())),
         fmt::arg("nodeImageRepoFiles", buildNodeImageRepoFiles(os())),
+        fmt::arg("autofsCommands",
+            buildConfluentAutofsImageCommands(
+                cluster()
+                    ->getHeadnode()
+                    .getConnection(Network::Profile::Management)
+                    .getAddress()
+                    .to_string())),
         fmt::arg("hnIp",
             cluster()
                 ->getHeadnode()
@@ -480,6 +544,58 @@ TEST_CASE("buildUserSpackModulePathExport tolerates an unset MODULEPATH")
         == "export MODULEPATH=/opt/spack/share/spack/lmod/linux-rocky10-x86_64/Core${MODULEPATH:+:$MODULEPATH}");
 }
 
+TEST_CASE("buildConfluentImageDistroString matches Confluent import naming")
+{
+    using opencattus::models::OS;
+
+    CHECK(buildConfluentImageDistroString(
+              OS(OS::Distro::Rocky, OS::Platform::el10, 1))
+        == "rocky-10.1");
+    CHECK(buildConfluentImageDistroString(
+              OS(OS::Distro::AlmaLinux, OS::Platform::el10, 1))
+        == "alma-10.1");
+    CHECK(buildConfluentImageDistroString(
+              OS(OS::Distro::RHEL, OS::Platform::el10, 1))
+        == "rhel-10.1");
+    CHECK(buildConfluentImageDistroString(
+              OS(OS::Distro::OL, OS::Platform::el10, 1))
+        == "oraclelinux-10.1");
+}
+
+TEST_CASE("buildConfluentRepoRpmUrl prefers the configured mirror when enabled")
+{
+    using opencattus::models::OS;
+    using opencattus::services::Options;
+
+    opencattus::Singleton<const Options>::init([] {
+        return std::make_unique<Options>(Options {
+            .enableMirrors = true,
+            .mirrorBaseUrl = "http://mirror.local.versatushpc.com.br/",
+        });
+    });
+
+    CHECK(buildConfluentRepoRpmUrl(
+              OS(OS::Distro::RHEL, OS::Platform::el10, 1))
+        == "http://mirror.local.versatushpc.com.br/lenovo-hpc/rpm/latest/el10/x86_64/lenovo-hpc-yum-1-1.x86_64.rpm");
+}
+
+TEST_CASE("buildConfluentRepoRpmUrl falls back to Lenovo upstream when mirrors are disabled")
+{
+    using opencattus::models::OS;
+    using opencattus::services::Options;
+
+    opencattus::Singleton<const Options>::init([] {
+        return std::make_unique<Options>(Options {
+            .enableMirrors = false,
+            .mirrorBaseUrl = "http://mirror.local.versatushpc.com.br/",
+        });
+    });
+
+    CHECK(buildConfluentRepoRpmUrl(
+              OS(OS::Distro::RHEL, OS::Platform::el10, 1))
+        == "https://hpc.lenovo.com/yum/latest/el10/x86_64/lenovo-hpc-yum-1-1.x86_64.rpm");
+}
+
 TEST_CASE("buildNodeImageRepoFiles keeps distro repo filenames explicit")
 {
     using opencattus::models::OS;
@@ -538,4 +654,17 @@ TEST_CASE("buildNodeImageInstallCommand keeps EL8, EL9, and EL10 explicit")
               OS(OS::Distro::Rocky, OS::Platform::el10, 1))
         == "dnf install -y --nogpg "
            "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs");
+}
+
+TEST_CASE("buildConfluentAutofsImageCommands creates autofs directories and installs nfs utilities")
+{
+    const auto script = buildConfluentAutofsImageCommands("192.168.30.254");
+
+    CHECK(script.contains("set -xeu -o pipefail"));
+    CHECK(script.contains("dnf install -y --nogpg autofs nfs-utils"));
+    CHECK(script.contains(
+        "mkdir -p /etc/auto.master.d /home /opt/ohpc/pub /opt/spack /opt/intel /opt/nvidia /scratch"));
+    CHECK(script.contains("/etc/auto.master.d/ohpc.autofs"));
+    CHECK(script.contains("test -f /usr/lib/systemd/system/autofs.service"));
+    CHECK(script.contains("systemctl enable autofs"));
 }

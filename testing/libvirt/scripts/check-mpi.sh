@@ -7,6 +7,9 @@ mpi_nodes=${OPENCATTUS_MPI_SMOKE_NODES:?OPENCATTUS_MPI_SMOKE_NODES is required}
 mpi_tasks=${OPENCATTUS_MPI_SMOKE_TASKS:?OPENCATTUS_MPI_SMOKE_TASKS is required}
 mpi_workdir=${OPENCATTUS_MPI_SMOKE_WORKDIR:-${HOME}/opencattus-mpi-smoke}
 mpi_output=${OPENCATTUS_MPI_SMOKE_OUTPUT:-${mpi_workdir}/mpi-hello.out}
+mpi_exec_workdir=${OPENCATTUS_MPI_SMOKE_EXEC_WORKDIR:-/tmp/opencattus-mpi-smoke}
+mpi_exec_binary=${mpi_exec_workdir}/mpi_hello
+mpi_exec_wrapper=${mpi_exec_workdir}/run-mpi-hello.sh
 
 read -r -a nodes <<<"${node_list}"
 
@@ -132,18 +135,83 @@ int main(int argc, char **argv)
 EOF
 
 mpicc "${mpi_workdir}/mpi_hello.c" -o "${mpi_workdir}/mpi_hello"
+mpi_encoded_binary=$(base64 "${mpi_workdir}/mpi_hello" | tr -d '\n')
+
+# Carry the actual MPI runtime library locations into the compute-node wrapper
+# so the smoke test does not depend on the headnode and compute node exposing
+# identical module names.
+mapfile -t mpi_runtime_lib_dirs < <(
+    ldd "${mpi_workdir}/mpi_hello" |
+        awk '/=>/ && $3 ~ /^\// { print $3 }' |
+        xargs -r -n1 dirname |
+        awk '
+            !seen[$0]++ &&
+            $0 != "/lib" &&
+            $0 != "/lib64" &&
+            $0 != "/usr/lib" &&
+            $0 != "/usr/lib64" { print }
+        '
+)
+
+mpi_runtime_ld_library_path=
+if (( ${#mpi_runtime_lib_dirs[@]} > 0 )); then
+    printf -v mpi_runtime_ld_library_path '%s:' "${mpi_runtime_lib_dirs[@]}"
+    mpi_runtime_ld_library_path=${mpi_runtime_ld_library_path%:}
+fi
+
+mpi_runtime_warmup=
+if (( ${#mpi_runtime_lib_dirs[@]} > 0 )); then
+    printf -v mpi_runtime_warmup '%q ' "${mpi_runtime_lib_dirs[@]}"
+    mpi_runtime_warmup=${mpi_runtime_warmup% }
+fi
+
+cat >"${mpi_workdir}/run-mpi-hello.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ -n "${mpi_runtime_ld_library_path}" ]]; then
+    export LD_LIBRARY_PATH='${mpi_runtime_ld_library_path}'"\${LD_LIBRARY_PATH:+:\${LD_LIBRARY_PATH}}"
+fi
+exec '${mpi_exec_binary}'
+EOF
+chmod 755 "${mpi_workdir}/run-mpi-hello.sh"
+mpi_wrapper_encoded=$(base64 "${mpi_workdir}/run-mpi-hello.sh" | tr -d '\n')
 
 srun_args=(
     --mpi=pmix
     --nodes="${mpi_nodes}"
     --ntasks="${mpi_tasks}"
+    --chdir=/tmp
 )
 
 if (( mpi_tasks == mpi_nodes && mpi_nodes > 1 )); then
     srun_args+=(--ntasks-per-node=1)
 fi
 
-srun "${srun_args[@]}" "${mpi_workdir}/mpi_hello" | tee "${mpi_output}"
+stage_args=(
+    --nodes="${mpi_nodes}"
+    --ntasks="${mpi_nodes}"
+    --chdir=/tmp
+)
+
+if (( mpi_nodes > 1 )); then
+    stage_args+=(--ntasks-per-node=1)
+fi
+
+srun "${stage_args[@]}" /bin/mkdir -p "${mpi_exec_workdir}"
+srun "${stage_args[@]}" /bin/sh -lc "cat <<'EOF' | base64 -d > '${mpi_exec_binary}'
+${mpi_encoded_binary}
+EOF
+chmod 755 '${mpi_exec_binary}'"
+srun "${stage_args[@]}" /bin/sh -lc "cat <<'EOF' | base64 -d > '${mpi_exec_wrapper}'
+${mpi_wrapper_encoded}
+EOF
+chmod 755 '${mpi_exec_wrapper}'"
+
+if [[ -n "${mpi_runtime_warmup}" ]]; then
+    srun "${stage_args[@]}" /bin/sh -lc "for dir in ${mpi_runtime_warmup}; do ls -d \"\$dir\" >/dev/null; done"
+fi
+
+srun "${srun_args[@]}" "${mpi_exec_wrapper}" 2>&1 | tee "${mpi_output}"
 
 hello_lines=$(grep -c '^Hello from rank ' "${mpi_output}" || true)
 if (( hello_lines != mpi_tasks )); then

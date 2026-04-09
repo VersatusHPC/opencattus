@@ -75,6 +75,66 @@ short_token() {
     printf '%s' "${sanitized}" | sha256sum | cut -c1-8
 }
 
+canonical_distro_id() {
+    case "${1,,}" in
+        rocky)
+            printf 'rocky'
+            ;;
+        alma|almalinux)
+            printf 'alma'
+            ;;
+        ol|oracle|oraclelinux)
+            printf 'ol'
+            ;;
+        rhel|redhat|redhatenterpriselinux)
+            printf 'rhel'
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+answerfile_distro_id() {
+    case "$1" in
+        rocky)
+            printf 'Rocky'
+            ;;
+        alma)
+            printf 'AlmaLinux'
+            ;;
+        ol)
+            printf 'OL'
+            ;;
+        rhel)
+            printf 'RHEL'
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+osinfo_short_id_exists() {
+    local short_id=$1
+
+    command -v osinfo-query >/dev/null 2>&1 || return 1
+    osinfo-query os --fields=short-id \
+        | awk 'NR > 2 { print $1 }' \
+        | grep -Fxq "${short_id}"
+}
+
+is_supported_lab_distro() {
+    case "$1:$2" in
+        rocky:8|rocky:9|rocky:10|alma:8|alma:9|alma:10|ol:8|ol:9|ol:10|rhel:8|rhel:9|rhel:10)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 token_hex_byte() {
     local start=$1
     printf '%s' "${BRIDGE_TOKEN:${start}:2}"
@@ -145,7 +205,7 @@ default_remote_build_preset_build() {
 
 headnode_glibmm_package() {
     if is_distro_major_el10; then
-        printf 'glibmm2.68'
+        printf 'glibmm2.4'
     elif is_distro_major_el8; then
         printf 'glibmm24'
     elif is_distro_major_el9; then
@@ -156,14 +216,41 @@ headnode_glibmm_package() {
 }
 
 virt_install_osinfo_name() {
-    if is_distro_major_el10; then
-        printf 'generic'
-    elif is_distro_major_el8; then
-        printf 'rocky8'
-    elif is_distro_major_el9; then
-        printf 'rocky9'
+    local preferred='generic'
+    local fallback='generic'
+
+    case "${DISTRO_ID}" in
+        rocky)
+            if is_distro_major_el10; then
+                preferred='generic'
+            else
+                preferred="rocky${DISTRO_MAJOR}"
+            fi
+            ;;
+        alma)
+            preferred="almalinux${DISTRO_MAJOR}"
+            ;;
+        rhel)
+            preferred="rhel${DISTRO_VERSION}"
+            fallback="rhel${DISTRO_MAJOR}-unknown"
+            ;;
+        ol)
+            preferred="ol${DISTRO_VERSION}"
+            if is_distro_major_el9; then
+                fallback='ol9-unknown'
+            fi
+            ;;
+        *)
+            require_supported_distro_major
+            ;;
+    esac
+
+    if osinfo_short_id_exists "${preferred}"; then
+        printf '%s' "${preferred}"
+    elif osinfo_short_id_exists "${fallback}"; then
+        printf '%s' "${fallback}"
     else
-        require_supported_distro_major
+        printf 'generic'
     fi
 }
 
@@ -175,8 +262,11 @@ load_defaults() {
     LAB_NAME=${LAB_NAME:-opencattus-el9}
 
     DISTRO_ID=${DISTRO_ID:-rocky}
+    DISTRO_ID=$(canonical_distro_id "${DISTRO_ID}") \
+        || die "Unsupported DISTRO_ID ${DISTRO_ID}; expected one of rocky, alma, ol, or rhel"
     DISTRO_VERSION=${DISTRO_VERSION:-9.6}
     DISTRO_MAJOR=${DISTRO_MAJOR:-${DISTRO_VERSION%%.*}}
+    ANSWERFILE_DISTRO_ID=${ANSWERFILE_DISTRO_ID:-$(answerfile_distro_id "${DISTRO_ID}")}
     require_supported_distro_major
 
     if [[ -z "${PROVISIONER+x}" ]]; then
@@ -316,6 +406,7 @@ load_defaults() {
     REMOTE_INSTALL_ROOT=${REMOTE_INSTALL_ROOT:-/opt/opencattus}
     REMOTE_INSTALL_CONF_DIR=${REMOTE_INSTALL_CONF_DIR:-${REMOTE_INSTALL_ROOT}/conf}
     REMOTE_INSTALL_REPO_DIR=${REMOTE_INSTALL_REPO_DIR:-${REMOTE_INSTALL_CONF_DIR}/repos}
+    OPENCATTUS_MIRROR_URL=${OPENCATTUS_MIRROR_URL:-}
 
     MPI_SMOKE_TEST=${MPI_SMOKE_TEST:-1}
     MPI_SMOKE_NODES=${MPI_SMOKE_NODES:-${COMPUTE_COUNT}}
@@ -681,13 +772,11 @@ check_config() {
         "SERVICE_NETWORK_ENABLED must be 0 or 1"
     [[ "${ANSWERFILE_ROUNDTRIP}" == "0" || "${ANSWERFILE_ROUNDTRIP}" == "1" ]] || die \
         "ANSWERFILE_ROUNDTRIP must be 0 or 1"
-    if is_distro_major_el8; then
-        [[ "${DISTRO_ID}" == "rocky" ]] || die \
-            "The current EL8 validation lab only targets Rocky Linux 8"
-    fi
+    is_supported_lab_distro "${DISTRO_ID}" "${DISTRO_MAJOR}" || die \
+        "Unsupported lab distro ${DISTRO_ID}${DISTRO_MAJOR}; supported combinations are rocky/alma/ol/rhel on EL8 and EL9, plus rocky/alma/rhel on EL10"
     if is_distro_major_el10; then
-        [[ "${DISTRO_ID}" == "rocky" ]] || die \
-            "The current EL10 bootstrap lab only targets Rocky Linux 10"
+        [[ "${DISTRO_ID}" == "rocky" || "${DISTRO_ID}" == "alma" || "${DISTRO_ID}" == "rhel" || "${DISTRO_ID}" == "ol" ]] || die \
+            "The current EL10 bootstrap lab targets Rocky Linux 10, AlmaLinux 10, RHEL 10, and Oracle Linux 10"
         [[ "${PROVISIONER}" == "confluent" ]] || die \
             "EL10 bootstrap is Confluent-only; xCAT remains out of scope for this lab"
     fi
@@ -1039,8 +1128,57 @@ remote_available_kernel() {
 prepare_headnode() {
     local running_kernel
     local available_kernel
+    local epel_release_url
 
     wait_for_headnode_ssh
+
+    if [[ -n "${OPENCATTUS_MIRROR_URL}" && "${DISTRO_ID}" == "rhel" ]]; then
+        local mirror_url="${OPENCATTUS_MIRROR_URL%/}"
+        local repo_file="/etc/yum.repos.d/opencattus-rhel-local.repo"
+        local codeready_path="rhel/codeready-builder-for-rhel-${DISTRO_MAJOR}-x86_64-rpms"
+        local repo_content
+
+        repo_content=$(cat <<EOF
+[opencattus-rhel-baseos]
+name=OpenCATTUS local RHEL ${DISTRO_MAJOR} BaseOS
+baseurl=${mirror_url}/rhel/rhel-${DISTRO_MAJOR}-for-\$basearch-baseos-rpms/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+
+[opencattus-rhel-appstream]
+name=OpenCATTUS local RHEL ${DISTRO_MAJOR} AppStream
+baseurl=${mirror_url}/rhel/rhel-${DISTRO_MAJOR}-for-\$basearch-appstream-rpms/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+EOF
+)
+
+        if curl -fsSLI "${mirror_url}/${codeready_path}/repodata/repomd.xml" >/dev/null 2>&1; then
+            repo_content+=$(cat <<EOF
+
+[opencattus-rhel-codeready-builder]
+name=OpenCATTUS local RHEL ${DISTRO_MAJOR} CodeReady Builder
+baseurl=${mirror_url}/${codeready_path}/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+EOF
+)
+        else
+            log "Local mirror ${OPENCATTUS_MIRROR_URL} does not expose ${codeready_path}; continuing without CodeReady Builder"
+        fi
+
+        log "Bootstrapping RHEL ${DISTRO_MAJOR} headnode repos from ${OPENCATTUS_MIRROR_URL}"
+        ssh_remote "sudo tee '${repo_file}' >/dev/null <<'EOF'
+${repo_content}
+EOF
+sudo dnf clean all >/dev/null 2>&1 || true"
+    fi
 
     log "Checking headnode repository state"
     ssh_remote "if ! sudo find /etc/yum.repos.d -maxdepth 1 -name '*.repo' | grep -q .; then
@@ -1053,6 +1191,21 @@ prepare_headnode() {
             exit 1
         fi
     fi"
+
+    if is_distro_major_el10; then
+        epel_release_url="https://dl.fedoraproject.org/pub/epel/epel-release-latest-${DISTRO_MAJOR}.noarch.rpm"
+        if [[ -n "${OPENCATTUS_MIRROR_URL}" ]]; then
+            local mirror_epel_release_url="${OPENCATTUS_MIRROR_URL%/}/epel/epel-release-latest-${DISTRO_MAJOR}.noarch.rpm"
+            if curl -fsSLI "${mirror_epel_release_url}" >/dev/null 2>&1; then
+                epel_release_url="${mirror_epel_release_url}"
+            fi
+        fi
+
+        log "Ensuring EL${DISTRO_MAJOR} EPEL runtime repo is available"
+        ssh_remote "if ! rpm -q epel-release >/dev/null 2>&1; then
+                sudo dnf install --refresh --setopt=keepcache=0 -y '${epel_release_url}'
+            fi"
+    fi
 
     log "Ensuring headnode runtime prerequisites are installed"
     ssh_remote "sudo systemctl stop packagekit packagekit-offline-update >/dev/null 2>&1 || true;
@@ -1083,6 +1236,12 @@ prepare_headnode() {
     if [[ "${running_kernel}" != "${available_kernel}" ]]; then
         log "Updating headnode kernel from ${running_kernel} to ${available_kernel}"
         ssh_remote "sudo dnf install -y kernel"
+        ssh_remote "if command -v grubby >/dev/null 2>&1; then
+                target=/boot/vmlinuz-${available_kernel};
+                if [[ -f \$target ]]; then
+                    sudo grubby --set-default \$target;
+                fi;
+            fi"
         ssh_remote "sudo reboot" >/dev/null 2>&1 || true
         sleep 10
         wait_for_headnode_ssh
@@ -1121,7 +1280,7 @@ render_answerfile() {
         -e "s|__MANAGEMENT_NETMASK__|${MANAGEMENT_NETMASK}|g" \
         -e "s|__MANAGEMENT_DOMAIN__|${MANAGEMENT_DOMAIN}|g" \
         -e "s|__REMOTE_ISO_PATH__|${REMOTE_ISO_PATH}|g" \
-        -e "s|__DISTRO_ID__|${DISTRO_ID}|g" \
+        -e "s|__DISTRO_ID__|${ANSWERFILE_DISTRO_ID}|g" \
         -e "s|__DISTRO_VERSION__|${DISTRO_VERSION}|g" \
         -e "s|__PROVISIONER__|${PROVISIONER}|g" \
         -e "s|__PARTITION_NAME__|${PARTITION_NAME}|g" \
@@ -1239,6 +1398,7 @@ EOF
 
     remote_cmd=$(cat <<EOF
 export PATH="\$HOME/.local/bin:\$PATH" &&
+export OPENCATTUS_MIRROR_URL='${OPENCATTUS_MIRROR_URL}' &&
 cd '${REMOTE_SOURCE_DIR}' &&
 ${compiler_setup_cmd}
 conan profile detect --force &&
@@ -1316,11 +1476,23 @@ prepare_roundtrip_answerfile() {
 
 run_installer() {
     local install_log="${LOG_DIR}/install.log"
+    local -a installer_args=(-l 6 -a "$(active_remote_answerfile_path)" -u)
+    local installer_args_quoted
     local remote_cmd
+
+    if [[ -n "${OPENCATTUS_MIRROR_URL}" ]]; then
+        log "Using OpenCATTUS mirror ${OPENCATTUS_MIRROR_URL}"
+        # Current OpenCATTUS releases still gate mirror selection behind the
+        # legacy --disable-mirrors switch. Keep the workaround in the harness
+        # until the product CLI grows an explicit enable-mirrors option.
+        installer_args+=(--disable-mirrors --mirror-url "${OPENCATTUS_MIRROR_URL}")
+    fi
+
+    printf -v installer_args_quoted '%q ' "${installer_args[@]}"
 
     remote_cmd=$(cat <<EOF
 cd '${HEADNODE_DATA_DIR}' &&
-sudo '${REMOTE_BINARY_PATH}' -l 6 -a '$(active_remote_answerfile_path)' -u
+sudo '${REMOTE_BINARY_PATH}' ${installer_args_quoted}
 EOF
 )
 

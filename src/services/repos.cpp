@@ -398,6 +398,12 @@ struct MirrorRepo final {
             return std::nullopt;
         }
 
+        if (paths.gpgkey.value().starts_with("file://")
+            || paths.gpgkey.value().starts_with("http://")
+            || paths.gpgkey.value().starts_with("https://")) {
+            return paths.gpgkey.value();
+        }
+
         const auto opts = opencattus::utils::singleton::options();
         return fmt::format("{mirrorUrl}/{path}",
             fmt::arg("mirrorUrl", opts->mirrorBaseUrl),
@@ -453,6 +459,12 @@ TEST_CASE("MirrorRepo")
     CHECK(mirrorConfigOnline.baseurl() == "file:///var/run/repos/myrepo/repo");
     CHECK(mirrorConfigOnline.gpgkey().value()
         == "file:///var/run/repos/myrepo/key.gpg");
+
+    auto mirrorConfigAbsoluteKey = MirrorRepo<TrueMirrorExistenceChecker> {
+        .paths = { .repo = "myrepo/repo",
+            .gpgkey = "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release" } };
+    CHECK(mirrorConfigAbsoluteKey.gpgkey().value()
+        == "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release");
 
     // Test existence
     CHECK(mirrorConfigOnline.exists());
@@ -737,8 +749,14 @@ public:
         for (const auto& repoGroup : repoNames) {
             RepoConfig repo;
 
-            // repoId.id (no placeholders)
-            repo.repoId.id = repoGroup;
+            // repoId.id
+            try {
+                repo.repoId.id = interpolateVars(repoGroup, vars);
+            } catch (const fmt::format_error& e) {
+                opencattus::functions::abort(
+                    "Failed to format repo id for repo '{}': {}", repoGroup,
+                    e.what());
+            }
 
             // name
             auto name = file.getString(repoGroup, "name");
@@ -823,7 +841,7 @@ public:
             }
 
             LOG_TRACE("Loaded repository configuration for {} from {}",
-                interpolateVars(repo.repoId.id, vars), path);
+                repo.repoId.id, path);
             output.insert(repo.repoId.filename, repo);
         }
     };
@@ -935,6 +953,47 @@ TEST_CASE("RepoConfigParser")
     REQUIRE(ohpcOpt.has_value() == true);
     CHECK(ohpcOpt->upstream.repo
         == "https://repos.openhpc.community/OpenHPC/4/EL_10/");
+
+    const auto rhelEl10Conf = RepoConfigParser::parseTest("repos/rhel.conf",
+        RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.4.0",
+            .ohpcVersion = "4",
+            .osversion = "10.1",
+            .releasever = "10",
+            .xcatVersion = "latest",
+            .zabbixVersion = "7.0",
+            .ofedVersion = "latest-2.9-LTS",
+        });
+    const auto rhelBaseOsOpt = rhelEl10Conf.find("baseos");
+    REQUIRE(rhelBaseOsOpt.has_value() == true);
+    CHECK(rhelBaseOsOpt->mirror.repo == "rhel/rhel-10-for-x86_64-baseos-rpms/");
+
+    const auto rhelAppStreamOpt = rhelEl10Conf.find("appstream");
+    REQUIRE(rhelAppStreamOpt.has_value() == true);
+    CHECK(rhelAppStreamOpt->mirror.repo
+        == "rhel/rhel-10-for-x86_64-appstream-rpms/");
+
+    const auto rhelCodeReadyOpt = rhelEl10Conf.find("codeready-builder");
+    REQUIRE(rhelCodeReadyOpt.has_value() == true);
+    CHECK(rhelCodeReadyOpt->mirror.repo
+        == "rhel/codeready-builder-for-rhel-10-x86_64-rpms/");
+
+    const auto oracleEl10Conf = RepoConfigParser::parseTest("repos/oracle.conf",
+        RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.4.0",
+            .ohpcVersion = "4",
+            .osversion = "10.1",
+            .releasever = "10",
+            .xcatVersion = "latest",
+            .zabbixVersion = "7.0",
+            .ofedVersion = "latest-2.9-LTS",
+        });
+    const auto oracleAppStreamOpt = oracleEl10Conf.find("ol10_appstream");
+    REQUIRE(oracleAppStreamOpt.has_value() == true);
+    CHECK(oracleAppStreamOpt->upstream.repo
+        == "https://yum.oracle.com/repo/OracleLinux/OL10/appstream/x86_64/");
 #endif
 }
 
@@ -1219,17 +1278,14 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
         auto distro = osinfo.getDistro();
         auto platform = osinfo.getPlatform();
         auto majorVersion = osinfo.getMajorVersion();
-        std::string arch = opencattus::utils::enums::toString(osinfo.getArch());
-
         switch (distro) {
             case OS::Distro::AlmaLinux:
                 switch (platform) {
                     case OS::Platform::el8:
-                        return "\"AlmaLinux 8 - PowerTools\"";
+                        return "powertools";
                     case OS::Platform::el9:
                     case OS::Platform::el10:
-                        return fmt::format("\"AlmaLinux {} - CRB\"",
-                            majorVersion);
+                        return "crb";
                     default:
                         throw std::runtime_error("Unsupported platform");
                 }
@@ -1244,8 +1300,7 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
                         throw std::runtime_error("Unsupported platform");
                 }
             case OS::Distro::RHEL:
-                return fmt::format("codeready-builder-for-rhel-{}-{}-rpms",
-                    majorVersion, arch);
+                return "codeready-builder";
             case OS::Distro::OL:
                 return fmt::format("ol{}_codeready_builder", majorVersion);
             default:
@@ -1258,6 +1313,7 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
     {
         auto distro = osinfo.getDistro();
         auto majorVersion = osinfo.getMajorVersion();
+        auto platform = osinfo.getPlatform();
         auto output = std::vector<std::string>();
         const auto& distroRepos = conffiles.distroRepos;
         const auto& nonDistroRepos = conffiles.nonDistroRepos;
@@ -1268,7 +1324,8 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
 
         switch (distro) {
             case OS::Distro::AlmaLinux:
-                addToOutput("AlmaLinuxBaseOS");
+                addToOutput("appstream");
+                addToOutput("baseos");
                 addToOutput("{}", resolveCodeReadyBuilderName(osinfo));
                 break;
             case OS::Distro::Rocky: {
@@ -1278,12 +1335,15 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
                 break;
             }
             case OS::Distro::RHEL:
-                addToOutput("rhel-{releasever}-baseos",
-                    fmt::arg("releasever", majorVersion));
-                addToOutput("rhel-{releasever}-codeready-builder",
-                    fmt::arg("releasever", majorVersion));
+                addToOutput("appstream");
+                addToOutput("baseos");
+                if (platform != OS::Platform::el10) {
+                    addToOutput("{}", resolveCodeReadyBuilderName(osinfo));
+                }
                 break;
             case OS::Distro::OL:
+                addToOutput("ol{releasever}_appstream",
+                    fmt::arg("releasever", majorVersion));
                 addToOutput("OLBaseOS");
                 addToOutput("ol{releasever}_codeready_builder",
                     fmt::arg("releasever", majorVersion));
@@ -1354,14 +1414,42 @@ TEST_CASE("RepoNames")
         // fmt::print("Repos: {}\n", fmt::join(enabledRepos, ","));
         CHECK(enabledRepos
             == std::vector<std::string> {
-                "rhel-9-baseos",
-                "rhel-9-codeready-builder",
+                "appstream",
+                "baseos",
+                "codeready-builder",
                 "epel",
                 "OpenHPC",
                 "OpenHPC-Updates",
                 "rpmfusion",
                 "elrepo",
                 "beegfs",
+            });
+    }
+
+    // RHEL EL10
+    {
+        const auto osinfo = OS(models::OS::Distro::RHEL, OS::Platform::el10, 1);
+        const auto el10Vars = RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.4.0",
+            .ohpcVersion = "4",
+            .osversion = "10.1",
+            .releasever = "10",
+            .xcatVersion = "latest",
+            .zabbixVersion = "7.0",
+        };
+        const auto conffiles = RepoConfigParser::load<ShouldUseVaultService>(
+            "repos/", osinfo, el10Vars);
+        const auto enabledRepos = enabler.resolveReposNames(osinfo, conffiles);
+        CHECK(enabledRepos
+            == std::vector<std::string> {
+                "appstream",
+                "baseos",
+                "epel",
+                "OpenHPC",
+                "OpenHPC-Updates",
+                "rpmfusion",
+                "elrepo",
             });
     }
 
@@ -1374,8 +1462,9 @@ TEST_CASE("RepoNames")
         const auto enabledRepos = enabler.resolveReposNames(osinfo, conffiles);
         CHECK(enabledRepos
             == std::vector<std::string> {
-                "AlmaLinuxBaseOS",
-                "\"AlmaLinux 9 - CRB\"",
+                "appstream",
+                "baseos",
+                "crb",
                 "epel",
                 "OpenHPC",
                 "OpenHPC-Updates",
@@ -1394,8 +1483,9 @@ TEST_CASE("RepoNames")
         const auto enabledRepos = enabler.resolveReposNames(osinfo, conffiles);
         CHECK(enabledRepos
             == std::vector<std::string> {
-                "AlmaLinuxBaseOS",
-                "\"AlmaLinux 8 - PowerTools\"",
+                "appstream",
+                "baseos",
+                "powertools",
                 "epel",
                 "OpenHPC",
                 "OpenHPC-Updates",
@@ -1482,6 +1572,7 @@ TEST_CASE("RepoNames")
         // fmt::print("Repos: {}", fmt::join(enabledRepos, ","));
         CHECK(enabledRepos
             == std::vector<std::string> {
+                "ol9_appstream",
                 "OLBaseOS",
                 "ol9_codeready_builder",
                 "epel",

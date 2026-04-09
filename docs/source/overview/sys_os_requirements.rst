@@ -6,8 +6,10 @@ System Requirements
 
 Before you attempt to run OpenCATTUS, make sure your head node matches the
 current validated baseline. The project now has validated unattended lab
-coverage on EL8, EL9, and an initial EL10 Confluent path, but the supported
-scope is not identical across those releases.
+coverage on EL8, EL9, and EL10 Confluent paths, but the supported scope is
+not identical across those releases. AlmaLinux, Oracle Linux, and RHEL EL8/EL9
+lanes now have explicit lab scaffolding for validation work, but Rocky remains
+the only distro family with completed end-to-end EL8/EL9 recovery runs.
 
 Minimum Hardware Requirements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -69,14 +71,49 @@ Current Recovery Status
        spanning them. The dedicated Confluent service-network topology is also
        now validated.
    * - Rocky Linux 10.1 + Confluent
-     - Initially validated
+     - Validated
      - First EL10 bootstrap baseline. Verified unattended in the EL10
        libvirt/KVM lab with one and two deployed compute-node layouts, healthy
        ``sinfo``, and OpenHPC MPI hello-world runs in both the one-node and
        two-node cases.
+   * - RHEL 10.1 + Confluent
+     - Validated
+     - Mirror-backed EL10 expansion lane. Verified unattended with a local
+       qcow2 headnode image, mirrored repos, healthy ``sinfo``, exported NFS
+       paths, and an OpenHPC MPI hello-world run on the deployed compute node.
+   * - AlmaLinux 10.1 + Confluent
+     - Validated
+     - Cloud-image EL10 expansion lane. Verified unattended with the same
+       Confluent-only EL10 bootstrap path, healthy ``sinfo``, exported NFS
+       paths, and an OpenHPC MPI hello-world run on the deployed compute node.
+   * - Oracle Linux 10.1 + Confluent
+     - Validated
+     - Cloud-image EL10 expansion lane. Verified unattended after forcing the
+       installed RHCK as the default boot target, with healthy ``sinfo``,
+       exported NFS paths, and an OpenHPC MPI hello-world run on the deployed
+       compute node.
+   * - AlmaLinux 8/9 + xCAT or Confluent
+     - Planned
+     - Candidate EL8/EL9 lab configs now exist for both provisioners, but the
+       first unattended validation runs are still pending.
+   * - Oracle Linux 8/9 + xCAT or Confluent
+     - Planned
+     - Candidate EL8/EL9 lab configs now exist for both provisioners, but the
+       first unattended validation runs are still pending and may require
+       distro-specific media tuning.
+   * - RHEL 8/9 + xCAT or Confluent
+     - Planned
+     - Candidate EL8/EL9 lab configs now exist for both provisioners. These
+       paths require entitled RHEL media and repository access during
+       validation.
 
 Current EL8 Support Matrix
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The EL8 and EL9 capability matrices below still reflect the currently
+validated Rocky baselines. AlmaLinux, Oracle Linux, and RHEL now have
+candidate lab matrix entries, but they remain unvalidated until the first
+end-to-end runs complete.
 
 .. list-table::
    :widths: 30 18 18 34
@@ -134,6 +171,9 @@ Current EL8 Support Matrix
 EL10 Bootstrap Matrix
 ~~~~~~~~~~~~~~~~~~~~~
 
+The currently validated EL10 distro lanes are Rocky Linux 10.1, AlmaLinux
+10.1, RHEL 10.1, and Oracle Linux 10.1, all on the Confluent provisioner.
+
 .. list-table::
    :widths: 30 18 52
    :header-rows: 1
@@ -143,7 +183,8 @@ EL10 Bootstrap Matrix
      - Notes
    * - Answerfile-driven unattended install
      - Validated
-     - Verified from a clean Rocky Linux 10.1 libvirt/KVM run.
+     - Verified from clean Rocky Linux 10.1, AlmaLinux 10.1, RHEL 10.1, and
+       Oracle Linux 10.1 libvirt/KVM runs.
    * - Headnode verification
      - Validated
      - ``chronyd``, NFS, MariaDB, Munge, SLURM, and Confluent services
@@ -153,8 +194,9 @@ EL10 Bootstrap Matrix
      - ``sinfo -N`` reaches ``idle`` on the deployed node.
    * - OpenHPC MPI hello world
      - Validated
-     - Two MPI ranks run through Slurm in both the one-node layout and the
-       two-node layout.
+     - Two MPI ranks run through Slurm on all currently validated EL10 distro
+       lanes, including both the one-node layout and the two-node layout on
+       Rocky Linux 10.1.
    * - External + management network topology
      - Validated
      - This is the current EL10 lab topology.
@@ -164,8 +206,8 @@ EL10 Bootstrap Matrix
        test across nodes.
    * - Dedicated service network
      - Validated
-     - Rocky Linux 10.1 + Confluent now completes the unattended install,
-       verify, and MPI smoke path with a dedicated headnode service NIC and a
+     - Rocky Linux 10.1 + Confluent completes the unattended install, verify,
+       and MPI smoke path with a dedicated headnode service NIC and a
        populated ``[network_service]`` section.
    * - Dedicated application network / OFED path
      - Not yet validated

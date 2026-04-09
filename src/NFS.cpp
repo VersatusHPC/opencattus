@@ -52,6 +52,9 @@ opencattus::services::ScriptBuilder NFS::installScript(const OS& osinfo)
         .addCommand("# install packages")
         .addPackage("nfs-utils")
         .addNewLine()
+        .addCommand("# Ensure exported directories exist before NFS starts")
+        .addCommand("mkdir -p /opt/ohpc/pub /opt/spack")
+        .addNewLine()
         .addCommand("# Add exports to /etc/exports")
         .addLineToFile("/etc/exports", "/home",
             "/home *(rw,no_subtree_check,fsid={},no_root_squash)", 10)
@@ -139,6 +142,7 @@ TEST_CASE("installScript")
     const auto scriptStr = builder.toString();
     const auto script = std::string_view(scriptStr);
     CHECK(script.contains("dnf install -y nfs-utils\n"));
+    CHECK(script.contains("mkdir -p /opt/ohpc/pub /opt/spack"));
     CHECK(script.contains("systemctl enable --now rpcbind nfs-server"));
     CHECK(script.contains("exportfs -a"));
     CHECK(script.contains("systemctl is-active --quiet firewalld.service"));
