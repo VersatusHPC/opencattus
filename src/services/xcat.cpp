@@ -4,8 +4,10 @@
  */
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib> // setenv / getenv
 #include <ranges>
+#include <thread>
 
 #include <filesystem>
 #include <fmt/format.h>
@@ -43,6 +45,9 @@ std::string getOSImageDistroVersion(const OS& nodeOS)
         case OS::Distro::RHEL:
             osimage += "rhels";
             osimage += nodeOS.getVersion();
+            if (nodeOS.getPlatform() == OS::Platform::el9) {
+                osimage += ".0";
+            }
             break;
         case OS::Distro::OL:
             osimage += "ol";
@@ -213,6 +218,15 @@ std::string buildPrecreateMyPostscriptsCommand(bool enabled)
 {
     return fmt::format("chdef -t site precreatemypostscripts={}",
         enabled ? "YES" : "NO");
+}
+
+std::string buildXCATCredentialReadinessCheckCommand()
+{
+    return "bash -lc \"[ -s /etc/xcat/ca/ca-cert.pem ] && "
+           "[ -s /etc/xcat/ca/private/ca-key.pem ] && "
+           "[ -s /etc/xcat/cert/server-cred.pem ] && "
+           "[ -s /root/.xcat/client-cred.pem ] && "
+           "[ -s /home/conserver/.xcat/client-cred.pem ]\"";
 }
 
 std::string shellSingleQuote(std::string_view value)
@@ -403,6 +417,17 @@ EOF
         // patched helpers and plugin code are picked up without replaying the
         // full bootstrap workflow.
         runner->executeCommand("systemctl enable --now xcatd httpd");
+        // Some EL9 lanes ship xCAT skeleton credential directories in the RPM
+        // payload. The package post-install then skips the actual CA/client/
+        // server credential generation because it only checks directory
+        // existence, leaving zero-length or missing credentials behind.
+        if (runner->executeCommand(buildXCATCredentialReadinessCheckCommand())
+            != 0) {
+            LOG_WARN(
+                "xCAT credentials are incomplete after package init; "
+                "repairing with xcatconfig -c");
+            runner->checkCommand("/opt/xcat/sbin/xcatconfig -c");
+        }
         runner->executeCommand("systemctl restart xcatd httpd");
     } else {
         LOG_WARN("xCAT Already patched, skipping");
@@ -411,6 +436,16 @@ EOF
 
 void XCAT::setup() const
 {
+    auto runner = opencattus::utils::singleton::runner();
+    for (int attempt = 1; attempt <= 30; ++attempt) {
+        if (runner->executeCommand("/opt/xcat/bin/lsdef -t site") == 0) {
+            break;
+        }
+        if (attempt == 30) {
+            throw std::runtime_error("ERROR: xCAT site table never became ready");
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+    }
     setDHCPInterfaces(cluster()
             ->getHeadnode()
             .getConnection(Network::Profile::Management)
@@ -1201,7 +1236,7 @@ TEST_CASE("getOSImageDistroVersion uses node OS metadata")
     CHECK(getOSImageDistroVersion(OS(OS::Distro::Rocky, OS::Platform::el9, 7))
         == "rocky9.7");
     CHECK(getOSImageDistroVersion(OS(OS::Distro::RHEL, OS::Platform::el9, 7))
-        == "rhels9.7");
+        == "rhels9.7.0");
     CHECK(getOSImageDistroVersion(OS(OS::Distro::OL, OS::Platform::el9, 7))
         == "ol9.7.0");
 }

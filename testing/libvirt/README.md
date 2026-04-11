@@ -15,17 +15,19 @@ Scope:
 The currently validated targets are `Rocky Linux 8.10 + xCAT`,
 `Rocky Linux 8.10 + Confluent`,
 `Rocky Linux 9.7 + xCAT`, `Rocky Linux 9.7 + Confluent`,
+`AlmaLinux 9.7 + xCAT`, `AlmaLinux 9.7 + Confluent`,
+`Oracle Linux 9.7 + xCAT`, `Oracle Linux 9.7 + Confluent`,
+`RHEL 9.6 + xCAT`, `RHEL 9.6 + Confluent`,
 `Rocky Linux 10.1 + Confluent`, `AlmaLinux 10.1 + Confluent`,
 `RHEL 10.1 + Confluent`, and `Oracle Linux 10.1 + Confluent`.
 The current EL10 baseline is still narrower than the full EL9 recovery scope,
 and the EL8 baseline is narrower than EL9, but both now have real unattended
 lab coverage.
 
-The expansion matrix now also has runnable lab scaffolding for
-`AlmaLinux 8/9`, `Oracle Linux 8/9`, and `RHEL 8/9` with both `xCAT` and
-`Confluent`. Those extra distro lanes are not yet validated; they exist so we
-can drive the next fixing and validation wave without inventing ad hoc lab
-configs each time.
+The expansion matrix still has runnable lab scaffolding for `AlmaLinux 8`,
+`Oracle Linux 8`, and `RHEL 8` with both `xCAT` and `Confluent`. Those EL8
+lanes are not yet validated; they exist so we can drive the next fixing and
+validation wave without inventing ad hoc lab configs each time.
 
 ## Host requirements
 
@@ -49,6 +51,10 @@ You also need:
   template you want to run.
 - A matching Enterprise Linux DVD ISO for the compute image creation step.
 - Either a locally built `opencattus` binary or the full source tree so the harness can build inside the headnode.
+- Headnode storage sized sanely. The harness now enforces a minimum
+  `HEADNODE_DISK_GB=100`, and the guest cloud-init path is expected to grow the
+  root partition, LVM PV, and filesystem to consume the allocated qcow2 size.
+  The example configs currently use `220G`.
 - Compute VMs sized realistically for xCAT stateless boot. The current tested floor is `8192` MiB per compute node; `4096` MiB failed during initramfs expansion of `rootimg.cpio.gz`.
 
 Keep the cloud image and ISO under `/var/lib/libvirt/images`, ideally in a dedicated asset directory such as `/var/lib/libvirt/images/opencattus-assets`, unless you have already labeled another path for libvirt access. The harness stores the headnode qcow2 overlay and cloud-init seed ISO there by default to avoid SELinux denials on enforcing Enterprise Linux hosts.
@@ -70,8 +76,10 @@ Keep the cloud image and ISO under `/var/lib/libvirt/images`, ideally in a dedic
      `testing/libvirt/config/alma10-confluent.env.example`,
      `testing/libvirt/config/ol10-confluent.env.example`,
      `testing/libvirt/config/rhel10-confluent.env.example`
-   - candidate EL8/EL9 distro expansion lanes:
-     `testing/libvirt/config/{alma,ol,rhel}{8,9}-{xcat,confluent}.env.example`
+   - validated EL9 expansion lanes:
+     `testing/libvirt/config/{alma,ol,rhel}9-{xcat,confluent}.env.example`
+   - candidate EL8 expansion lanes:
+     `testing/libvirt/config/{alma,ol,rhel}8-{xcat,confluent}.env.example`
 2. The Rocky 10 wrapper defaults to a one-node, two-rank MPI smoke. If you
    want the validated two-node MPI path on EL9 or EL10, also set:
 
@@ -130,6 +138,11 @@ The `run` command collects logs even when install or verification fails so the f
 
 The example config deliberately keeps `NODE_REAL_MEMORY_MB` below the VM's assigned RAM. That is not a typo. xCAT unpacks the stateless image in memory during PXE boot, so the guest needs headroom beyond the SLURM `RealMemory` value you advertise to jobs.
 
+For release testing, treat `100G` as the absolute minimum headnode disk floor.
+If a cloud image does not automatically grow its rootfs, fix that in the lab
+recipe before trusting the result. A qcow2 overlay that says `220G` on the host
+is not sufficient if the guest still boots with a `32G` root LV.
+
 The default config also assumes a single active lab on the host. If you want multiple labs at once, override the external and management subnet settings in addition to changing `LAB_NAME`.
 
 The harness accepts these `DISTRO_ID` tokens:
@@ -149,6 +162,62 @@ If you set `OPENCATTUS_MIRROR_URL`, the harness passes that mirror into the
 installer and also uses it to bootstrap unentitled `RHEL` headnodes during lab
 setup.
 
+For release testing, prefer a clean exported source tree over pointing the lab
+at a live developer checkout. That avoids copying local scratch directories into
+the guest build context:
+
+```bash
+rm -rf /var/tmp/opencattus-release-source
+mkdir -p /var/tmp/opencattus-release-source
+git -C /path/to/opencattus archive HEAD | tar -x -C /var/tmp/opencattus-release-source
+```
+
+Then set:
+
+```bash
+OPENCATTUS_SOURCE_DIR=/var/tmp/opencattus-release-source
+```
+
+For `RHEL` lanes, you can build the qcow2 headnode asset locally from the
+mirror instead of downloading it from the Red Hat portal. The compose host can
+be entitled through RHSM, but the qcow2 build itself can stay mirror-backed:
+
+```bash
+sudo dnf install -y image-builder jq
+sudo mkdir -p /var/tmp/opencattus-rhel9-image-builder/repositories
+cat >/var/tmp/opencattus-rhel9-image-builder/rhel9-kvm.toml <<'EOF'
+[[packages]]
+name = "cloud-init"
+version = "*"
+
+[[packages]]
+name = "qemu-guest-agent"
+version = "*"
+EOF
+
+jq '(.x86_64) |= map(
+  if .name == "baseos" then
+    .baseurl = "http://mirror.local.versatushpc.com.br/rhel/rhel-9.6-for-x86_64-baseos-eus-rpms/" | .rhsm = false
+  elif .name == "appstream" then
+    .baseurl = "http://mirror.local.versatushpc.com.br/rhel/rhel-9.6-for-x86_64-appstream-eus-rpms/" | .rhsm = false
+  else
+    . end
+)' /usr/share/osbuild-composer/repositories/rhel-9.6.json \
+  >/var/tmp/opencattus-rhel9-image-builder/repositories/rhel-9.6.json
+
+sudo image-builder build qcow2 \
+  --distro rhel-9.6 \
+  --data-dir /var/tmp/opencattus-rhel9-image-builder \
+  --output-dir /var/tmp/opencattus-rhel9-image-builder/output \
+  --output-name rhel-9.6-x86_64-kvm \
+  --blueprint /var/tmp/opencattus-rhel9-image-builder/rhel9-kvm.toml \
+  --with-buildlog \
+  --with-manifest
+```
+
+Copy the resulting qcow2 into `/var/lib/libvirt/images/opencattus-assets/` and
+point the matching `rhel*.env` file at it.
+
 ## EL-family expansion matrix
 
 | Target | xCAT | Confluent | Notes |
@@ -158,9 +227,9 @@ setup.
 | Oracle Linux 8.10 | Planned | Planned | Candidate lab configs now exist; expect media-specific tuning during first runs. |
 | RHEL 8.10 | Planned | Planned | Candidate lab configs now exist; requires entitled media and repo access. |
 | Rocky Linux 9.7 | Validated | Validated | Current EL9 baseline. |
-| AlmaLinux 9.7 | Planned | Planned | Candidate lab configs now exist; first unattended runs still pending. |
-| Oracle Linux 9 | Planned | Planned | Candidate config is scaffolded with a 9.4 example; adjust `DISTRO_VERSION` to match local media. |
-| RHEL 9.7 | Planned | Planned | Candidate lab configs now exist; requires entitled media and repo access. |
+| AlmaLinux 9.7 | Validated | Validated | Verified in the unattended EL9 libvirt/KVM lab with headnode verification and MPI smoke. |
+| Oracle Linux 9.7 | Validated | Validated | Verified in the unattended EL9 libvirt/KVM lab; the xCAT lane repairs incomplete initial credentials with `xcatconfig -c` before the first `lsdef` probe. |
+| RHEL 9.6 | Validated | Validated | Verified against local entitled media plus repo access with the same headnode verification and MPI smoke flow as Rocky Linux 9.7. |
 | Rocky Linux 10.1 | Out of scope | Validated | Confluent-only EL10 bootstrap path. |
 | AlmaLinux 10.1 | Out of scope | Validated | Confluent-only EL10 cloud-image lane. Verified with the same headnode, deploy, and MPI smoke flow as Rocky Linux 10. |
 | RHEL 10.1 | Out of scope | Validated | Confluent-only EL10 mirror-backed lane. Uses a qcow2 headnode image plus local mirrored repos. |
@@ -169,8 +238,8 @@ setup.
 ## EL8 support matrix
 
 These capability tables still describe the currently validated Rocky baselines.
-The AlmaLinux, Oracle Linux, and RHEL EL8/EL9 lanes are scaffolded for
-validation, but they have not completed these checks yet.
+The AlmaLinux, Oracle Linux, and RHEL EL8 lanes are scaffolded for validation,
+but they have not completed these checks yet.
 
 | Capability | xCAT | Confluent | Notes |
 | --- | --- | --- | --- |
@@ -235,6 +304,7 @@ reconstructing ad hoc lab steps.
 2. Copy the closest `testing/libvirt/config/*.env.example` file and set
    `BASE_IMAGE`, `CLUSTER_ISO`, and either `OPENCATTUS_BINARY` or
    `OPENCATTUS_SOURCE_DIR`.
+   For release work, prefer a clean source export instead of the live checkout.
 3. Set `OPENCATTUS_MIRROR_URL` whenever you want package resolution to stay on
    the local mirror, especially for `RHEL` lanes.
 4. Run `testing/libvirt/opencattus-el8-lab.sh`, `testing/libvirt/opencattus-el9-lab.sh`,
@@ -244,6 +314,43 @@ reconstructing ad hoc lab steps.
    lane.
 6. On failure, inspect `logs/install.log` first, then the per-host logs under
    `logs/headnode/` and the compute-node console captures.
+
+If you are reusing a busy lab host, clear stale OpenCATTUS libvirt networks
+before rerunning a lane. Old `opencattus-*` networks can leave orphan `oc*`
+bridges behind, which causes fresh runs to fail early with
+`Network is already in use by interface ...` even though the distro path itself
+is fine. Keep any currently live lab networks, then remove the stale ones:
+
+```bash
+python3 - <<'PY'
+import subprocess
+keep = {
+    # Add any currently active lab networks you want to preserve.
+    # Example:
+    # 'opencattus-rhel9-confluent-r1-ext',
+    # 'opencattus-rhel9-confluent-r1-mgmt',
+}
+
+res = subprocess.run(
+    ['sudo', 'virsh', 'net-list', '--all', '--name'],
+    capture_output=True, text=True, check=True
+)
+for name in [n.strip() for n in res.stdout.splitlines()
+             if n.strip().startswith('opencattus-') and n.strip() not in keep]:
+    subprocess.run(['sudo', 'virsh', 'net-destroy', name],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(['sudo', 'virsh', 'net-undefine', name],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+links = subprocess.run(['ip', '-brief', 'link', 'show'],
+                       capture_output=True, text=True, check=True)
+for line in links.stdout.splitlines():
+    parts = line.split()
+    if len(parts) >= 2 and parts[0].startswith('oc') and parts[1] == 'DOWN':
+        subprocess.run(['sudo', 'ip', 'link', 'delete', parts[0]],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+PY
+```
 
 A lane counts as release-valid only when all of these are true:
 
@@ -256,6 +363,13 @@ A lane counts as release-valid only when all of these are true:
 For long-running investigations, prefer keeping each rerun in a unique
 `LAB_NAME` instead of reusing the same one. That preserves the old logs and
 makes it obvious which exact artifact set corresponds to the current result.
+
+When you provide `OPENCATTUS_BINARY`, the EL9 harness now verifies both the
+dynamic linker view (`ldd`) and a real `--help` execution on the guest before
+it reuses that binary. That matters across EL9 minor releases: a cached binary
+can look linked correctly and still die immediately on a newer or older glibc
+symbol requirement such as `GLIBC_2.35`. If the probe fails, the harness falls
+back to building from `OPENCATTUS_SOURCE_DIR` inside the headnode.
 
 ## Self-hosted GitHub Actions
 
@@ -305,6 +419,10 @@ testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env destroy
   usable SLURM state.
 - The xCAT path can expose simulated BMC endpoints through VirtualBMC, and the
   harness opens the minimal host-side firewalld rule needed for UDP `623`.
+- The xCAT path repairs incomplete certificate skeletons with
+  `xcatconfig -c` when the package install leaves empty credentials behind,
+  which is required for the Oracle Linux 9.7 lane to pass the first
+  `lsdef -t site` probe.
 - The harness restarts compute VMs with `virsh` for deterministic PXE reboots
   during lab runs.
 - The compute VMs can PXE boot on the management network.
@@ -324,9 +442,10 @@ testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env destroy
   branch can reuse the same host-side lab orchestration while the product port
   is still underway.
 - The currently validated multi-node EL9 topology is two compute nodes on
-  external plus management networks. EL9 Confluent service-network coverage is
-  now also validated, but the xCAT service-network and broader application
-  network variants still need coverage.
+  external plus management networks across Rocky Linux 9.7, AlmaLinux 9.7,
+  Oracle Linux 9.7, and RHEL 9.6. EL9 Confluent service-network coverage is
+  also validated, but the xCAT service-network and broader application network
+  variants still need coverage.
 - The currently validated EL8 topology is a single xCAT-managed or
   Confluent-managed compute node on external plus management networks.
 - The currently validated EL10 service-network topology adds a dedicated

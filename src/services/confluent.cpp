@@ -33,6 +33,22 @@ fi
         fmt::arg("internalNic", internalNic));
 }
 
+std::string buildHttpdTlsBootstrapCommands()
+{
+    return R"(
+# Some EL9 family lanes can leave zero-length default mod_ssl assets behind.
+if [ ! -s /etc/pki/tls/certs/localhost.crt ] || [ ! -s /etc/pki/tls/private/localhost.key ]; then
+    rm -f /etc/pki/tls/certs/localhost.crt /etc/pki/tls/private/localhost.key
+    openssl req -x509 -nodes -newkey rsa:2048 -sha256 -days 3650 \
+        -subj '/CN=localhost' \
+        -keyout /etc/pki/tls/private/localhost.key \
+        -out /etc/pki/tls/certs/localhost.crt
+    chmod 0600 /etc/pki/tls/private/localhost.key /etc/pki/tls/certs/localhost.crt
+    restorecon /etc/pki/tls/certs/localhost.crt /etc/pki/tls/private/localhost.key || :
+fi
+)";
+}
+
 std::string buildNodeDefinitionScript(
     const models::Node& node, std::string_view image)
 {
@@ -276,6 +292,7 @@ rpm -ivh {confluentRepoRpmUrl} || :
 
 # Install required packages
 dnf install -y lenovo-confluent tftp-server dnsmasq
+{httpdTlsBootstrapCommands}
 systemctl enable confluent --now
 systemctl enable httpd --now 
 systemctl enable tftp.socket --now
@@ -308,7 +325,7 @@ osdeploy initialize -u -s -k -l -p -a -t -g
 osdeploy import {isoPath} || :
 
 # Create a temporary chroot to work as basis for the boot image
-export scratchdir=/tmp/scratchdir
+export scratchdir=/var/tmp/opencattus-scratchdir
 rm -rf $scratchdir || :
 rm -rf /var/lib/confluent/public/os/{image}-diskless || :
 imgutil build -y -s {image} $scratchdir
@@ -385,10 +402,10 @@ EOF
 
 
 # Pack the image from the temporary chroot and give a name
-imgutil pack /tmp/scratchdir/ {image}-diskless
+imgutil pack $scratchdir/ {image}-diskless
 
 # Remove the leftover files from the chroot
-rm -rf /tmp/scratchdir || :
+rm -rf $scratchdir || :
 )d",
 
         fmt::arg("domain", cluster()->getDomainName()),
@@ -397,6 +414,7 @@ rm -rf /tmp/scratchdir || :
         fmt::arg("spackModulePathExport", buildUserSpackModulePathExport(os())),
         fmt::arg("nodeImageInstallCommand", buildNodeImageInstallCommand(os())),
         fmt::arg("nodeImageRepoFiles", buildNodeImageRepoFiles(os())),
+        fmt::arg("httpdTlsBootstrapCommands", buildHttpdTlsBootstrapCommands()),
         fmt::arg("autofsCommands",
             buildConfluentAutofsImageCommands(
                 cluster()
@@ -479,6 +497,20 @@ TEST_CASE("buildFirewalldTrustedInterfaceCommands checks firewalld activity befo
         "firewall-cmd --zone=trusted --change-interface=mgmt0 --permanent"));
     CHECK(script.contains("firewall-cmd --reload"));
     CHECK_FALSE(script.contains("systemctl is-enabled --quiet firewalld.service"));
+}
+
+TEST_CASE("buildHttpdTlsBootstrapCommands repairs missing or empty mod_ssl localhost assets")
+{
+    const auto script = buildHttpdTlsBootstrapCommands();
+
+    CHECK(script.contains(
+        "if [ ! -s /etc/pki/tls/certs/localhost.crt ] || [ ! -s /etc/pki/tls/private/localhost.key ]; then"));
+    CHECK(script.contains("openssl req -x509 -nodes -newkey rsa:2048 -sha256 -days 3650"));
+    CHECK(script.contains("-subj '/CN=localhost'"));
+    CHECK(script.contains(
+        "chmod 0600 /etc/pki/tls/private/localhost.key /etc/pki/tls/certs/localhost.crt"));
+    CHECK(script.contains(
+        "restorecon /etc/pki/tls/certs/localhost.crt /etc/pki/tls/private/localhost.key || :"));
 }
 
 TEST_CASE("buildNodeDefinitionScript emits a MAC assignment only when the management MAC is known")

@@ -667,13 +667,69 @@ fqdn: ${HEADNODE_NAME}.${CLUSTER_DOMAIN}
 manage_etc_hosts: true
 package_update: true
 packages:
+  - cloud-utils-growpart
   - dnf-plugins-core
   - $(headnode_glibmm_package)
+  - lvm2
   - newt
+  - openssh-server
   - qemu-guest-agent
   - rsync
   - tar
   - wget
+write_files:
+  - path: /usr/local/sbin/opencattus-grow-rootfs.sh
+    owner: root:root
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euxo pipefail
+
+      root_source=\$(findmnt -n -o SOURCE /)
+      root_fstype=\$(findmnt -n -o FSTYPE /)
+
+      if [[ "\${root_source}" == /dev/mapper/* || "\${root_source}" == /dev/*/* ]]; then
+          vg_name=\$(lvs --noheadings -o vg_name "\${root_source}" 2>/dev/null | awk 'NF { print \$1; exit }' || true)
+          if [[ -n "\${vg_name}" ]]; then
+              pv_name=\$(pvs --noheadings -o pv_name -S "vg_name=\${vg_name}" 2>/dev/null | awk 'NF { print \$1; exit }' || true)
+              if [[ -n "\${pv_name}" ]]; then
+                  pv_basename=\$(basename "\${pv_name}")
+                  parent_disk=\$(lsblk -no PKNAME "\${pv_name}" 2>/dev/null | awk 'NF { print \$1; exit }' || true)
+                  if [[ -r "/sys/class/block/\${pv_basename}/partition" ]]; then
+                      part_number=\$(tr -d '[:space:]' < "/sys/class/block/\${pv_basename}/partition" || true)
+                  else
+                      part_number=\$(lsblk -no PARTN "\${pv_name}" 2>/dev/null | awk 'NF { print \$1; exit }' || true)
+                  fi
+                  if [[ -n "\${parent_disk}" && -n "\${part_number}" ]]; then
+                      growpart "/dev/\${parent_disk}" "\${part_number}" || true
+                  fi
+                  pvresize "\${pv_name}" || true
+              fi
+              lvextend -l +100%FREE -r "\${root_source}" || true
+          fi
+      elif [[ "\${root_source}" == /dev/* ]]; then
+          root_basename=\$(basename "\${root_source}")
+          parent_disk=\$(lsblk -no PKNAME "\${root_source}" 2>/dev/null | awk 'NF { print \$1; exit }' || true)
+          if [[ -r "/sys/class/block/\${root_basename}/partition" ]]; then
+              part_number=\$(tr -d '[:space:]' < "/sys/class/block/\${root_basename}/partition" || true)
+          else
+              part_number=\$(lsblk -no PARTN "\${root_source}" 2>/dev/null | awk 'NF { print \$1; exit }' || true)
+          fi
+          if [[ -n "\${parent_disk}" && -n "\${part_number}" ]]; then
+              growpart "/dev/\${parent_disk}" "\${part_number}" || true
+          fi
+          case "\${root_fstype}" in
+              xfs)
+                  xfs_growfs / || true
+                  ;;
+              ext2|ext3|ext4)
+                  resize2fs "\${root_source}" || true
+                  ;;
+          esac
+      fi
+
+      lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT
+      df -h /
 users:
   - default
   - name: ${SSH_USER}
@@ -685,6 +741,8 @@ users:
     ssh_authorized_keys:
       - ${pubkey}
 runcmd:
+  - [bash, -lc, /usr/local/sbin/opencattus-grow-rootfs.sh]
+  - [systemctl, enable, --now, sshd]
   - [systemctl, enable, --now, qemu-guest-agent]
 EOF
 
@@ -792,6 +850,8 @@ check_config() {
     fi
 
     [[ -d "${LOCAL_REPO_CONFIG_DIR}" ]] || die "Repo config directory not found: ${LOCAL_REPO_CONFIG_DIR}"
+    (( HEADNODE_DISK_GB >= 100 )) || die \
+        "HEADNODE_DISK_GB (${HEADNODE_DISK_GB}) must be at least 100 GiB"
 
     topology_vcpus=$((NODE_SOCKETS * NODE_CORES_PER_SOCKET * NODE_THREADS_PER_CORE))
     (( topology_vcpus > 0 )) || die "Node CPU topology must resolve to at least one vCPU"
@@ -1341,7 +1401,9 @@ probe_remote_binary() {
     local probe_log="${LOG_DIR}/binary-probe.log"
 
     mkdir -p "${LOG_DIR}"
-    ssh_remote "ldd '${REMOTE_BINARY_PATH}'" >"${probe_log}" 2>&1
+    ssh_remote "set -euo pipefail &&
+        ldd '${REMOTE_BINARY_PATH}' &&
+        '${REMOTE_BINARY_PATH}' --help >/dev/null" >"${probe_log}" 2>&1
 }
 
 sync_to_remote() {
