@@ -130,11 +130,11 @@ systemctl restart chronyd
 if ${ofed_enabled}; then
     cat <<EOF > /etc/yum.repos.d/doca.repo
 [doca]
-name=DOCA latest for RHEL 9.6
-baseurl=https://linux.mellanox.com/public/repo/doca/latest-2.9-LTS/rhel9.6/x86_64/
+name=DOCA 3.2 LTS for RHEL 9
+baseurl=https://linux.mellanox.com/public/repo/doca/latest-3.2-LTS/rhel9/x86_64/
 enabled=1
 gpgcheck=1
-gpgkey=https://linux.mellanox.com/public/repo/doca/latest-2.9-LTS/rhel9.6/x86_64/GPG-KEY-Mellanox.pub
+gpgkey=https://linux.mellanox.com/public/repo/doca/latest-3.2-LTS/rhel9/x86_64/GPG-KEY-Mellanox.pub
 EOF
     dnf makecache --repo=doca
     # --nogpg mitigate
@@ -605,4 +605,3 @@ df
 #     - Enable EPEL for extra packages.
 #     - Use NVIDIA repos with EL9.6 / Rocky 9.6 support.
 #     - Lock versions to prevent automatic update breakage.
-
