@@ -35,7 +35,7 @@ namespace opencattus::models {
 OS::OS()
 {
     LOG_INFO("Initializing OS (ctr 1)");
-    struct utsname system { };
+    struct utsname system {};
     // @FIXME: Unfortunately this runs during the initialization of the
     //  cluster instance. Which prevents us of running this during testing
     //  in a machine that does not have /etc/os-release file.

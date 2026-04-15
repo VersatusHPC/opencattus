@@ -219,11 +219,12 @@ Current EL9 Support Matrix
        ``[network_service]`` section for both xCAT and Confluent.
    * - Dedicated application network / OFED path
      - Validated
-     - Not yet validated
-     - Rocky Linux 9.7 + xCAT now completes the application-network + DOCA 3.2
-       LTS path, including package/image verification, compute boot, Slurm
-       ``idle``, NFS exports, and MPI smoke. Confluent coverage is still
-       pending.
+     - Validated
+     - Rocky Linux 9.7 now completes the application-network + DOCA 3.2 LTS
+       path for both xCAT and Confluent, including a dedicated headnode
+       application NIC, populated ``[network_application]`` and ``[ofed]``
+       sections, package/image verification, compute boot, Slurm ``idle``, NFS
+       exports, OFED checks, and MPI smoke.
    * - Multi-node cluster
      - Validated
      - Validated

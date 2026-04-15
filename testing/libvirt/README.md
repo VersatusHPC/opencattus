@@ -64,7 +64,7 @@ Keep the cloud image and ISO under `/var/lib/libvirt/images`, ideally in a dedic
 1. Copy one of these environment templates, then set `BASE_IMAGE`,
    `CLUSTER_ISO`, and either `OPENCATTUS_BINARY` or `OPENCATTUS_SOURCE_DIR`:
 
-   - Rocky baselines: `testing/libvirt/config/rocky8-xcat.env.example`, `testing/libvirt/config/rocky8-confluent.env.example`, `testing/libvirt/config/rocky9-xcat.env.example`, `testing/libvirt/config/rocky9-confluent.env.example`, `testing/libvirt/config/rocky9-confluent-service.env.example`, `testing/libvirt/config/rocky10-confluent.env.example`, `testing/libvirt/config/rocky10-confluent-service.env.example`
+   - Rocky baselines: `testing/libvirt/config/rocky8-xcat.env.example`, `testing/libvirt/config/rocky8-confluent.env.example`, `testing/libvirt/config/rocky9-xcat.env.example`, `testing/libvirt/config/rocky9-confluent.env.example`, `testing/libvirt/config/rocky9-confluent-service.env.example`, `testing/libvirt/config/rocky9-confluent-doca32.env.example`, `testing/libvirt/config/rocky10-confluent.env.example`, `testing/libvirt/config/rocky10-confluent-service.env.example`
    - Validated EL10 Confluent lanes: `testing/libvirt/config/alma10-confluent.env.example`, `testing/libvirt/config/ol10-confluent.env.example`, `testing/libvirt/config/rhel10-confluent.env.example`
    - Validated EL9 expansion lanes: `testing/libvirt/config/{alma,ol,rhel}9-{xcat,confluent}.env.example`
    - Candidate EL8 expansion lanes: `testing/libvirt/config/{alma,ol,rhel}8-{xcat,confluent}.env.example`
@@ -234,7 +234,7 @@ but they have not completed these checks yet.
 | OpenHPC MPI hello world | Validated | Validated | Run through Slurm on the recovered EL9 cluster in both single-node and two-node MPI layouts. |
 | External + management network topology | Validated | Validated | This is the currently tested lab topology. |
 | Dedicated service network | Validated | Validated | Rocky Linux 9.7 now completes the unattended install, verify, and MPI smoke path with a dedicated `oc-svc0` headnode NIC and a populated `[network_service]` section for both xCAT and Confluent. |
-| Dedicated application network / OFED path | Validated | Not yet validated | Rocky Linux 9.7 + xCAT now completes the application-network + DOCA 3.2 LTS path, including package/image verification, compute boot, Slurm `idle`, NFS exports, and MPI smoke. Confluent coverage is still pending. |
+| Dedicated application network / OFED path | Validated | Validated | Rocky Linux 9.7 now completes the application-network + DOCA 3.2 LTS path for both xCAT and Confluent, including a dedicated `oc-app0` headnode NIC, populated `[network_application]` and `[ofed]` sections, package/image verification, compute boot, Slurm `idle`, NFS exports, OFED checks, and MPI smoke. |
 | Multi-node cluster | Validated | Validated | Two compute nodes boot, join the cluster, and complete the MPI smoke test. |
 | TUI-driven install | Not yet validated | Not yet validated | Recovery work has focused on unattended answerfile installs first. |
 | `--dump-answerfile` round-trip | Validated | Validated | Rocky Linux 9.7 now completes a full dump-regenerate-install cycle in the EL9 libvirt/KVM lab for both xCAT and Confluent. |
@@ -414,9 +414,10 @@ testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env destroy
 - The currently validated multi-node EL9 topology is two compute nodes on
   external plus management networks across Rocky Linux 9.7, AlmaLinux 9.7,
   Oracle Linux 9.7, and RHEL 9.6. EL9 service-network coverage is validated on
-  Rocky Linux 9.7 for both xCAT and Confluent. The EL9 xCAT application-network
-  + DOCA 3.2 LTS path is validated on Rocky Linux 9.7; Confluent OFED coverage
-  and broader application-network variants still need coverage.
+  Rocky Linux 9.7 for both xCAT and Confluent. The EL9 dedicated
+  application-network + DOCA 3.2 LTS path is also validated on Rocky Linux 9.7
+  for both xCAT and Confluent; broader application-network variants still need
+  coverage.
 - The currently validated EL8 topology is a single xCAT-managed or
   Confluent-managed compute node on external plus management networks.
 - The currently validated EL10 service-network topology adds a dedicated

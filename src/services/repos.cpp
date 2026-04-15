@@ -4,6 +4,7 @@
  */
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fmt/core.h>
 #include <fstream>
@@ -578,7 +579,7 @@ struct RepoAssembler final {
         const UpstreamRepo<UChecker>& upstream, const bool enabled = false,
         const bool forceUpstream = false)
     {
-        auto repo = RPMRepository { };
+        auto repo = RPMRepository {};
         repo.group(static_cast<std::string>(repoid.id));
         repo.id(static_cast<std::string>(repoid.id));
         repo.name(static_cast<std::string>(repoid.name));
@@ -666,7 +667,7 @@ public:
     void insert(const std::string& filename, RepoConfig& value)
     {
         if (!m_files.contains(filename)) {
-            m_files.emplace(filename, std::vector<RepoConfig> { });
+            m_files.emplace(filename, std::vector<RepoConfig> {});
         }
         m_files.at(filename).emplace_back(value);
     }
@@ -934,12 +935,34 @@ std::string defaultDOCARepoTargetFor(
     const auto normalized
         = opencattus::utils::string::lower(std::string(ofedVersion));
     const auto isLts = normalized.contains("lts");
+    const auto ltsMajorVersion = [&normalized]() -> std::optional<int> {
+        const auto digitsStart = normalized.find_first_of("0123456789");
+        if (digitsStart == std::string::npos) {
+            return std::nullopt;
+        }
+
+        auto digitsEnd = digitsStart;
+        while (digitsEnd < normalized.size()
+            && std::isdigit(
+                static_cast<unsigned char>(normalized.at(digitsEnd)))) {
+            ++digitsEnd;
+        }
+
+        return std::stoi(
+            normalized.substr(digitsStart, digitsEnd - digitsStart));
+    }();
 
     switch (osinfo.getPlatform()) {
         case OS::Platform::el8:
             return isLts ? "8.10" : "8";
         case OS::Platform::el9:
-            return isLts ? "9.6" : "9";
+            if (!isLts) {
+                return "9";
+            }
+            if (ltsMajorVersion.has_value() && ltsMajorVersion.value() >= 3) {
+                return "9";
+            }
+            return "9.6";
         case OS::Platform::el10:
             if (isLts) {
                 throw std::runtime_error(
@@ -1065,6 +1088,10 @@ TEST_CASE("defaultDOCARepoTargetFor uses explicit EL baselines")
               "latest-2.9-LTS")
         == "9.6");
     CHECK(defaultDOCARepoTargetFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el9, 7),
+              "latest-3.2-LTS")
+        == "9");
+    CHECK(defaultDOCARepoTargetFor(
               OS(models::OS::Distro::Rocky, OS::Platform::el9, 7), "latest")
         == "9");
     CHECK(defaultDOCARepoTargetFor(
@@ -1119,7 +1146,7 @@ TEST_CASE("defaultRHELCodeReadyMirrorRepoFor follows the local mirror layout")
 TEST_CASE("RepoConfigParser emits explicit DOCA repo targets")
 {
 #ifdef BUILD_TESTING
-    const auto el9Conf = RepoConfigParser::parseTest("repos/repos.conf",
+    const auto el9Conf29 = RepoConfigParser::parseTest("repos/repos.conf",
         RepoConfigVars {
             .arch = "x86_64",
             .beegfsVersion = "beegfs_7.3.3",
@@ -1132,15 +1159,38 @@ TEST_CASE("RepoConfigParser emits explicit DOCA repo targets")
             .ofedRepoTarget = "9.6",
             .cudaGPGKey = "D42D0685.pub",
         });
-    const auto el9Doca = el9Conf.find("doca");
-    REQUIRE(el9Doca.has_value() == true);
-    CHECK(el9Doca->upstream.repo
+    const auto el9Doca29 = el9Conf29.find("doca");
+    REQUIRE(el9Doca29.has_value() == true);
+    CHECK(el9Doca29->upstream.repo
         == "https://linux.mellanox.com/public/repo/doca/latest-2.9-LTS/"
            "rhel9.6/x86_64/");
-    REQUIRE(el9Doca->upstream.gpgkey.has_value() == true);
-    CHECK(el9Doca->upstream.gpgkey.value()
+    REQUIRE(el9Doca29->upstream.gpgkey.has_value() == true);
+    CHECK(el9Doca29->upstream.gpgkey.value()
         == "https://linux.mellanox.com/public/repo/doca/latest-2.9-LTS/"
            "rhel9.6/x86_64/GPG-KEY-Mellanox.pub");
+
+    const auto el9Conf32 = RepoConfigParser::parseTest("repos/repos.conf",
+        RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.3.3",
+            .ohpcVersion = "3",
+            .osversion = "9.7",
+            .releasever = "9",
+            .xcatVersion = "latest",
+            .zabbixVersion = "6.4",
+            .ofedVersion = "latest-3.2-LTS",
+            .ofedRepoTarget = "9",
+            .cudaGPGKey = "D42D0685.pub",
+        });
+    const auto el9Doca32 = el9Conf32.find("doca");
+    REQUIRE(el9Doca32.has_value() == true);
+    CHECK(el9Doca32->upstream.repo
+        == "https://linux.mellanox.com/public/repo/doca/latest-3.2-LTS/"
+           "rhel9/x86_64/");
+    REQUIRE(el9Doca32->upstream.gpgkey.has_value() == true);
+    CHECK(el9Doca32->upstream.gpgkey.value()
+        == "https://linux.mellanox.com/public/repo/doca/latest-3.2-LTS/"
+           "rhel9/x86_64/GPG-KEY-Mellanox.pub");
 
     const auto el10Conf = RepoConfigParser::parseTest("repos/repos.conf",
         RepoConfigVars {
@@ -1443,7 +1493,7 @@ public:
     void enable(const std::vector<std::string>& repos, bool value)
     {
         auto byIdPtr = [](const std::shared_ptr<RPMRepositoryFile>& rptr) {
-            return std::hash<std::string> { }(rptr->path());
+            return std::hash<std::string> {}(rptr->path());
         };
         std::unordered_set<std::shared_ptr<RPMRepositoryFile>,
             decltype(byIdPtr)>
@@ -1472,7 +1522,7 @@ public:
     {
         // Function to iterate over map by id
         constexpr auto byId
-            = [](auto& repo) { return std::hash<std::string> { }(repo.id()); };
+            = [](auto& repo) { return std::hash<std::string> {}(repo.id()); };
 
         std::unordered_set<RPMRepository, decltype(byId)> output;
         for (auto& [_id1, repoFile] : m_filesIdx) {
@@ -1749,7 +1799,7 @@ TEST_CASE("RepoNames")
     struct ShouldUseVaultService final {
         static bool shouldUseVault(const OS& osinfo) { return false; }
     };
-    const auto enabler = RepoNames<ShouldUseVaultService> { };
+    const auto enabler = RepoNames<ShouldUseVaultService> {};
     const RepoConfigVars& vars = RepoConfigVars {
         .arch = "x86_64",
         .beegfsVersion = "beegfs_7.3.3",
@@ -2074,7 +2124,7 @@ TEST_SUITE("opencattus::services::repos [slow]")
 #ifdef BUILD_TESTING
         using namespace opencattus::services;
         opencattus::services::initializeSingletonsOptions(
-            std::make_unique<const Options>(Options { }));
+            std::make_unique<const Options>(Options {}));
         const auto repos = std::filesystem::path("./repos");
         REQUIRE(opencattus::functions::exists(repos / "repos.conf"));
         const auto confs

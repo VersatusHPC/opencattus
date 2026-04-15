@@ -817,7 +817,7 @@ TEST_CASE("buildConfluentRepoRpmUrl uses upstream by default")
     using opencattus::services::Options;
 
     opencattus::Singleton<const Options>::init(
-        std::make_unique<const Options>(Options { }));
+        std::make_unique<const Options>(Options {}));
 
     CHECK(buildConfluentRepoRpmUrl(OS(OS::Distro::Rocky, OS::Platform::el9, 7))
         == "https://hpc.lenovo.com/yum/latest/el9/x86_64/"
