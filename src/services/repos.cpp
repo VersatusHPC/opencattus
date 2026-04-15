@@ -4,7 +4,6 @@
  */
 
 #include <algorithm>
-#include <cctype>
 #include <filesystem>
 #include <fmt/core.h>
 #include <fstream>
@@ -863,8 +862,8 @@ public:
             .releasever = "9",
             .xcatVersion = "latest",
             .zabbixVersion = "6.4",
-            .ofedVersion = "latest-2.9-LTS",
-            .ofedRepoTarget = "9.6",
+            .ofedVersion = "latest-3.2-LTS",
+            .ofedRepoTarget = "9",
             .cudaGPGKey = "D42D0685.pub",
         })
     {
@@ -929,47 +928,82 @@ std::string defaultOpenHPCVersionFor(const OS& osinfo)
     }
 }
 
-std::string defaultDOCARepoTargetFor(
-    const OS& osinfo, std::string_view ofedVersion)
+std::optional<std::pair<int, int>> parseDocaLtsVersion(
+    std::string_view ofedVersion)
 {
     const auto normalized
         = opencattus::utils::string::lower(std::string(ofedVersion));
-    const auto isLts = normalized.contains("lts");
-    const auto ltsMajorVersion = [&normalized]() -> std::optional<int> {
-        const auto digitsStart = normalized.find_first_of("0123456789");
-        if (digitsStart == std::string::npos) {
-            return std::nullopt;
-        }
+    if (!normalized.contains("lts")) {
+        return std::nullopt;
+    }
 
-        auto digitsEnd = digitsStart;
-        while (digitsEnd < normalized.size()
-            && std::isdigit(
-                static_cast<unsigned char>(normalized.at(digitsEnd)))) {
-            ++digitsEnd;
-        }
+    constexpr std::string_view prefix = "latest-";
+    constexpr std::string_view suffix = "-lts";
+    const auto prefixPos = normalized.find(prefix);
+    const auto suffixPos = normalized.rfind(suffix);
+    if (prefixPos == std::string::npos || suffixPos == std::string::npos
+        || suffixPos <= prefixPos + prefix.size()) {
+        return std::nullopt;
+    }
 
-        return std::stoi(
-            normalized.substr(digitsStart, digitsEnd - digitsStart));
-    }();
+    const auto versionToken = normalized.substr(
+        prefixPos + prefix.size(), suffixPos - (prefixPos + prefix.size()));
+    const auto dotPos = versionToken.find('.');
+    if (dotPos == std::string::npos) {
+        return std::nullopt;
+    }
+
+    try {
+        return std::pair { std::stoi(versionToken.substr(0, dotPos)),
+            std::stoi(versionToken.substr(dotPos + 1)) };
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+bool usesDocaMajorVersionRepo(std::string_view ofedVersion)
+{
+    const auto normalized
+        = opencattus::utils::string::lower(std::string(ofedVersion));
+    if (!normalized.contains("lts")) {
+        return true;
+    }
+
+    if (const auto parsed = parseDocaLtsVersion(ofedVersion);
+        parsed.has_value()) {
+        return parsed.value() >= std::pair { 3, 2 };
+    }
+
+    return false;
+}
+
+std::string defaultDOCARepoTargetFor(
+    const OS& osinfo, std::string_view ofedVersion)
+{
+    if (usesDocaMajorVersionRepo(ofedVersion)) {
+        switch (osinfo.getPlatform()) {
+            case OS::Platform::el8:
+                return "8";
+            case OS::Platform::el9:
+                return "9";
+            case OS::Platform::el10:
+                return "10";
+            default:
+                throw std::runtime_error(
+                    fmt::format("Unsupported DOCA repository baseline for EL{}",
+                        osinfo.getMajorVersion()));
+        }
+    }
 
     switch (osinfo.getPlatform()) {
         case OS::Platform::el8:
-            return isLts ? "8.10" : "8";
+            return "8.10";
         case OS::Platform::el9:
-            if (!isLts) {
-                return "9";
-            }
-            if (ltsMajorVersion.has_value() && ltsMajorVersion.value() >= 3) {
-                return "9";
-            }
             return "9.6";
         case OS::Platform::el10:
-            if (isLts) {
-                throw std::runtime_error(
-                    "DOCA LTS repo target is not defined for EL10; choose a "
-                    "supported major-track DOCA stream explicitly");
-            }
-            return "10";
+            throw std::runtime_error(
+                "Legacy DOCA LTS repo target is not defined for EL10; choose a "
+                "major-version DOCA stream such as latest or latest-3.2-LTS");
         default:
             throw std::runtime_error(
                 fmt::format("Unsupported DOCA repository baseline for EL{}",
@@ -1095,7 +1129,15 @@ TEST_CASE("defaultDOCARepoTargetFor uses explicit EL baselines")
               OS(models::OS::Distro::Rocky, OS::Platform::el9, 7), "latest")
         == "9");
     CHECK(defaultDOCARepoTargetFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el9, 7),
+              "latest-3.2-LTS")
+        == "9");
+    CHECK(defaultDOCARepoTargetFor(
               OS(models::OS::Distro::Rocky, OS::Platform::el10, 1), "latest")
+        == "10");
+    CHECK(defaultDOCARepoTargetFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el10, 1),
+              "latest-3.2-LTS")
         == "10");
     CHECK_THROWS_AS(defaultDOCARepoTargetFor(
                         OS(models::OS::Distro::Rocky, OS::Platform::el10, 1),
@@ -1239,6 +1281,30 @@ TEST_CASE("RepoConfigParser emits CUDA repository URLs")
         == "https://developer.download.nvidia.com/compute/cuda/repos/rhel9/"
            "x86_64/D42D0685.pub");
 
+    const auto el9ModernLtsConf
+        = RepoConfigParser::parseTest("repos/repos.conf",
+            RepoConfigVars {
+                .arch = "x86_64",
+                .beegfsVersion = "beegfs_7.3.3",
+                .ohpcVersion = "3",
+                .osversion = "9.7",
+                .releasever = "9",
+                .xcatVersion = "latest",
+                .zabbixVersion = "6.4",
+                .ofedVersion = "latest-3.2-LTS",
+                .ofedRepoTarget = "9",
+                .cudaGPGKey = "D42D0685.pub",
+            });
+    const auto el9ModernLtsDoca = el9ModernLtsConf.find("doca");
+    REQUIRE(el9ModernLtsDoca.has_value() == true);
+    CHECK(el9ModernLtsDoca->upstream.repo
+        == "https://linux.mellanox.com/public/repo/doca/latest-3.2-LTS/"
+           "rhel9/x86_64/");
+    REQUIRE(el9ModernLtsDoca->upstream.gpgkey.has_value() == true);
+    CHECK(el9ModernLtsDoca->upstream.gpgkey.value()
+        == "https://linux.mellanox.com/public/repo/doca/latest-3.2-LTS/"
+           "rhel9/x86_64/GPG-KEY-Mellanox.pub");
+
     const auto el10Conf = RepoConfigParser::parseTest("repos/repos.conf",
         RepoConfigVars {
             .arch = "x86_64",
@@ -1261,6 +1327,25 @@ TEST_CASE("RepoConfigParser emits CUDA repository URLs")
     CHECK(el10Cuda->upstream.gpgkey.value()
         == "https://developer.download.nvidia.com/compute/cuda/repos/rhel10/"
            "x86_64/CDF6BA43.pub");
+    const auto el10ModernLtsConf
+        = RepoConfigParser::parseTest("repos/repos.conf",
+            RepoConfigVars {
+                .arch = "x86_64",
+                .beegfsVersion = "beegfs_7.4.0",
+                .ohpcVersion = "4",
+                .osversion = "10.1",
+                .releasever = "10",
+                .xcatVersion = "latest",
+                .zabbixVersion = "7.0",
+                .ofedVersion = "latest-3.2-LTS",
+                .ofedRepoTarget = "10",
+                .cudaGPGKey = "CDF6BA43.pub",
+            });
+    const auto el10ModernLtsDoca = el10ModernLtsConf.find("doca");
+    REQUIRE(el10ModernLtsDoca.has_value() == true);
+    CHECK(el10ModernLtsDoca->upstream.repo
+        == "https://linux.mellanox.com/public/repo/doca/latest-3.2-LTS/"
+           "rhel10/x86_64/");
 #endif
 }
 
@@ -1808,8 +1893,8 @@ TEST_CASE("RepoNames")
         .releasever = "9",
         .xcatVersion = "latest",
         .zabbixVersion = "6.4",
-        .ofedVersion = "latest-2.9-LTS",
-        .ofedRepoTarget = "9.6",
+        .ofedVersion = "latest-3.2-LTS",
+        .ofedRepoTarget = "9",
         .cudaGPGKey = "D42D0685.pub",
     };
     const RepoConfigVars& varsEl8 = RepoConfigVars {
@@ -1820,8 +1905,8 @@ TEST_CASE("RepoNames")
         .releasever = "8",
         .xcatVersion = "latest",
         .zabbixVersion = "6.4",
-        .ofedVersion = "latest-2.9-LTS",
-        .ofedRepoTarget = "8.10",
+        .ofedVersion = "latest-3.2-LTS",
+        .ofedRepoTarget = "8",
         .cudaGPGKey = "D42D0685.pub",
     };
 
@@ -2045,8 +2130,8 @@ TEST_CASE("RepoGenerator")
         .releasever = "9",
         .xcatVersion = "latest",
         .zabbixVersion = "6.4",
-        .ofedVersion = "latest-2.9-LTS",
-        .ofedRepoTarget = "9.6",
+        .ofedVersion = "latest-3.2-LTS",
+        .ofedRepoTarget = "9",
         .cudaGPGKey = "D42D0685.pub",
     };
     opencattus::Singleton<const Options>::init(
