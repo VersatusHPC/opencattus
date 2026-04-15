@@ -17,8 +17,8 @@
 #include <variant>
 
 #include <opencattus/services/log.h>
-#include <opencattus/utils/string.h>
 #include <opencattus/utils/singleton.h>
+#include <opencattus/utils/string.h>
 
 #include <fstream>
 #include <memory>
@@ -35,7 +35,7 @@ namespace opencattus::models {
 OS::OS()
 {
     LOG_INFO("Initializing OS (ctr 1)");
-    struct utsname system {};
+    struct utsname system { };
     // @FIXME: Unfortunately this runs during the initialization of the
     //  cluster instance. Which prevents us of running this during testing
     //  in a machine that does not have /etc/os-release file.

@@ -124,8 +124,8 @@ void AnswerFile::dumpInformation()
         "information", "cluster_name", information.cluster_name);
     m_keyfile.setString(
         "information", "company_name", information.company_name);
-    m_keyfile.setString("information", "administrator_email",
-        information.administrator_email);
+    m_keyfile.setString(
+        "information", "administrator_email", information.administrator_email);
 }
 
 void AnswerFile::dumpTimeSettings()
@@ -190,12 +190,10 @@ void AnswerFile::dumpNodes()
             m_keyfile.setString("node", "real_memory", *generic.real_memory);
         }
         if (generic.bmc_username) {
-            m_keyfile.setString(
-                "node", "bmc_username", *generic.bmc_username);
+            m_keyfile.setString("node", "bmc_username", *generic.bmc_username);
         }
         if (generic.bmc_password) {
-            m_keyfile.setString(
-                "node", "bmc_password", *generic.bmc_password);
+            m_keyfile.setString("node", "bmc_password", *generic.bmc_password);
         }
         if (generic.bmc_serialport) {
             m_keyfile.setString(
@@ -249,8 +247,7 @@ void AnswerFile::dumpNodes()
         }
 
         if (node.real_memory) {
-            m_keyfile.setString(
-                sectionName, "real_memory", *node.real_memory);
+            m_keyfile.setString(sectionName, "real_memory", *node.real_memory);
         }
 
         if (node.bmc_address) {

@@ -817,7 +817,7 @@ TEST_CASE("buildConfluentRepoRpmUrl uses upstream by default")
     using opencattus::services::Options;
 
     opencattus::Singleton<const Options>::init(
-        std::make_unique<const Options>(Options {}));
+        std::make_unique<const Options>(Options { }));
 
     CHECK(buildConfluentRepoRpmUrl(OS(OS::Distro::Rocky, OS::Platform::el9, 7))
         == "https://hpc.lenovo.com/yum/latest/el9/x86_64/"
@@ -886,14 +886,12 @@ TEST_CASE("buildConfluentImageName matches osdeploy distribution ids")
 {
     using opencattus::models::OS;
 
-    CHECK(buildConfluentImageName(
-              OS(OS::Distro::Rocky, OS::Platform::el10, 1))
+    CHECK(buildConfluentImageName(OS(OS::Distro::Rocky, OS::Platform::el10, 1))
         == "rocky-10.1-x86_64");
     CHECK(buildConfluentImageName(
               OS(OS::Distro::AlmaLinux, OS::Platform::el10, 1))
         == "alma-10.1-x86_64");
-    CHECK(
-        buildConfluentImageName(OS(OS::Distro::RHEL, OS::Platform::el9, 7))
+    CHECK(buildConfluentImageName(OS(OS::Distro::RHEL, OS::Platform::el9, 7))
         == "rhel-9.7-x86_64");
     CHECK(buildConfluentImageName(OS(OS::Distro::OL, OS::Platform::el9, 5))
         == "ol-9.5-x86_64");

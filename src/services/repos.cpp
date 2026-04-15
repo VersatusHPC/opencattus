@@ -725,8 +725,8 @@ class RepoConfigParser final {
             fmt::arg("cudaGPGKey", vars.cudaGPGKey),
             fmt::arg("rhelBaseMirrorGPGKey", vars.rhelBaseMirrorGPGKey),
             fmt::arg("rhelCodeReadyMirrorRepo", vars.rhelCodeReadyMirrorRepo),
-            fmt::arg("rhelCodeReadyMirrorGPGKey",
-                vars.rhelCodeReadyMirrorGPGKey));
+            fmt::arg(
+                "rhelCodeReadyMirrorGPGKey", vars.rhelCodeReadyMirrorGPGKey));
     };
 
 public:
@@ -799,9 +799,9 @@ public:
                 try {
                     const auto value
                         = interpolateVars(mirrorGpgkey.value(), vars);
-                    repo.mirror.gpgkey
-                        = value.empty() ? std::nullopt
-                                        : std::make_optional(value);
+                    repo.mirror.gpgkey = value.empty()
+                        ? std::nullopt
+                        : std::make_optional(value);
                 } catch (const fmt::format_error& e) {
                     opencattus::functions::abort(
                         "Failed to format mirror.gpgkey for repo '{}': {}",
@@ -832,9 +832,9 @@ public:
                 try {
                     const auto value
                         = interpolateVars(upstreamGpgkey.value(), vars);
-                    repo.upstream.gpgkey
-                        = value.empty() ? std::nullopt
-                                        : std::make_optional(value);
+                    repo.upstream.gpgkey = value.empty()
+                        ? std::nullopt
+                        : std::make_optional(value);
                 } catch (const fmt::format_error& e) {
                     opencattus::functions::abort(
                         "Failed to format upstream.gpgkey for repo '{}': {}",
@@ -1099,8 +1099,8 @@ TEST_CASE("defaultRHELCodeReadyMirrorRepoFor follows the local mirror layout")
               OS(models::OS::Distro::RHEL, OS::Platform::el9, 7))
         == "rhel/RPM-GPG-KEY-redhat-release");
     CHECK(defaultRHELBaseMirrorGPGKeyFor(
-              OS(models::OS::Distro::RHEL, OS::Platform::el10, 1))
-        .empty());
+        OS(models::OS::Distro::RHEL, OS::Platform::el10, 1))
+            .empty());
     CHECK(defaultRHELCodeReadyMirrorRepoFor(
               OS(models::OS::Distro::RHEL, OS::Platform::el9, 7))
         == "rhel/codeready-builder-for-rhel-9-x86_64-rpms/");
@@ -1111,8 +1111,8 @@ TEST_CASE("defaultRHELCodeReadyMirrorRepoFor follows the local mirror layout")
               OS(models::OS::Distro::RHEL, OS::Platform::el10, 1))
         == "rocky/linux/10/CRB/x86_64/os/");
     CHECK(defaultRHELCodeReadyMirrorGPGKeyFor(
-              OS(models::OS::Distro::RHEL, OS::Platform::el10, 1))
-        .empty());
+        OS(models::OS::Distro::RHEL, OS::Platform::el10, 1))
+            .empty());
 #endif
 }
 
