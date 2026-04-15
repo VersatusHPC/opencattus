@@ -453,6 +453,37 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(diskImagePath);
     }
 
+    TEST_CASE("fillData accepts AlmaLinux shorthand on EL10")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath = tempAnswerfilePath(
+            "opencattus-cluster-provisioner-confluent-alma10");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-provisioner-confluent-alma10");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "confluent",
+            std::nullopt, "alma", "10.1");
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            CHECK(answerfile.system.distro
+                == opencattus::models::OS::Distro::AlmaLinux);
+            CHECK(answerfile.system.version == "10.1");
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while loading AlmaLinux shorthand answerfile");
+        }
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
     TEST_CASE("dumpFile writes corrected metadata to the requested output path")
     {
         initializeOptionsSingleton();

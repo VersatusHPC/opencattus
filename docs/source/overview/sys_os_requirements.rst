@@ -212,16 +212,18 @@ Current EL9 Support Matrix
      - Validated
      - This is the currently tested lab topology.
    * - Dedicated service network
-     - Not yet validated
      - Validated
-     - Rocky Linux 9.7 + Confluent now completes the unattended install,
-       verify, and MPI smoke path with a dedicated headnode service NIC and a
-       populated ``[network_service]`` section. xCAT service-network coverage
-       is still pending.
+     - Validated
+     - Rocky Linux 9.7 now completes the unattended install, verify, and MPI
+       smoke path with a dedicated headnode service NIC and a populated
+       ``[network_service]`` section for both xCAT and Confluent.
    * - Dedicated application network / OFED path
+     - Validated
      - Not yet validated
-     - Not yet validated
-     - Still outside the recovered EL9 baseline.
+     - Rocky Linux 9.7 + xCAT now completes the application-network + DOCA 3.2
+       LTS path, including package/image verification, compute boot, Slurm
+       ``idle``, NFS exports, and MPI smoke. Confluent coverage is still
+       pending.
    * - Multi-node cluster
      - Validated
      - Validated

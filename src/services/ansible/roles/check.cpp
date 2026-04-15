@@ -32,7 +32,7 @@ void run(const Role& role)
     using namespace opencattus::utils;
 
     // OFED installation fails with ISO kernel, require update and reboot
-    runner::shell::cmd("dnf makecache --repo baseos");
+    runner::shell::cmd("dnf makecache");
     const auto kernelAvailable = runner::shell::output(
         "dnf -q repoquery kernel --available --qf "
         "'%{{VERSION}}-%{{RELEASE}}.%{{ARCH}}' 2>/dev/null | sort -V | tail -1");

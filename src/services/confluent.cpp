@@ -156,6 +156,30 @@ command -v imgutil >/dev/null
             "httpdTlsBootstrapCommands", buildHttpdTlsBootstrapCommands()));
 }
 
+std::string buildConfluentImageName(const models::OS& os)
+{
+    std::string distro;
+    switch (os.getDistro()) {
+        case models::OS::Distro::Rocky:
+            distro = "rocky";
+            break;
+        case models::OS::Distro::AlmaLinux:
+            distro = "alma";
+            break;
+        case models::OS::Distro::RHEL:
+            distro = "rhel";
+            break;
+        case models::OS::Distro::OL:
+            distro = "ol";
+            break;
+        default:
+            std::unreachable();
+    }
+
+    return fmt::format("{}-{}-{}", distro, os.getVersion(),
+        opencattus::utils::enums::toString(os.getArch()));
+}
+
 std::string buildSpackModuleTree(const models::OS& os)
 {
     std::string distro;
@@ -509,9 +533,7 @@ void Confluent::install()
             nodeImageKernel.value());
     }
 
-    const auto image = fmt::format("{distro}-{arch}",
-        fmt::arg("arch", opencattus::utils::enums::toString(os().getArch())),
-        fmt::arg("distro", os().getDistroString()));
+    const auto image = buildConfluentImageName(os());
 
     runner::shell::fmt(R"d(
 {confluentBootstrapCommands}
@@ -858,6 +880,23 @@ TEST_CASE("buildSpackModuleTree matches Spack's Enterprise Linux module naming")
         == "linux-rocky9-x86_64");
     CHECK(buildSpackModuleTree(OS(OS::Distro::Rocky, OS::Platform::el10, 0))
         == "linux-rocky10-x86_64");
+}
+
+TEST_CASE("buildConfluentImageName matches osdeploy distribution ids")
+{
+    using opencattus::models::OS;
+
+    CHECK(buildConfluentImageName(
+              OS(OS::Distro::Rocky, OS::Platform::el10, 1))
+        == "rocky-10.1-x86_64");
+    CHECK(buildConfluentImageName(
+              OS(OS::Distro::AlmaLinux, OS::Platform::el10, 1))
+        == "alma-10.1-x86_64");
+    CHECK(
+        buildConfluentImageName(OS(OS::Distro::RHEL, OS::Platform::el9, 7))
+        == "rhel-9.7-x86_64");
+    CHECK(buildConfluentImageName(OS(OS::Distro::OL, OS::Platform::el9, 5))
+        == "ol-9.5-x86_64");
 }
 
 TEST_CASE("buildUserSpackModulePathExport tolerates an unset MODULEPATH")

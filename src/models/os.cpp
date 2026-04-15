@@ -17,6 +17,7 @@
 #include <variant>
 
 #include <opencattus/services/log.h>
+#include <opencattus/utils/string.h>
 #include <opencattus/utils/singleton.h>
 
 #include <fstream>
@@ -227,8 +228,13 @@ void OS::setDistro(OS::Distro distro) { m_distro = distro; }
 void OS::setDistro(std::string_view distro)
 {
     using namespace opencattus::utils;
+    auto normalizedDistro = utils::string::lower(std::string(distro));
+    if (normalizedDistro == "alma") {
+        normalizedDistro = "almalinux";
+    }
+
     if (const auto& rval = enums::ofStringOpt<OS::Distro>(
-            std::string(distro), enums::Case::Insensitive)) {
+            normalizedDistro, enums::Case::Insensitive)) {
         setDistro(rval.value());
     } else {
 

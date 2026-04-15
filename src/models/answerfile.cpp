@@ -19,6 +19,7 @@
 #include <opencattus/services/options.h>
 #include <opencattus/services/osservice.h>
 #include <opencattus/utils/singleton.h>
+#include <opencattus/utils/string.h>
 
 using opencattus::services::Postfix;
 
@@ -498,7 +499,11 @@ void AnswerFile::loadSystemSettings()
     auto opts = opencattus::utils::singleton::options();
 
     // Verify supported distros
-    auto afDistro = m_keyfile.getString("system", "distro");
+    auto afDistro = opencattus::utils::string::lower(
+        m_keyfile.getString("system", "distro"));
+    if (afDistro == "alma") {
+        afDistro = "almalinux";
+    }
     if (const auto& formatDistro
         = opencattus::utils::enums::ofStringOpt<OS::Distro>(
             afDistro, opencattus::utils::enums::Case::Insensitive)) {
