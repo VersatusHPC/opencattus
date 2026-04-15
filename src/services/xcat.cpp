@@ -1734,7 +1734,7 @@ TEST_CASE("buildXcatInfinibandPlan uses inbox packages for EL8 compute nodes")
 TEST_CASE("buildXcatInfinibandPlan stages DOCA packages for EL8 compute nodes")
 {
     const auto plan
-        = buildXcatInfinibandPlan(OFED(OFED::Kind::Doca, "latest-2.9-LTS"),
+        = buildXcatInfinibandPlan(OFED(OFED::Kind::Doca, "latest-3.2-LTS"),
             OS(OS::Distro::Rocky, OS::Platform::el8, 10, OS::Arch::x86_64),
             std::nullopt, "4.18.0-553.75.1.el8_10.x86_64");
     const std::vector<std::string_view> expectedPackages {};

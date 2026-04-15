@@ -617,7 +617,7 @@ TEST_SUITE("opencattus::models::answerfile")
         std::ofstream(diskImagePath).close();
         writeAnswerfile(
             answerfilePath, diskImagePath, interfaces.front(), interfaces.front());
-        appendOFEDSection(answerfilePath, "mellanox", "latest-2.9-LTS");
+        appendOFEDSection(answerfilePath, "mellanox", "latest-3.2-LTS");
 
         try {
             AnswerFile answerfile(answerfilePath);
@@ -626,7 +626,7 @@ TEST_SUITE("opencattus::models::answerfile")
 
             REQUIRE(cluster.getOFED().has_value());
             CHECK(cluster.getOFED()->getKind() == OFED::Kind::Doca);
-            CHECK(cluster.getOFED()->getVersion() == "latest-2.9-LTS");
+            CHECK(cluster.getOFED()->getVersion() == "latest-3.2-LTS");
         } catch (const std::exception& e) {
             FAIL(std::string(e.what()));
         } catch (...) {
