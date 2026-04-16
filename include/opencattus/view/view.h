@@ -43,7 +43,8 @@ public:
     virtual void okCancelMessage(const char* message) = 0;
     virtual void okCancelMessage(const char* title, const char* message) = 0;
     virtual void okCancelMessagePairs(
-        const char* title, const char* message, const FieldEntries& pairs) = 0;
+        const char* title, const char* message, const FieldEntries& pairs)
+        = 0;
 
     template <std::ranges::range T>
     void okCancelMessage(const char* title, const char* message, const T& pairs)
@@ -60,10 +61,12 @@ public:
 
     virtual std::pair<int, std::vector<std::string>> multipleSelectionMenu(
         const char* title, const char* message, const char* help,
-        MultipleSelectionEntries items) = 0;
+        MultipleSelectionEntries items)
+        = 0;
 
     virtual std::string listMenuImpl(const char* title, const char* message,
-        const std::vector<std::string>& items, const char* helpMessage) = 0;
+        const std::vector<std::string>& items, const char* helpMessage)
+        = 0;
 
     template <std::ranges::range T>
     std::string listMenu(const char* title, const char* message, const T& items,
@@ -76,7 +79,8 @@ public:
 
     virtual std::vector<std::string> collectListMenuImpl(const char* title,
         const char* message, const std::vector<std::string>& items,
-        const char* helpMessage, ListButtonCallback addCallback) = 0;
+        const char* helpMessage, ListButtonCallback addCallback)
+        = 0;
 
     template <std::ranges::range T>
     std::vector<std::string> collectListMenu(const char* title,
@@ -89,7 +93,8 @@ public:
     }
 
     virtual FieldEntries fieldMenuImpl(const char* title, const char* message,
-        const FieldEntries& items, const char* helpMessage) = 0;
+        const FieldEntries& items, const char* helpMessage)
+        = 0;
 
     template <std::ranges::range T>
     T fieldMenu(const char* title, const char* message, const T& items,
@@ -102,7 +107,7 @@ public:
                 "View::fieldMenuImpl returned a different number of fields");
         }
 
-        T result { };
+        T result {};
         for (std::size_t i = 0; i < output.size(); ++i) {
             result[i] = output[i];
         }
@@ -115,7 +120,8 @@ public:
         = 0;
 
     virtual bool yesNoQuestion(
-        const char* title, const char* message, const char* helpMessage) = 0;
+        const char* title, const char* message, const char* helpMessage)
+        = 0;
 };
 
 #endif // OPENCATTUS_VIEW_H_

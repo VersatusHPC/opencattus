@@ -70,7 +70,7 @@ std::pair<int, std::vector<std::string>> Newt::multipleSelectionMenu(
 
     newtRefresh();
 
-    newtExitStruct es = { };
+    newtExitStruct es = {};
     newtFormRun(form, &es);
 
     int retval = 0;

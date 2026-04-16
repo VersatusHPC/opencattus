@@ -427,15 +427,14 @@ void Cluster::fillTestData()
 
     // TODO: Pass network connection as object
     std::list<Connection> connections1 {
-        { &getNetwork(Network::Profile::Management), { }, "00:0c:29:9b:0c:75",
+        { &getNetwork(Network::Profile::Management), {}, "00:0c:29:9b:0c:75",
             "172.26.0.1" },
-        { &getNetwork(Network::Profile::Application), "eno1", { },
-            "172.27.0.1" }
+        { &getNetwork(Network::Profile::Application), "eno1", {}, "172.27.0.1" }
     };
 
     std::list<Connection> connections2 { { &getNetwork(
                                                Network::Profile::Management),
-        { }, "de:ad:be:ff:00:00", "172.26.0.2" } };
+        {}, "de:ad:be:ff:00:00", "172.26.0.2" } };
 
     BMC bmc { "172.25.0.2", "ADMIN", "ADMIN", 0, 115200, BMC::kind::IPMI };
 
