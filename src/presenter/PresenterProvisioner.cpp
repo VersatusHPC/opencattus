@@ -53,7 +53,7 @@ auto toProvisionerName(Cluster::Provisioner provisioner) -> std::string
 namespace opencattus::presenter {
 
 PresenterProvisioner::PresenterProvisioner(
-    std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)
+    std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view)
     : Presenter(model, view)
 {
     const auto supported

@@ -10,7 +10,7 @@ namespace opencattus::presenter {
 using opencattus::models::SLURM;
 
 PresenterQueueSystem::PresenterQueueSystem(
-    std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)
+    std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view)
     : Presenter(model, view)
 {
 

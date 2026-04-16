@@ -30,7 +30,7 @@ private:
 
 public:
     PresenterInfiniband(std::unique_ptr<Cluster>& model,
-        std::unique_ptr<Newt>& view, opencattus::presenter::NetworkCreator& nc);
+        std::unique_ptr<View>& view, opencattus::presenter::NetworkCreator& nc);
 };
 
 };

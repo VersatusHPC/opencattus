@@ -12,7 +12,7 @@
 #include <opencattus/models/cluster.h>
 #include <opencattus/network.h>
 #include <opencattus/services/log.h>
-#include <opencattus/view/newt.h>
+#include <opencattus/view/view.h>
 
 #include <memory>
 #include <utility>
@@ -128,7 +128,7 @@ private:
 
 public:
     PresenterNetwork(std::unique_ptr<Cluster>& model,
-        std::unique_ptr<Newt>& view, NetworkCreator& nc,
+        std::unique_ptr<View>& view, NetworkCreator& nc,
         Network::Profile profile = Network::Profile::External,
         Network::Type type = Network::Type::Ethernet);
 };

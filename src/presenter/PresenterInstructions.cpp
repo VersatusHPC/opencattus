@@ -8,7 +8,7 @@
 namespace opencattus::presenter {
 
 PresenterInstructions::PresenterInstructions(
-    std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)
+    std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view)
     : Presenter(model, view)
 {
 

@@ -10,7 +10,7 @@
 namespace opencattus::presenter {
 
 PresenterRepository::PresenterRepository(
-    std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)
+    std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view)
     : Presenter(model, view)
 {
     auto manager = opencattus::Singleton<services::repos::RepoManager>::get();

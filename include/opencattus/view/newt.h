@@ -79,17 +79,34 @@ public:
 
     ~Newt() override;
 
-    void message(const char*);
-    void message(const char*, const char*);
+    void message(const char*) override;
+    void message(const char*, const char*) override;
 
-    void fatalMessage(const char*, const char*);
+    void fatalMessage(const char*, const char*) override;
 
-    void okCancelMessage(const char* message);
-    void okCancelMessage(const char* title, const char* message);
+    void okCancelMessage(const char* message) override;
+    void okCancelMessage(const char* title, const char* message) override;
+    void okCancelMessagePairs(
+        const char* title, const char* message, const View::FieldEntries& pairs)
+        override;
 
     std::pair<int, std::vector<std::string>> multipleSelectionMenu(
         const char* title, const char* message, const char* help,
-        std::vector<std::tuple<std::string, std::string, bool>> items);
+        View::MultipleSelectionEntries items)
+        override;
+
+    std::string listMenuImpl(const char* title, const char* message,
+        const std::vector<std::string>& items, const char* helpMessage)
+        override;
+
+    std::vector<std::string> collectListMenuImpl(const char* title,
+        const char* message, const std::vector<std::string>& items,
+        const char* helpMessage, View::ListButtonCallback addCallback)
+        override;
+
+    View::FieldEntries fieldMenuImpl(const char* title, const char* message,
+        const View::FieldEntries& items, const char* helpMessage)
+        override;
 
     // TODO:
     //  * Better template?
@@ -279,10 +296,8 @@ public:
      * into a percent (a 0 to 100 value)
      */
     bool progressMenu(const char* title, const char* message,
-        opencattus::services::CommandProxy&&,
-        std::function<std::optional<double>(
-            opencattus::services::CommandProxy&)>
-            fPercent);
+        opencattus::services::CommandProxy&&, View::ProgressCallback fPercent)
+        override;
 
     // TODO:
     //  * Optimize for std::string_view and std::string.
@@ -373,7 +388,8 @@ public:
     }
 
     bool yesNoQuestion(
-        const char* title, const char* message, const char* helpMessage);
+        const char* title, const char* message, const char* helpMessage)
+        override;
 };
 
 #endif // OPENCATTUS_NEWT_H_

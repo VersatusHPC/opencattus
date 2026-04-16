@@ -532,8 +532,8 @@ void Cluster::dumpData(const std::filesystem::path& answerfilePath)
         = getProvisioner() == Provisioner::xCAT ? "xcat" : "confluent";
     if (const auto ofed = getOFED(); ofed.has_value()) {
         answerfil.ofed.enabled = true;
-        answerfil.ofed.kind
-            = std::string(opencattus::utils::enums::toString(ofed->getKind()));
+        answerfil.ofed.kind = opencattus::utils::string::lower(
+            std::string(opencattus::utils::enums::toString(ofed->getKind())));
         answerfil.ofed.version = ofed->getVersion();
     }
     answerfil.slurm.mariadb_root_password = slurmMariaDBRootPassword;

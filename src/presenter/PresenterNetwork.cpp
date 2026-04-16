@@ -176,7 +176,7 @@ void NetworkCreator::saveNetworksToModel(Cluster& model)
 //  After the end of this class the temporary objects will be destroyed anyway.
 
 PresenterNetwork::PresenterNetwork(std::unique_ptr<Cluster>& model,
-    std::unique_ptr<Newt>& view, NetworkCreator& nc, Network::Profile profile,
+    std::unique_ptr<View>& view, NetworkCreator& nc, Network::Profile profile,
     Network::Type type)
     : Presenter(model, view)
     , m_network(std::make_unique<Network>(profile, type))

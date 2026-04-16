@@ -9,7 +9,7 @@
 namespace opencattus::presenter {
 
 PresenterLocale::PresenterLocale(
-    std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)
+    std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view)
     : Presenter(model, view)
 {
     auto availableLocales = opencattus::Singleton<IRunner>::get()->checkOutput(

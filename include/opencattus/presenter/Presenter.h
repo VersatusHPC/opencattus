@@ -11,7 +11,7 @@
 #include <opencattus/models/queuesystem.h>
 #include <opencattus/models/slurm.h>
 #include <opencattus/services/log.h>
-#include <opencattus/view/newt.h>
+#include <opencattus/view/view.h>
 
 namespace opencattus::presenter {
 
@@ -31,7 +31,7 @@ protected:
     //  - https://youtu.be/xnqTKD8uD64?t=1145
     //  - http://tinyurl.com/gotw91
     std::unique_ptr<Cluster>& m_model;
-    std::unique_ptr<Newt>& m_view;
+    std::unique_ptr<View>& m_view;
 
     struct Messages {
         struct Placeholder {
@@ -40,7 +40,7 @@ protected:
         };
     };
 
-    Presenter(std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)
+    Presenter(std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view)
         : m_model(model)
         , m_view(view)
     {

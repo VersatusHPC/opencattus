@@ -20,9 +20,23 @@ static std::vector<std::string> retrieveListSelectedItems(newtComponent list)
     return ret;
 }
 
+std::string Newt::listMenuImpl(const char* title, const char* message,
+    const std::vector<std::string>& items, const char* helpMessage)
+{
+    return Newt::listMenu(title, message, items, helpMessage);
+}
+
+std::vector<std::string> Newt::collectListMenuImpl(const char* title,
+    const char* message, const std::vector<std::string>& items,
+    const char* helpMessage, ListButtonCallback addCallback)
+{
+    return Newt::collectListMenu(
+        title, message, items, helpMessage, std::move(addCallback));
+}
+
 std::pair<int, std::vector<std::string>> Newt::multipleSelectionMenu(
     const char* title, const char* message, const char* help,
-    std::vector<std::tuple<std::string, std::string, bool>> items)
+    View::MultipleSelectionEntries items)
 {
     auto* form = newtForm(nullptr, nullptr, 0);
     newtFormSetWidth(form, m_suggestedWidth);

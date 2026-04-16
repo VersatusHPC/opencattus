@@ -227,7 +227,7 @@ int main(int argc, const char** argv)
 
     if (opts->enableTUI) {
         // Entrypoint; if the view is constructed it will start the TUI.
-        auto view = std::make_unique<Newt>();
+        std::unique_ptr<View> view = std::make_unique<Newt>();
         auto presenter
             = std::make_unique<opencattus::presenter::PresenterInstall>(
                 model, view);

@@ -37,7 +37,7 @@ private:
     };
 
 public:
-    PresenterTime(std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view);
+    PresenterTime(std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view);
 };
 
 };

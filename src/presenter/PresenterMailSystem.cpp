@@ -6,11 +6,13 @@
 #include <opencattus/functions.h>
 #include <opencattus/presenter/PresenterMailSystem.h>
 
+#include <boost/lexical_cast.hpp>
+
 using opencattus::services::Postfix;
 
 namespace opencattus::presenter {
 PresenterMailSystem::PresenterMailSystem(
-    std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)
+    std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view)
     : Presenter(model, view)
 {
 
