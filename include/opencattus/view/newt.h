@@ -66,6 +66,7 @@ protected:
     void abort() override;
     void helpMessage(const char*) override;
     static bool hasEmptyField(const struct newtWinEntry*);
+    static bool allowsEmptyField(const struct newtWinEntry&);
 
 public:
     Newt();

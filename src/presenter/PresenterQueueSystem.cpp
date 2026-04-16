@@ -23,7 +23,10 @@ PresenterQueueSystem::PresenterQueueSystem(
 
     // TODO: Placeholder data
     auto fieldsSLURM = std::to_array<std::pair<std::string, std::string>>(
-        { { Messages::SLURM::partition, "execution" } });
+        { { Messages::SLURM::partition, "execution" },
+            { Messages::SLURM::mariadbRootPassword, "mariadb-root" },
+            { Messages::SLURM::slurmDBPassword, "slurmdbd" },
+            { Messages::SLURM::storagePassword, "slurm-storage" } });
 
     if (auto& queue = m_model->getQueueSystem()) {
         switch (queue.value()->getKind()) {
@@ -38,6 +41,9 @@ PresenterQueueSystem::PresenterQueueSystem(
 
                 const auto& slurm = dynamic_cast<SLURM*>(queue.value().get());
                 slurm->setDefaultQueue(fieldsSLURM[0].second);
+                m_model->slurmMariaDBRootPassword = fieldsSLURM[1].second;
+                m_model->slurmDBPassword = fieldsSLURM[2].second;
+                m_model->slurmStoragePassword = fieldsSLURM[3].second;
                 LOG_DEBUG(
                     "Set SLURM default queue: {}", slurm->getDefaultQueue());
 
@@ -58,6 +64,10 @@ PresenterQueueSystem::PresenterQueueSystem(
                 LOG_DEBUG("Set PBS Execution Place: {}",
                     opencattus::utils::enums::toString<PBS::ExecutionPlace>(
                         pbs->getExecutionPlace()));
+                queue.value()->setDefaultQueue("execution");
+                m_model->slurmMariaDBRootPassword = "unused";
+                m_model->slurmDBPassword = "unused";
+                m_model->slurmStoragePassword = "unused";
 
                 break;
             }

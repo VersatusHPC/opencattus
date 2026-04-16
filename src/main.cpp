@@ -4,7 +4,9 @@
  */
 
 #include <cctype>
+#include <chrono>
 #include <cstdlib>
+#include <filesystem>
 
 #include <opencattus/const.h>
 #include <opencattus/dbus_client.h>
@@ -93,6 +95,23 @@ int runTestCommand(const std::string& testCommand,
     }
 #endif
     return EXIT_SUCCESS;
+}
+
+auto generatedTuiAnswerfilePath() -> std::filesystem::path
+{
+    const auto suffix
+        = std::chrono::system_clock::now().time_since_epoch().count();
+    return std::filesystem::temp_directory_path()
+        / fmt::format("opencattus-tui-{}.ini", suffix);
+}
+
+auto generateAnswerfileFromTuiModel(opencattus::models::Cluster& model)
+    -> std::unique_ptr<opencattus::models::AnswerFile>
+{
+    const auto path = generatedTuiAnswerfilePath();
+    model.dumpData(path);
+    LOG_INFO("Generated TUI answerfile at {}", path.string());
+    return std::make_unique<opencattus::models::AnswerFile>(path);
 }
 
 }; // anonymous namespace
@@ -212,6 +231,7 @@ int main(int argc, const char** argv)
         auto presenter
             = std::make_unique<opencattus::presenter::PresenterInstall>(
                 model, view);
+        answerfile = generateAnswerfileFromTuiModel(*model);
     }
 
     initializeSingletonsModel(std::move(model), std::move(answerfile));

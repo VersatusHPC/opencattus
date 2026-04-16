@@ -701,4 +701,46 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(answerfilePath);
         std::filesystem::remove(diskImagePath);
     }
+
+    TEST_CASE("dumpData round-trips OFED settings")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto sourcePath
+            = tempAnswerfilePath("opencattus-cluster-ofed-source");
+        const auto outputPath
+            = tempAnswerfilePath("opencattus-cluster-ofed-output");
+        const auto diskImagePath = tempIsoPath("opencattus-cluster-ofed");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(sourcePath, diskImagePath, interfaces.front(),
+            interfaces.front());
+        appendOFEDSection(sourcePath, "doca", "latest-3.2-LTS");
+
+        try {
+            AnswerFile sourceAnswerfile(sourcePath);
+            Cluster cluster;
+            cluster.fillData(sourceAnswerfile);
+
+            std::filesystem::remove(outputPath);
+            cluster.dumpData(outputPath);
+
+            AnswerFile dumpedAnswerfile(outputPath);
+
+            CHECK(dumpedAnswerfile.ofed.enabled);
+            CHECK(dumpedAnswerfile.ofed.kind == "doca");
+            REQUIRE(dumpedAnswerfile.ofed.version.has_value());
+            CHECK(dumpedAnswerfile.ofed.version.value() == "latest-3.2-LTS");
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while round-tripping OFED settings");
+        }
+
+        std::filesystem::remove(sourcePath);
+        std::filesystem::remove(outputPath);
+        std::filesystem::remove(diskImagePath);
+    }
 }

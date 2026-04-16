@@ -53,6 +53,15 @@ void Newt::abort()
     std::exit(EXIT_SUCCESS);
 }
 
+bool Newt::allowsEmptyField(const struct newtWinEntry& entry)
+{
+    if (entry.text == nullptr) {
+        return false;
+    }
+
+    return std::string_view(entry.text).contains("(optional)");
+}
+
 // TODO: Remove this method; this check must be done outside the view
 bool Newt::hasEmptyField(const struct newtWinEntry* entries)
 {
@@ -63,6 +72,10 @@ bool Newt::hasEmptyField(const struct newtWinEntry* entries)
      * return true if any value is empty based on the length of the string.
      */
     for (unsigned i = 0; entries[i].text; i++) {
+        if (allowsEmptyField(entries[i])) {
+            continue;
+        }
+
         if (strlen(*entries[i].value) == 0) {
             sprintf(message, "%s cannot be empty\n", entries[i].text);
 

@@ -6,6 +6,7 @@
 #include <opencattus/functions.h>
 #include <opencattus/presenter/PresenterNodesOperationalSystem.h>
 #include <opencattus/services/log.h>
+#include <opencattus/utils/string.h>
 
 #include <algorithm>
 #include <boost/algorithm/string/classification.hpp>
@@ -14,10 +15,118 @@
 #include <filesystem>
 #include <fmt/args.h>
 #include <fmt/core.h>
+#include <map>
 #include <ranges>
+#include <regex>
 #include <string_view>
 
+#ifdef BUILD_TESTING
+#include <doctest/doctest.h>
+#else
+#define DOCTEST_CONFIG_DISABLE
+#include <doctest/doctest.h>
+#endif
+
 namespace fs = std::filesystem;
+
+namespace {
+
+using OS = opencattus::models::OS;
+using PresenterNodesVersionCombo
+    = opencattus::presenter::PresenterNodesVersionCombo;
+
+auto defaultVersionComboFor(OS::Distro /*distro*/) -> PresenterNodesVersionCombo
+{
+    return { 9, 6, OS::Arch::x86_64 };
+}
+
+auto parseVersionString(std::string_view raw)
+    -> std::optional<std::pair<int, int>>
+{
+    const auto separator = raw.find('.');
+    if (separator == std::string_view::npos) {
+        return std::nullopt;
+    }
+
+    try {
+        return std::pair<int, int> {
+            std::stoi(std::string(raw.substr(0, separator))),
+            std::stoi(std::string(raw.substr(separator + 1))),
+        };
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+}
+
+auto parseArchitecture(std::string_view raw) -> std::optional<OS::Arch>
+{
+    const auto normalized
+        = opencattus::utils::string::lower(std::string(raw));
+    if (normalized.contains("x86_64")) {
+        return OS::Arch::x86_64;
+    }
+
+    if (normalized.contains("ppc64le")) {
+        return OS::Arch::ppc64le;
+    }
+
+    return std::nullopt;
+}
+
+auto makeOperatingSystem(
+    OS::Distro distro, const PresenterNodesVersionCombo& version)
+{
+    const auto [majorVersion, minorVersion, arch] = version;
+
+    switch (majorVersion) {
+        case 8:
+            return OS(distro, OS::Platform::el8,
+                static_cast<unsigned>(minorVersion), arch);
+        case 9:
+            return OS(distro, OS::Platform::el9,
+                static_cast<unsigned>(minorVersion), arch);
+        case 10:
+            return OS(distro, OS::Platform::el10,
+                static_cast<unsigned>(minorVersion), arch);
+        default:
+            throw std::runtime_error(
+                fmt::format("Unsupported OS version {}.{}", majorVersion,
+                    minorVersion));
+    }
+}
+
+auto inferVersionComboFromIso(
+    OS::Distro distro, std::string_view isoName)
+    -> std::optional<PresenterNodesVersionCombo>
+{
+    const auto arch = parseArchitecture(isoName);
+    if (!arch.has_value()) {
+        return std::nullopt;
+    }
+
+    std::smatch match;
+    const auto isoString = std::string(isoName);
+
+    if (distro == OS::Distro::OL) {
+        const std::regex olPattern(R"(R([0-9]+)-U([0-9]+))");
+        if (!std::regex_search(isoString, match, olPattern)) {
+            return std::nullopt;
+        }
+
+        return PresenterNodesVersionCombo { std::stoi(match[1].str()),
+            std::stoi(match[2].str()), arch.value() };
+    }
+
+    const std::regex genericPattern(R"(([0-9]+)\.([0-9]+))");
+    if (!std::regex_search(isoString, match, genericPattern)) {
+        return std::nullopt;
+    }
+
+    return PresenterNodesVersionCombo { std::stoi(match[1].str()),
+        std::stoi(match[2].str()), arch.value() };
+}
+
+} // namespace
 
 namespace opencattus::presenter {
 
@@ -55,64 +164,40 @@ std::string PresenterNodesOperationalSystem::getDownloadURL(
     return "?";
 }
 
-const std::unordered_map<OS::Distro, std::vector<PresenterNodesVersionCombo>>
-    version_map({ { OS::Distro::AlmaLinux,
-                      {
-                          { 9, 4, OS::Arch::x86_64 },
-                          { 9, 4, OS::Arch::ppc64le },
-                          { 9, 3, OS::Arch::x86_64 },
-                          { 9, 3, OS::Arch::ppc64le },
-                          { 9, 2, OS::Arch::x86_64 },
-                          { 9, 2, OS::Arch::ppc64le },
-                      } },
-        { OS::Distro::Rocky,
-            {
-                { 9, 4, OS::Arch::x86_64 },
-                { 9, 4, OS::Arch::ppc64le },
-                { 9, 3, OS::Arch::x86_64 },
-                { 9, 3, OS::Arch::ppc64le },
-                { 9, 2, OS::Arch::x86_64 },
-                { 9, 2, OS::Arch::ppc64le },
-            } },
-        { OS::Distro::OL,
-            {
-                { 9, 4, OS::Arch::x86_64 },
-                { 9, 3, OS::Arch::x86_64 },
-                { 9, 2, OS::Arch::x86_64 },
-            } } });
-
-std::optional<PresenterNodesVersionCombo>
-PresenterNodesOperationalSystem::selectVersion(OS::Distro distro)
+PresenterNodesVersionCombo PresenterNodesOperationalSystem::promptVersion(
+    OS::Distro distro, std::optional<PresenterNodesVersionCombo> initial)
 {
-    if (distro == OS::Distro::RHEL)
-        return std::nullopt;
+    auto [defaultMajor, defaultMinor, defaultArch]
+        = initial.value_or(defaultVersionComboFor(distro));
 
-    auto nameiter = version_map.at(distro)
-        | std::views::transform([](const PresenterNodesVersionCombo& c) {
-              auto [maj, min, arch] = c;
-              return fmt::format("{}.{} ({})", maj, min,
-                  opencattus::utils::enums::toString(arch));
-          });
+    auto metadata = std::to_array<std::pair<std::string, std::string>>(
+        { { Messages::OperationalSystemVersion::version,
+              fmt::format("{}.{}", defaultMajor, defaultMinor) },
+            { Messages::OperationalSystemVersion::architecture,
+                opencattus::utils::enums::toString(defaultArch) } });
 
-    std::vector<std::string> versions;
-    std::copy(
-        std::begin(nameiter), std::end(nameiter), std::back_inserter(versions));
+    while (true) {
+        metadata = m_view->fieldMenu(Messages::title,
+            Messages::OperationalSystemVersion::question, metadata,
+            Messages::OperationalSystemVersion::help);
 
-    auto version_to_download = m_view->listMenu(Messages::title,
-        Messages::OperationalSystemVersion::question, versions,
-        Messages::OperationalSystemVersion::help);
+        const auto parsedVersion = parseVersionString(metadata[0].second);
+        if (!parsedVersion.has_value()) {
+            m_view->message(
+                Messages::title, Messages::OperationalSystemVersion::invalidVersion);
+            continue;
+        }
 
-    if (auto findit
-        = std::find(versions.begin(), versions.end(), version_to_download);
-        findit != versions.end()) {
-        const auto currentver = std::distance(versions.begin(), findit);
-        const auto& vdistro = version_map.at(distro);
-        LOG_ASSERT(currentver >= 0, "currentver is negative");
-        return std::make_optional<PresenterNodesVersionCombo>(
-            vdistro[static_cast<size_t>(currentver)]);
+        const auto parsedArch = parseArchitecture(metadata[1].second);
+        if (!parsedArch.has_value()) {
+            m_view->message(
+                Messages::title, Messages::OperationalSystemVersion::invalidArch);
+            continue;
+        }
+
+        return PresenterNodesVersionCombo { parsedVersion->first,
+            parsedVersion->second, parsedArch.value() };
     }
-
-    return std::nullopt;
 }
 
 PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
@@ -131,29 +216,29 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
     distros["Rocky Linux"] = OS::Distro::Rocky;
     distros["Oracle Linux"] = OS::Distro::OL;
 
-    // Download remote ISO image or use local image
-
-    auto downloadIso = false;
-
-    downloadIso = m_view->yesNoQuestion(Messages::title,
+    const auto downloadIso = m_view->yesNoQuestion(Messages::title,
         Messages::OperationalSystemDownloadIso::FirstStage::question,
         Messages::OperationalSystemDirectoryPath::help);
 
     if (downloadIso) {
-
-        // Download remote ISO
         auto distroToDownload = m_view->listMenu(Messages::title,
             Messages::OperationalSystemDownloadIso::SecondStage::question,
             distroNames,
             Messages::OperationalSystemDownloadIso::SecondStage::help);
 
-        auto selectedDistro = distros.find(distroToDownload);
+        const auto selectedDistro = distros.find(distroToDownload);
+        LOG_ASSERT(selectedDistro != distros.end(), "selected distro missing");
+        if (selectedDistro->second == OS::Distro::RHEL) {
+            m_view->fatalMessage(
+                Messages::title, Messages::OperationalSystemVersion::rhelError);
+        }
 
-        auto versioncombo = selectVersion(selectedDistro->second);
+        const auto versioncombo = promptVersion(selectedDistro->second);
         std::string distroDownloadURL
-            = getDownloadURL(selectedDistro->second, *versioncombo);
+            = getDownloadURL(selectedDistro->second, versioncombo);
         std::string isoName
-            = distroDownloadURL.substr(distroDownloadURL.find_last_of('/'));
+            = distroDownloadURL.substr(
+                distroDownloadURL.find_last_of('/') + 1);
 
         //@TODO Implement newt GUI progress bar
         auto command = Singleton<IRunner>::get()->executeCommandIter(
@@ -204,11 +289,11 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
             });
 
         m_model->setDiskImage(fmt::format("/root/{}", isoName));
+        m_model->getHeadnode().setOS(
+            makeOperatingSystem(selectedDistro->second, versioncombo));
         LOG_DEBUG("Selected ISO: {}", fmt::format("/root/{}", isoName))
 
     } else {
-        // Operational system directory path selection
-
         auto isoDirectoryPath
             = std::to_array<std::pair<std::string, std::string>>(
                 { { Messages::OperationalSystemDirectoryPath::field,
@@ -231,41 +316,18 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
         LOG_DEBUG(
             "ISO directory path set to {}", isoDirectoryPath.data()->second);
 
-        // Operational system distro selection
-
         auto selectedDistroName = m_view->listMenu(Messages::title,
             Messages::OperationalSystemDistro::question, distroNames,
             Messages::OperationalSystemDistro::help);
 
-        auto selectedDistro = distros.find(selectedDistroName);
-
-        // Operational system iso selection
-
+        const auto selectedDistro = distros.find(selectedDistroName);
+        LOG_ASSERT(selectedDistro != distros.end(), "selected distro missing");
         auto isoRoot = isoDirectoryPath.data()->second;
         std::vector<std::string> isos;
 
         for (const auto& entry : fs::directory_iterator(isoRoot)) {
             if (entry.path().string().ends_with("iso")) {
                 auto formattedIsoName = entry.path().filename().string();
-
-                isos.emplace_back(formattedIsoName);
-
-                // TODO: this detection method is not reliable
-                // The right way should be to mount the ISO and check inside of
-                // it.
-
-                /**
-                   [root@opencattus home]# mount -o loop
-                 /opt/iso/opencattus-iso.iso /mnt mount: /mnt: WARNING: device
-                 write-protected, mounted read-only. [root@opencattus home]# ls
-                 /mnt AppStream  BaseOS  EFI images  isolinux  LICENSE
-                 media.repo  TRANS.TBL [root@opencattus home]# less
-                 /mnt/media.repo [InstallMedia] name=Rocky Linux 8.8
-                   mediaid=None
-                   metadata_expire=-1
-                   gpgcheck=0
-                   cost=500
-                 **/
                 switch (selectedDistro->second) {
                     case OS::Distro::RHEL:
                         if (formattedIsoName.contains("rhel")) {
@@ -291,15 +353,54 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
             }
         }
 
+        if (isos.empty()) {
+            m_view->fatalMessage(
+                Messages::title, Messages::OperationalSystem::noneFound);
+        }
+
         auto selectedIso = m_view->listMenu(Messages::title,
             Messages::OperationalSystem::question, isos,
             Messages::OperationalSystem::help);
 
-        m_model->setDiskImage(
-            fmt::format("{}/{}", isoDirectoryPath.data()->second, selectedIso));
+        const auto selectedIsoPath
+            = fmt::format("{}/{}", isoDirectoryPath.data()->second, selectedIso);
+        m_model->setDiskImage(selectedIsoPath);
+        const auto versioncombo = promptVersion(selectedDistro->second,
+            inferVersionComboFromIso(selectedDistro->second, selectedIso));
+        m_model->getHeadnode().setOS(
+            makeOperatingSystem(selectedDistro->second, versioncombo));
         LOG_DEBUG("Selected ISO: {}",
-            fmt::format("{}/{}", isoDirectoryPath.data()->second, selectedIso));
+            selectedIsoPath);
     }
 }
 
-};
+}; // namespace opencattus::presenter
+
+TEST_CASE("inferVersionComboFromIso parses Rocky ISO names")
+{
+    const auto inferred = inferVersionComboFromIso(
+        OS::Distro::Rocky, "Rocky-9.6-x86_64-dvd.iso");
+
+    REQUIRE(inferred.has_value());
+    const PresenterNodesVersionCombo expected { 9, 6, OS::Arch::x86_64 };
+    CHECK(inferred.value() == expected);
+}
+
+TEST_CASE("inferVersionComboFromIso parses Oracle Linux ISO names")
+{
+    const auto inferred = inferVersionComboFromIso(
+        OS::Distro::OL, "OracleLinux-R9-U7-x86_64-dvd.iso");
+
+    REQUIRE(inferred.has_value());
+    const PresenterNodesVersionCombo expected { 9, 7, OS::Arch::x86_64 };
+    CHECK(inferred.value() == expected);
+}
+
+TEST_CASE("makeOperatingSystem maps major versions to supported platforms")
+{
+    const auto os
+        = makeOperatingSystem(OS::Distro::Rocky, { 10, 1, OS::Arch::x86_64 });
+
+    CHECK(os.getPlatform() == OS::Platform::el10);
+    CHECK(os.getVersion() == "10.1");
+}

@@ -30,8 +30,22 @@ private:
                 = "Compute node root password";
             static constexpr const auto confirmRootPassword
                 = "Confirm compute node root password";
-            static constexpr const auto DiskImagePath
-                = "Disk image path of node OS";
+        };
+
+        struct Topology {
+            static constexpr const auto question
+                = "Enter the compute node topology and BMC defaults";
+            static constexpr const auto help
+                = Presenter::Messages::Placeholder::help;
+
+            static constexpr const auto sockets = "Sockets";
+            static constexpr const auto coresPerSocket = "Cores per socket";
+            static constexpr const auto threadsPerCore = "Threads per core";
+            static constexpr const auto realMemory = "Real memory (MiB)";
+            static constexpr const auto bmcUsername = "Generic BMC username";
+            static constexpr const auto bmcPassword = "Generic BMC password";
+            static constexpr const auto bmcSerialPort = "BMC serial port";
+            static constexpr const auto bmcSerialSpeed = "BMC serial speed";
         };
 
         struct Error {
@@ -39,6 +53,8 @@ private:
                 = "Prefix must start with a letter";
             static constexpr const auto paddingMax
                 = "We can only support up to 1000 nodes";
+            static constexpr const auto rootPasswordMismatch
+                = "The compute node root password confirmation does not match";
         };
 
         struct Quantity {
@@ -52,11 +68,14 @@ private:
             static constexpr const auto startNumber = "Node start number";
         };
 
-        struct MAC {
+        struct NodeEntry {
             static constexpr const auto question
-                = "Enter the MAC address for node";
+                = "Enter the management MAC and BMC address for node";
             static constexpr const auto help
                 = Presenter::Messages::Placeholder::help;
+
+            static constexpr const auto macAddress = "Management MAC address";
+            static constexpr const auto bmcAddress = "BMC address";
         };
     };
 

@@ -309,6 +309,18 @@ void AnswerFile::dumpPostfix()
     }
 }
 
+void AnswerFile::dumpOFED()
+{
+    if (!ofed.enabled) {
+        return;
+    }
+
+    m_keyfile.setString("ofed", "kind", ofed.kind);
+    if (ofed.version.has_value()) {
+        m_keyfile.setString("ofed", "version", ofed.version.value());
+    }
+}
+
 void AnswerFile::dumpOptions()
 {
     LOG_TRACE("Dump answerfile variables")
@@ -324,6 +336,7 @@ void AnswerFile::dumpOptions()
     dumpSlurm();
 
     dumpNodes();
+    dumpOFED();
     dumpPostfix();
 }
 

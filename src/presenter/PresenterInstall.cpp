@@ -13,10 +13,23 @@
 #include <opencattus/presenter/PresenterNetwork.h>
 #include <opencattus/presenter/PresenterNodes.h>
 #include <opencattus/presenter/PresenterNodesOperationalSystem.h>
+#include <opencattus/presenter/PresenterProvisioner.h>
 #include <opencattus/presenter/PresenterQueueSystem.h>
-#include <opencattus/presenter/PresenterRepository.h>
 #include <opencattus/presenter/PresenterTime.h>
 #include <opencattus/presenter/PresenterWelcome.h>
+
+namespace {
+
+struct NetworkMessages {
+    static constexpr const auto title = "Network settings";
+    static constexpr const auto serviceQuestion
+        = "Do you want to configure a service network?";
+    static constexpr const auto serviceHelp
+        = "Enable this when the cluster uses a dedicated service or BMC "
+          "network alongside the management network.";
+};
+
+} // namespace
 
 namespace opencattus::presenter {
 PresenterInstall::PresenterInstall(
@@ -42,9 +55,9 @@ PresenterInstall::PresenterInstall(
     Call<PresenterHostId>();
 #endif
 
-#if 1 // Repository
-    Call<PresenterRepository>();
-#endif
+    // Repository configuration still happens during execution. The previous
+    // TUI repository screen depended on post-init singletons and did not
+    // persist anything into the model.
 
     NetworkCreator nc;
 #if 1 // Networking
@@ -69,6 +82,17 @@ PresenterInstall::PresenterInstall(
             ex.what());
     }
 
+    if (m_view->yesNoQuestion(NetworkMessages::title,
+            NetworkMessages::serviceQuestion, NetworkMessages::serviceHelp)) {
+        try {
+            Call<PresenterNetwork>(nc, Network::Profile::Service);
+        } catch (const std::exception& ex) {
+            LOG_ERROR("Failed to add {} network: {}",
+                opencattus::utils::enums::toString(Network::Profile::Service),
+                ex.what());
+        }
+    }
+
 #endif
 
 #if 1 // Infiniband support
@@ -78,6 +102,7 @@ PresenterInstall::PresenterInstall(
 
 #if 1 // Compute nodes formation details
     Call<PresenterNodesOperationalSystem>();
+    Call<PresenterProvisioner>();
     Call<PresenterNodes>();
 #endif
 

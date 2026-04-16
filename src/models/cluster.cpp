@@ -530,11 +530,20 @@ void Cluster::dumpData(const std::filesystem::path& answerfilePath)
     }
     answerfil.system.provisioner
         = getProvisioner() == Provisioner::xCAT ? "xcat" : "confluent";
+    if (const auto ofed = getOFED(); ofed.has_value()) {
+        answerfil.ofed.enabled = true;
+        answerfil.ofed.kind
+            = std::string(opencattus::utils::enums::toString(ofed->getKind()));
+        answerfil.ofed.version = ofed->getVersion();
+    }
     answerfil.slurm.mariadb_root_password = slurmMariaDBRootPassword;
     answerfil.slurm.slurmdb_password = slurmDBPassword;
     answerfil.slurm.storage_password = slurmStoragePassword;
-    answerfil.slurm.partition_name
-        = std::string(m_queueSystem.value()->getDefaultQueue());
+    answerfil.slurm.partition_name = "execution";
+    if (const auto& queueSystem = getQueueSystem()) {
+        answerfil.slurm.partition_name
+            = std::string(queueSystem.value()->getDefaultQueue());
+    }
 
     answerfil.information.cluster_name = getName();
     answerfil.information.company_name = getCompanyName();

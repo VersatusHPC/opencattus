@@ -24,7 +24,7 @@ PresenterMailSystem::PresenterMailSystem(
                     Messages::Profile::help))
                   .value();
         m_model->setMailSystem(mailSystemProfile);
-        auto mailSystem = m_model->getMailSystem().value(); // copy here
+        auto& mailSystem = m_model->getMailSystem().value();
 
         LOG_DEBUG("Enabled Postfix with profile: {}",
             opencattus::utils::enums::toString<Postfix::Profile>(

@@ -13,6 +13,72 @@
 
 #include <algorithm>
 
+namespace {
+
+auto gatewayLabelFor(Network::Profile profile) -> const char*
+{
+    switch (profile) {
+        case Network::Profile::Service:
+        case Network::Profile::Application:
+            return "Gateway (optional)";
+        case Network::Profile::External:
+        case Network::Profile::Management:
+            return "Gateway";
+        default:
+            __builtin_unreachable();
+    }
+}
+
+auto fetchOptionalGateway(const std::string& interface) -> std::string
+{
+    try {
+        const auto gateway = Network::fetchGateway(interface);
+        if (gateway.is_unspecified()) {
+            return {};
+        }
+
+        return gateway.to_string();
+    } catch (const std::exception&) {
+        return {};
+    }
+}
+
+auto fetchOptionalDomainName() -> std::string
+{
+    try {
+        return Network::fetchDomainName();
+    } catch (const std::exception&) {
+        return {};
+    }
+}
+
+auto fetchOptionalNameservers() -> std::vector<address>
+{
+    try {
+        return Network::fetchNameservers();
+    } catch (const std::exception&) {
+        return {};
+    }
+}
+
+auto parseNameservers(std::string_view raw) -> std::vector<address>
+{
+    std::vector<address> parsed;
+    std::vector<std::string> parts;
+    boost::split(parts, std::string(raw), boost::is_any_of(", "),
+        boost::token_compress_on);
+
+    for (const auto& part : parts) {
+        if (!part.empty()) {
+            parsed.emplace_back(boost::asio::ip::make_address(part));
+        }
+    }
+
+    return parsed;
+}
+
+} // namespace
+
 namespace opencattus::presenter {
 
 bool NetworkCreator::checkIfProfileExists(Network::Profile profile)
@@ -65,7 +131,9 @@ void NetworkCreator::saveNetworksToModel(Cluster& model)
 
         netptr->setSubnetMask(net.subnetMask);
         netptr->setAddress(netptr->calculateAddress(conn.getAddress()));
-        netptr->setGateway(net.gateway);
+        if (!net.gateway.empty()) {
+            netptr->setGateway(net.gateway);
+        }
         netptr->setDomainName(net.name);
         netptr->setNameservers(net.domains);
 
@@ -162,7 +230,7 @@ void PresenterNetwork::createNetwork(
 
     std::string interface = networkInterfaceSelection(interfaceList);
 
-    std::vector<address> nameservers = Network::fetchNameservers();
+    std::vector<address> nameservers = fetchOptionalNameservers();
     std::vector<std::string> formattedNameservers;
     for (std::size_t i = 0; i < nameservers.size(); i++) {
         formattedNameservers.emplace_back(nameservers[i].to_string());
@@ -173,10 +241,9 @@ void PresenterNetwork::createNetwork(
               Connection::fetchAddress(interface).to_string() },
             { Messages::IP::subnetMask,
                 Network::fetchSubnetMask(interface).to_string() },
-            { Messages::IP::gateway,
-                Network::fetchGateway(interface).to_string() },
+            { gatewayLabelFor(ncd.profile), fetchOptionalGateway(interface) },
             // Nameserver definitions
-            { Messages::Domain::name, Network::fetchDomainName() },
+            { Messages::Domain::name, fetchOptionalDomainName() },
             { Messages::Domain::servers,
                 fmt::format("{}", fmt::join(formattedNameservers, ", ")) } });
 
@@ -197,7 +264,7 @@ void PresenterNetwork::createNetwork(
 
     // Domain Data
     ncd.name = networkDetails[i++].second;
-    ncd.domains = nameservers;
+    ncd.domains = parseNameservers(networkDetails[i++].second);
 }
 
 }
