@@ -283,28 +283,43 @@ void AnswerFile::dumpPostfix()
 
     auto profileName = opencattus::utils::enums::toString(postfix.profile);
     m_keyfile.setString("postfix", "profile", std::string { profileName });
-    m_keyfile.setString(
-        "postfix", "smtpd_tls_cert_file", postfix.cert_file.string());
-    m_keyfile.setString(
-        "postfix", "smtpd_tls_key_file", postfix.key_file.string());
+    if (!postfix.destination.empty()) {
+        m_keyfile.setString("postfix", "destination",
+            boost::algorithm::join(postfix.destination, ", "));
+    }
+    if (!postfix.cert_file.empty()) {
+        m_keyfile.setString(
+            "postfix", "smtpd_tls_cert_file", postfix.cert_file.string());
+    }
+    if (!postfix.key_file.empty()) {
+        m_keyfile.setString(
+            "postfix", "smtpd_tls_key_file", postfix.key_file.string());
+    }
 
     switch (postfix.profile) {
         case Postfix::Profile::Local:
             break;
         case Postfix::Profile::Relay:
-            m_keyfile.setString(
-                "postfix.relay", "server", postfix.smtp->server);
-            m_keyfile.setString(
-                "postfix.relay", "port", std::to_string(postfix.smtp->port));
+            if (postfix.smtp.has_value()) {
+                m_keyfile.setString(
+                    "postfix.relay", "server", postfix.smtp->server);
+                m_keyfile.setString("postfix.relay", "port",
+                    std::to_string(postfix.smtp->port));
+            }
             break;
         case Postfix::Profile::SASL:
-            m_keyfile.setString("postfix.sasl", "server", postfix.smtp->server);
-            m_keyfile.setString(
-                "postfix.sasl", "port", std::to_string(postfix.smtp->port));
-            m_keyfile.setString(
-                "postfix.sasl", "username", postfix.smtp->sasl->username);
-            m_keyfile.setString(
-                "postfix.sasl", "password", postfix.smtp->sasl->password);
+            if (postfix.smtp.has_value()) {
+                m_keyfile.setString(
+                    "postfix.sasl", "server", postfix.smtp->server);
+                m_keyfile.setString(
+                    "postfix.sasl", "port", std::to_string(postfix.smtp->port));
+                if (postfix.smtp->sasl.has_value()) {
+                    m_keyfile.setString("postfix.sasl", "username",
+                        postfix.smtp->sasl->username);
+                    m_keyfile.setString("postfix.sasl", "password",
+                        postfix.smtp->sasl->password);
+                }
+            }
             break;
     }
 }
@@ -716,9 +731,12 @@ void AnswerFile::loadPostfix()
 
     postfix.enabled = true;
 
-    boost::split(postfix.destination,
-        m_keyfile.getString("postfix", "destination"), boost::is_any_of(", "),
-        boost::token_compress_on);
+    if (const auto destination
+        = m_keyfile.getStringOpt("postfix", "destination");
+        destination.has_value() && !destination->empty()) {
+        boost::split(postfix.destination, destination.value(),
+            boost::is_any_of(", "), boost::token_compress_on);
+    }
 
     auto castProfile = opencattus::utils::enums::ofStringOpt<Postfix::Profile>(
         m_keyfile.getString("postfix", "profile"),
@@ -751,8 +769,10 @@ void AnswerFile::loadPostfix()
             break;
     }
 
-    postfix.cert_file = m_keyfile.getString("postfix", "smtpd_tls_cert_file");
-    postfix.key_file = m_keyfile.getString("postfix", "smtpd_tls_key_file");
+    postfix.cert_file
+        = m_keyfile.getStringOpt("postfix", "smtpd_tls_cert_file").value_or("");
+    postfix.key_file
+        = m_keyfile.getStringOpt("postfix", "smtpd_tls_key_file").value_or("");
 }
 
 void AnswerFile::loadOFED()

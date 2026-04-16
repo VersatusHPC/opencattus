@@ -533,7 +533,7 @@ void Cluster::dumpData(const std::filesystem::path& answerfilePath)
     if (const auto ofed = getOFED(); ofed.has_value()) {
         answerfil.ofed.enabled = true;
         answerfil.ofed.kind = opencattus::utils::string::lower(
-            std::string(opencattus::utils::enums::toString(ofed->getKind())));
+            opencattus::utils::enums::toString(ofed->getKind()));
         answerfil.ofed.version = ofed->getVersion();
     }
     answerfil.slurm.mariadb_root_password = slurmMariaDBRootPassword;
@@ -543,6 +543,45 @@ void Cluster::dumpData(const std::filesystem::path& answerfilePath)
     if (const auto& queueSystem = getQueueSystem()) {
         answerfil.slurm.partition_name
             = std::string(queueSystem.value()->getDefaultQueue());
+    }
+    if (const auto& mailSystem = getMailSystem(); mailSystem.has_value()) {
+        answerfil.postfix.enabled = true;
+        answerfil.postfix.profile = mailSystem->getProfile();
+
+        if (const auto& destinations = mailSystem->getDestination();
+            destinations.has_value()) {
+            answerfil.postfix.destination = destinations.value();
+        }
+
+        if (const auto& certFile = mailSystem->getCertFile();
+            certFile.has_value()) {
+            answerfil.postfix.cert_file = certFile.value();
+        }
+
+        if (const auto& keyFile = mailSystem->getKeyFile();
+            keyFile.has_value()) {
+            answerfil.postfix.key_file = keyFile.value();
+        }
+
+        if (const auto& smtpServer = mailSystem->getSMTPServer();
+            smtpServer.has_value() && mailSystem->getPort().has_value()) {
+            answerfil.postfix.smtp.emplace();
+            answerfil.postfix.smtp->server = smtpServer.value();
+            answerfil.postfix.smtp->port
+                = static_cast<int>(mailSystem->getPort().value());
+
+            if (mailSystem->getProfile() == Postfix::Profile::SASL) {
+                answerfil.postfix.smtp->sasl.emplace();
+                if (const auto& username = mailSystem->getUsername();
+                    username.has_value()) {
+                    answerfil.postfix.smtp->sasl->username = username.value();
+                }
+                if (const auto& password = mailSystem->getPassword();
+                    password.has_value()) {
+                    answerfil.postfix.smtp->sasl->password = password.value();
+                }
+            }
+        }
     }
 
     answerfil.information.cluster_name = getName();

@@ -52,6 +52,7 @@ using opencattus::presenter::PresenterQueueSystem;
 using opencattus::services::CommandProxy;
 using opencattus::services::IRunner;
 using opencattus::services::Options;
+using opencattus::services::Postfix;
 
 auto tempPath(std::string_view stem, std::string_view extension)
     -> std::filesystem::path
@@ -91,7 +92,7 @@ public:
         const std::string& cmd, opencattus::services::Stream /*out*/) override
     {
         m_commands.push_back(cmd);
-        return CommandProxy { };
+        return CommandProxy {};
     }
 
     void checkCommand(const std::string& cmd) override
@@ -355,7 +356,7 @@ auto hasInfinibandInterface() -> bool
 }
 
 void initializePresenterTestEnvironment(
-    ScriptedRunner::Outputs outputs = ScriptedRunner::Outputs { })
+    ScriptedRunner::Outputs outputs = ScriptedRunner::Outputs {})
 {
     opencattus::Singleton<const Options>::init(
         std::make_unique<const Options>(Options {
@@ -400,7 +401,7 @@ void addHeadnodeNetwork(Cluster& cluster, Network::Profile profile,
     std::string_view interface, std::string_view networkAddress,
     std::string_view connectionAddress, std::string_view subnetMask,
     std::string_view domainName,
-    const std::vector<std::string>& nameservers = { },
+    const std::vector<std::string>& nameservers = {},
     std::optional<std::string_view> gateway = std::nullopt)
 {
     auto network = std::make_unique<Network>(profile, Network::Type::Ethernet);
@@ -426,6 +427,47 @@ void addHeadnodeNetwork(Cluster& cluster, Network::Profile profile,
 
 TEST_SUITE("opencattus::presenter::tui")
 {
+    TEST_CASE("mail questionnaire stores postfix SASL settings on the model")
+    {
+        initializePresenterTestEnvironment(defaultRunnerOutputs());
+
+        auto model = std::make_unique<Cluster>();
+        seedClusterMetadata(*model);
+
+        auto state = std::make_shared<ScriptedViewState>();
+        state->responses = {
+            yesNo(true),
+            select("SASL"),
+            fields({ "mail.cluster.example.com",
+                "/etc/pki/tls/certs/cluster.example.com.cer",
+                "/etc/pki/tls/private/cluster.example.com.key" }),
+            fields(
+                { "smtp.example.com", "587", "relayUser", "examplePassword" }),
+        };
+
+        std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
+        PresenterMailSystem(model, view);
+
+        REQUIRE(model->getMailSystem().has_value());
+        const auto& mailSystem = model->getMailSystem().value();
+        CHECK(mailSystem.getProfile() == Postfix::Profile::SASL);
+        CHECK(mailSystem.getHostname().value() == "headnode");
+        CHECK(mailSystem.getDomain().value() == "cluster.example.com");
+        REQUIRE(mailSystem.getDestination().has_value());
+        CHECK(mailSystem.getDestination().value()
+            == std::vector<std::string> { "mail.cluster.example.com" });
+        CHECK(mailSystem.getSMTPServer().value() == "smtp.example.com");
+        CHECK(mailSystem.getPort().value() == 587);
+        CHECK(mailSystem.getUsername().value() == "relayUser");
+        CHECK(mailSystem.getPassword().value() == "examplePassword");
+        CHECK(mailSystem.getCertFile().value()
+            == std::filesystem::path(
+                "/etc/pki/tls/certs/cluster.example.com.cer"));
+        CHECK(mailSystem.getKeyFile().value()
+            == std::filesystem::path(
+                "/etc/pki/tls/private/cluster.example.com.key"));
+    }
+
     TEST_CASE("compute questionnaire presenters populate the cluster model")
     {
         initializePresenterTestEnvironment(defaultRunnerOutputs());
@@ -459,7 +501,13 @@ TEST_SUITE("opencattus::presenter::tui")
             fields({ "52:54:00:00:20:12", "172.16.0.12" }),
             select("SLURM"),
             fields({ "batch", "dbroot", "slurmdb", "storagepass" }),
-            yesNo(false),
+            yesNo(true),
+            select("SASL"),
+            fields({ "mail.cluster.example.com",
+                "/etc/pki/tls/certs/cluster.example.com.cer",
+                "/etc/pki/tls/private/cluster.example.com.key" }),
+            fields(
+                { "smtp.example.com", "587", "relayUser", "examplePassword" }),
         };
 
         std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
@@ -477,7 +525,11 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(model->slurmMariaDBRootPassword == "dbroot");
         CHECK(model->slurmDBPassword == "slurmdb");
         CHECK(model->slurmStoragePassword == "storagepass");
-        CHECK_FALSE(model->getMailSystem().has_value());
+        REQUIRE(model->getMailSystem().has_value());
+        CHECK(model->getMailSystem()->getProfile() == Postfix::Profile::SASL);
+        CHECK(model->getMailSystem()->getSMTPServer().value()
+            == "smtp.example.com");
+        CHECK(model->getMailSystem()->getUsername().value() == "relayUser");
 
         model->dumpData(outputPath);
         AnswerFile answerfile(outputPath);
@@ -486,6 +538,22 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(answerfile.system.version == "9.6");
         CHECK(answerfile.slurm.partition_name == "batch");
         CHECK(answerfile.slurm.mariadb_root_password == "dbroot");
+        REQUIRE(answerfile.postfix.enabled);
+        CHECK(answerfile.postfix.profile == Postfix::Profile::SASL);
+        CHECK(answerfile.postfix.destination
+            == std::vector<std::string> { "mail.cluster.example.com" });
+        CHECK(answerfile.postfix.cert_file
+            == std::filesystem::path(
+                "/etc/pki/tls/certs/cluster.example.com.cer"));
+        CHECK(answerfile.postfix.key_file
+            == std::filesystem::path(
+                "/etc/pki/tls/private/cluster.example.com.key"));
+        REQUIRE(answerfile.postfix.smtp.has_value());
+        CHECK(answerfile.postfix.smtp->server == "smtp.example.com");
+        CHECK(answerfile.postfix.smtp->port == 587);
+        REQUIRE(answerfile.postfix.smtp->sasl.has_value());
+        CHECK(answerfile.postfix.smtp->sasl->username == "relayUser");
+        CHECK(answerfile.postfix.smtp->sasl->password == "examplePassword");
         CHECK(answerfile.nodes.nodes.size() == 2);
         REQUIRE(answerfile.nodes.nodes[0].hostname.has_value());
         CHECK(answerfile.nodes.nodes[0].hostname.value() == "n01");

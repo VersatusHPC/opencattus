@@ -25,13 +25,25 @@ private:
                 = Presenter::Messages::Placeholder::help;
         };
 
+        struct Common {
+            static constexpr const auto question
+                = "Enter optional Postfix delivery settings";
+            static constexpr const auto help
+                = Presenter::Messages::Placeholder::help;
+
+            static constexpr const auto destination
+                = "Additional destinations (comma-separated)";
+            static constexpr const auto certFile = "TLS certificate file";
+            static constexpr const auto keyFile = "TLS key file";
+        };
+
         struct Relay {
             static constexpr const auto question
                 = "Enter the destination MTA information to relay messages";
             static constexpr const auto help
                 = Presenter::Messages::Placeholder::help;
 
-            static constexpr const auto hostname = "Hostname of the MTA";
+            static constexpr const auto hostname = "SMTP server";
             static constexpr const auto port = "Port";
         };
 
@@ -42,7 +54,7 @@ private:
             static constexpr const auto help
                 = Presenter::Messages::Placeholder::help;
 
-            static constexpr const auto hostname = "Hostname of the MTA";
+            static constexpr const auto hostname = "SMTP server";
             static constexpr const auto port = "Port";
             static constexpr const auto username = "Username";
             static constexpr const auto password = "Password";
