@@ -14,7 +14,12 @@ class PresenterLocale : public Presenter {
 private:
     struct Messages {
         static constexpr const auto title = "Locale settings";
-        static constexpr const auto question = "Pick your default locale";
+        static constexpr const auto question
+            = "Pick the default locale language";
+        static constexpr const auto regionQuestion
+            = "Pick the regional UTF-8 locale";
+        static constexpr const auto legacyQuestion
+            = "Pick a legacy or non-UTF-8 locale";
         static constexpr const auto help
             = Presenter::Messages::Placeholder::help;
     };
