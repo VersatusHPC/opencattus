@@ -27,12 +27,6 @@ architectural pattern based on
 where the components can be easily swapped or expanded in the future if
 needed.
 
-## Major features to be implemented
-
-* Localization support.
-* Always running daemon to ease cluster maintenance.
-* Static binaries.
-
 ## Dependencies
 
 * OpenCATTUS requires [boost](https://www.boost.org) C++ libraries.
@@ -59,15 +53,10 @@ automatically.
 
 ## Decisions
 
-* OpenCATTUS uses C++23 as the programming languages. We are not looking
-  for memory and performance optimization here, we strive for correctness. The
-  features that we want are a
-  flexible software that can interact with the Operating System without much
-  hassle. We don't prematurely optimize for resources, but we avoid unnecessary
-  dynamic memory
-  allocations even if this
-  costs some system resources, which are pretty much abundant anyway on an
-  HPC system manager (the headnode).
+* OpenCATTUS uses C++23 because it fits the system-level integration work of
+  the project and matches the libraries we rely on. The priority here is
+  correctness and predictable interaction with the operating system, not
+  squeezing out every last unit of performance on the headnode.
 * The [newt](https://pagure.io/newt) library is chosen since it seems to be the
   default library to do
   terminal composing on Linux systems, which is the goal here. We are basically
@@ -100,18 +89,12 @@ automatically.
   projects to enhance them, so we directly benefit from those changes.
 * OpenCATTUS is not made to run inside a container. It needs _bare metal_
   access.
-* Why this isn't written in the __whatever__ language since it's more modern?
-  -- _Simply because I tend to write better C++ and C code than other languages,
-  and the libraries and bindings that I need, and willing to use in the future,
-  were promptly available in C++ or C. Also C++ is very good at managing an OS
-  directly. We're aware that Python can do it too, but Python would create more
-  issues than C++ in this case._
 
 ## Status
 
 OpenCATTUS is alpha quality software. Some features are still missing, but
 they are on the roadmap. Production use should be done with caution and with
-preliminar testing.
+preliminary testing.
 
 ## Building
 
@@ -120,8 +103,7 @@ nature and `root` execution requirements.
 
 ### Recommended VM settings
 
-* EL8.10, EL9.6, or EL10 and higher based system with **minimal** package selection
-* EL10 support is limited to compilation and development purposes
+* EL8.10, EL9.6, or EL10-based system with **minimal** package selection
 * Half of system CPU cores as vCPU
 * At least 4GB of RAM
 * 50GB of Disk
@@ -148,8 +130,8 @@ Finally, to build the software just run the commands:
  $ cmake --build ./build
 ```
 
-Resulting binary will be available on `/build/src` directory in the root
-directory of the project.
+The resulting binary will be available under `./build/src` in the project
+root.
 
 As a final warning: running the software without **DUMMY** option will probably
 damage the running OS if they run as **root**. Be advised.
