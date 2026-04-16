@@ -89,7 +89,7 @@ public:
         const std::string& cmd, opencattus::services::Stream /*out*/) override
     {
         m_commands.push_back(cmd);
-        return CommandProxy {};
+        return CommandProxy { };
     }
 
     void checkCommand(const std::string& cmd) override
@@ -109,8 +109,7 @@ public:
         return it->second;
     }
 
-    int downloadFile(
-        const std::string& url, const std::string& file) override
+    int downloadFile(const std::string& url, const std::string& file) override
     {
         m_commands.push_back(fmt::format("download {} {}", url, file));
         return 0;
@@ -163,8 +162,8 @@ private:
     template <typename T> auto pop(std::string_view where) -> T
     {
         if (m_state->responses.empty()) {
-            throw std::runtime_error(fmt::format(
-                "No scripted response available for {}", where));
+            throw std::runtime_error(
+                fmt::format("No scripted response available for {}", where));
         }
 
         if (const auto value = std::get_if<T>(&m_state->responses.front())) {
@@ -173,15 +172,14 @@ private:
             return out;
         }
 
-        throw std::runtime_error(fmt::format(
-            "Unexpected scripted response type for {}", where));
+        throw std::runtime_error(
+            fmt::format("Unexpected scripted response type for {}", where));
     }
 
     void recordMessage(const char* title, const char* message)
     {
-        m_state->messages.emplace_back(
-            fmt::format("{}|{}", title == nullptr ? "" : title,
-                message == nullptr ? "" : message));
+        m_state->messages.emplace_back(fmt::format("{}|{}",
+            title == nullptr ? "" : title, message == nullptr ? "" : message));
     }
 
 public:
@@ -200,7 +198,10 @@ public:
         recordMessage("help", message);
     }
 
-    void message(const char* message) override { recordMessage(nullptr, message); }
+    void message(const char* message) override
+    {
+        recordMessage(nullptr, message);
+    }
 
     void message(const char* title, const char* message) override
     {
@@ -249,8 +250,9 @@ public:
         recordMessage(title, message);
         const auto reply = pop<ListReply>("listMenu");
         if (std::find(items.begin(), items.end(), reply.value) == items.end()) {
-            throw std::runtime_error(fmt::format(
-                "Scripted list selection '{}' not present in menu", reply.value));
+            throw std::runtime_error(
+                fmt::format("Scripted list selection '{}' not present in menu",
+                    reply.value));
         }
 
         return reply.value;
@@ -258,7 +260,8 @@ public:
 
     std::vector<std::string> collectListMenuImpl(const char* title,
         const char* message, const std::vector<std::string>& /*items*/,
-        const char* /*helpMessage*/, ListButtonCallback /*addCallback*/) override
+        const char* /*helpMessage*/,
+        ListButtonCallback /*addCallback*/) override
     {
         recordMessage(title, message);
         return pop<CollectListReply>("collectListMenu").values;
@@ -270,9 +273,9 @@ public:
         recordMessage(title, message);
         const auto reply = pop<FieldReply>("fieldMenu");
         if (reply.values.size() != items.size()) {
-            throw std::runtime_error(fmt::format(
-                "Expected {} field values, got {}", items.size(),
-                reply.values.size()));
+            throw std::runtime_error(
+                fmt::format("Expected {} field values, got {}", items.size(),
+                    reply.values.size()));
         }
 
         FieldEntries out = items;
@@ -287,7 +290,8 @@ public:
         CommandProxy&& /*command*/, ProgressCallback /*fPercent*/) override
     {
         recordMessage(title, message);
-        throw std::runtime_error("Unexpected progressMenu call in scripted view");
+        throw std::runtime_error(
+            "Unexpected progressMenu call in scripted view");
     }
 
     bool yesNoQuestion(const char* title, const char* message,
@@ -343,7 +347,7 @@ auto usableHostInterfaces() -> std::vector<std::string>
 }
 
 void initializePresenterTestEnvironment(
-    ScriptedRunner::Outputs outputs = ScriptedRunner::Outputs {})
+    ScriptedRunner::Outputs outputs = ScriptedRunner::Outputs { })
 {
     opencattus::Singleton<const Options>::init(
         std::make_unique<const Options>(Options {
@@ -366,8 +370,8 @@ auto defaultRunnerOutputs() -> ScriptedRunner::Outputs
 
 auto createTestIsoDirectory(std::string_view stem) -> std::filesystem::path
 {
-    const auto dir = std::filesystem::temp_directory_path()
-        / fmt::format("{}-isos", stem);
+    const auto dir
+        = std::filesystem::temp_directory_path() / fmt::format("{}-isos", stem);
     std::filesystem::create_directories(dir);
     std::ofstream(dir / "Rocky-9.6-x86_64-dvd.iso").close();
     return dir;
@@ -388,7 +392,7 @@ void addHeadnodeNetwork(Cluster& cluster, Network::Profile profile,
     std::string_view interface, std::string_view networkAddress,
     std::string_view connectionAddress, std::string_view subnetMask,
     std::string_view domainName,
-    const std::vector<std::string>& nameservers = {},
+    const std::vector<std::string>& nameservers = { },
     std::optional<std::string_view> gateway = std::nullopt)
 {
     auto network = std::make_unique<Network>(profile, Network::Type::Ethernet);
@@ -440,8 +444,8 @@ TEST_SUITE("opencattus::presenter::tui")
             fields({ "9.6", "x86_64" }),
             select("confluent"),
             fields({ "n", "2", "192.168.30.101", "labroot", "labroot" }),
-            fields({ "2", "16", "1", "65536", "admin", "secret", "1",
-                "115200" }),
+            fields(
+                { "2", "16", "1", "65536", "admin", "secret", "1", "115200" }),
             fields({ "2" }),
             fields({ "52:54:00:00:20:11", "172.16.0.11" }),
             fields({ "52:54:00:00:20:12", "172.16.0.12" }),
@@ -516,8 +520,8 @@ TEST_SUITE("opencattus::presenter::tui")
             .domains = { boost::asio::ip::make_address("1.1.1.1") },
         }));
 
-        PresenterNetwork(
-            model, view, nc, Network::Profile::Service, Network::Type::Ethernet);
+        PresenterNetwork(model, view, nc, Network::Profile::Service,
+            Network::Type::Ethernet);
         nc.saveNetworksToModel(*model);
 
         CHECK(state->responses.empty());
@@ -572,8 +576,8 @@ TEST_SUITE("opencattus::presenter::tui")
             fields({ "9.6", "x86_64" }),
             select("confluent"),
             fields({ "n", "2", "192.168.30.101", "labroot", "labroot" }),
-            fields({ "1", "8", "2", "32768", "admin", "secret", "1",
-                "115200" }),
+            fields(
+                { "1", "8", "2", "32768", "admin", "secret", "1", "115200" }),
             fields({ "2" }),
             fields({ "52:54:00:00:20:11", "172.16.0.11" }),
             fields({ "52:54:00:00:20:12", "172.16.0.12" }),

@@ -26,9 +26,8 @@ using opencattus::models::CPU;
 using opencattus::models::Node;
 using opencattus::models::OS;
 
-auto buildNodeName(
-    std::string_view prefix, std::size_t index, std::size_t padding)
-    -> std::string
+auto buildNodeName(std::string_view prefix, std::size_t index,
+    std::size_t padding) -> std::string
 {
     return fmt::format("{}{:0>{}}", prefix, index, padding);
 }
@@ -51,7 +50,8 @@ PresenterNodes::PresenterNodes(
     m_view->message(Messages::title, Messages::message);
 
     auto fields = std::to_array<std::pair<std::string, std::string>>({
-        { Messages::Nodes::prefix, "n" }, { Messages::Nodes::padding, "2" },
+        { Messages::Nodes::prefix, "n" },
+        { Messages::Nodes::padding, "2" },
         { Messages::Nodes::startIP, "" },
         { Messages::Nodes::rootPassword, "" },
         { Messages::Nodes::confirmRootPassword, "" },
@@ -80,8 +80,7 @@ retry:
     }
 
     if (fields[3].second != fields[4].second) {
-        m_view->message(
-            Messages::title, Messages::Error::rootPasswordMismatch);
+        m_view->message(Messages::title, Messages::Error::rootPasswordMismatch);
         goto retry;
     }
 
@@ -102,11 +101,12 @@ retry:
         { Messages::Topology::bmcSerialSpeed, "9600" },
     });
 
-    topology = m_view->fieldMenu(Messages::title,
-        Messages::Topology::question, topology, Messages::Topology::help);
+    topology = m_view->fieldMenu(Messages::title, Messages::Topology::question,
+        topology, Messages::Topology::help);
 
     i = 0;
-    m_model->nodeSockets = boost::lexical_cast<std::size_t>(topology[i++].second);
+    m_model->nodeSockets
+        = boost::lexical_cast<std::size_t>(topology[i++].second);
     m_model->nodeCoresPerSocket
         = boost::lexical_cast<std::size_t>(topology[i++].second);
     m_model->nodeThreadsPerCore
@@ -150,7 +150,8 @@ retry:
                 .c_str(),
             nodeFields, Messages::NodeEntry::help);
 
-        const auto nodeAddress = offsetIPv4Address(m_model->nodeStartIP, node - 1);
+        const auto nodeAddress
+            = offsetIPv4Address(m_model->nodeStartIP, node - 1);
         BMC bmc(nodeFields[1].second, m_model->nodeBMCUsername,
             m_model->nodeBMCPassword, m_model->nodeBMCSerialPort,
             m_model->nodeBMCSerialSpeed, BMC::kind::IPMI);
@@ -160,7 +161,8 @@ retry:
         connection.setMAC(nodeFields[0].second);
         connection.setAddress(nodeAddress);
 
-        Node newNode(nodeName, nodeOS, nodeCPU, std::move(nodeConnections), bmc);
+        Node newNode(
+            nodeName, nodeOS, nodeCPU, std::move(nodeConnections), bmc);
         newNode.setPrefix(std::optional<std::string> { m_model->nodePrefix });
         newNode.setPadding(std::optional<std::size_t> { m_model->nodePadding });
         newNode.setNodeStartIp(std::optional<address> { nodeAddress });

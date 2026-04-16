@@ -28,10 +28,8 @@ private:
             static constexpr const auto partition = "Partition name";
             static constexpr const auto mariadbRootPassword
                 = "MariaDB root password";
-            static constexpr const auto slurmDBPassword
-                = "slurmdbd password";
-            static constexpr const auto storagePassword
-                = "Storage password";
+            static constexpr const auto slurmDBPassword = "slurmdbd password";
+            static constexpr const auto storagePassword = "Storage password";
         };
 
         struct PBS {

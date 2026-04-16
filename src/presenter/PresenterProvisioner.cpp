@@ -71,21 +71,20 @@ PresenterProvisioner::PresenterProvisioner(
 
     const auto selectedName = m_view->listMenu(
         Messages::title, Messages::question, choices, Messages::help);
-    const auto selectedIt = std::find(choices.begin(), choices.end(),
-        selectedName);
+    const auto selectedIt
+        = std::find(choices.begin(), choices.end(), selectedName);
     LOG_ASSERT(selectedIt != choices.end(),
         "selected provisioner is not present on the choices list");
-    m_model->setProvisioner(
-        supported[static_cast<std::size_t>(
-            std::distance(choices.begin(), selectedIt))]);
+    m_model->setProvisioner(supported[static_cast<std::size_t>(
+        std::distance(choices.begin(), selectedIt))]);
 }
 
 } // namespace opencattus::presenter
 
 TEST_CASE("supportedProvisionersFor keeps EL10 on confluent")
 {
-    const auto supported
-        = supportedProvisionersFor(OS(OS::Distro::Rocky, OS::Platform::el10, 1));
+    const auto supported = supportedProvisionersFor(
+        OS(OS::Distro::Rocky, OS::Platform::el10, 1));
 
     CHECK(supported
         == std::vector<Cluster::Provisioner> {

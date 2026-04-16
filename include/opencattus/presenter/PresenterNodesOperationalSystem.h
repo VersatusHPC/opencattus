@@ -89,8 +89,7 @@ private:
         };
     };
 
-    PresenterNodesVersionCombo promptVersion(
-        OS::Distro distro,
+    PresenterNodesVersionCombo promptVersion(OS::Distro distro,
         std::optional<PresenterNodesVersionCombo> initial = std::nullopt);
     std::string getDownloadURL(
         OS::Distro distro, PresenterNodesVersionCombo version);

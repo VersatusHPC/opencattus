@@ -28,14 +28,12 @@ void initializeOptionsSingleton()
 
 auto tempAnswerfilePath(std::string_view stem) -> std::filesystem::path
 {
-    return std::filesystem::temp_directory_path()
-        / fmt::format("{}.ini", stem);
+    return std::filesystem::temp_directory_path() / fmt::format("{}.ini", stem);
 }
 
 auto tempIsoPath(std::string_view stem) -> std::filesystem::path
 {
-    return std::filesystem::temp_directory_path()
-        / fmt::format("{}.iso", stem);
+    return std::filesystem::temp_directory_path() / fmt::format("{}.iso", stem);
 }
 
 auto firstHostInterfaces() -> std::vector<std::string>
@@ -50,8 +48,7 @@ void writeAnswerfile(const std::filesystem::path& path,
     bool includeServiceNetwork = true,
     std::string_view provisioner = "confluent",
     std::optional<std::string_view> serviceNameservers = std::nullopt,
-    std::string_view distro = "rocky",
-    std::string_view version = "9.7")
+    std::string_view distro = "rocky", std::string_view version = "9.7")
 {
     std::ofstream out(path);
     REQUIRE(out.is_open());
@@ -129,8 +126,8 @@ void writeAnswerfile(const std::filesystem::path& path,
         << "bmc_address=192.168.31.101\n";
 }
 
-void appendOFEDSection(const std::filesystem::path& path,
-    std::string_view kind, std::string_view version = "latest")
+void appendOFEDSection(const std::filesystem::path& path, std::string_view kind,
+    std::string_view version = "latest")
 {
     std::ofstream out(path, std::ios::app);
     REQUIRE(out.is_open());
@@ -154,17 +151,18 @@ TEST_SUITE("opencattus::models::answerfile")
         const auto diskImagePath
             = tempIsoPath("opencattus-answerfile-service-network");
         std::ofstream(diskImagePath).close();
-        writeAnswerfile(
-            answerfilePath, diskImagePath, interfaces.front(), interfaces.front());
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front());
 
         try {
             AnswerFile answerfile(answerfilePath);
 
             REQUIRE(answerfile.service.con_interface.has_value());
-            CHECK(answerfile.service.con_interface.value() == interfaces.front());
-            REQUIRE(answerfile.service.con_ip_addr.has_value());
             CHECK(
-                answerfile.service.con_ip_addr->to_string() == "192.168.31.254");
+                answerfile.service.con_interface.value() == interfaces.front());
+            REQUIRE(answerfile.service.con_ip_addr.has_value());
+            CHECK(answerfile.service.con_ip_addr->to_string()
+                == "192.168.31.254");
             REQUIRE(answerfile.service.domain_name.has_value());
             CHECK(answerfile.service.domain_name.value()
                 == "cluster.service.example.com");
@@ -178,7 +176,8 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(diskImagePath);
     }
 
-    TEST_CASE("loadOptions leaves the service network unset when the section is absent")
+    TEST_CASE("loadOptions leaves the service network unset when the section "
+              "is absent")
     {
         initializeOptionsSingleton();
 
@@ -203,7 +202,8 @@ TEST_SUITE("opencattus::models::answerfile")
         } catch (const std::exception& e) {
             FAIL(std::string(e.what()));
         } catch (...) {
-            FAIL("non-std exception while loading answerfile without service network");
+            FAIL("non-std exception while loading answerfile without service "
+                 "network");
         }
 
         std::filesystem::remove(answerfilePath);
@@ -243,7 +243,8 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(diskImagePath);
     }
 
-    TEST_CASE("fillData keeps the service connection bound to the service interface")
+    TEST_CASE(
+        "fillData keeps the service connection bound to the service interface")
     {
         initializeOptionsSingleton();
 
@@ -264,12 +265,13 @@ TEST_SUITE("opencattus::models::answerfile")
             cluster.fillData(answerfile);
 
             const auto serviceInterface
-                = cluster.getHeadnode().getConnection(Network::Profile::Service)
+                = cluster.getHeadnode()
+                      .getConnection(Network::Profile::Service)
                       .getInterface();
-            const auto applicationInterface = cluster.getHeadnode()
-                                                  .getConnection(
-                                                      Network::Profile::Application)
-                                                  .getInterface();
+            const auto applicationInterface
+                = cluster.getHeadnode()
+                      .getConnection(Network::Profile::Application)
+                      .getInterface();
 
             REQUIRE(serviceInterface.has_value());
             REQUIRE(applicationInterface.has_value());
@@ -312,14 +314,16 @@ TEST_SUITE("opencattus::models::answerfile")
         } catch (const std::exception& e) {
             FAIL(std::string(e.what()));
         } catch (...) {
-            FAIL("non-std exception while filling cluster for Rocky Linux 8 xCAT");
+            FAIL("non-std exception while filling cluster for Rocky Linux 8 "
+                 "xCAT");
         }
 
         std::filesystem::remove(answerfilePath);
         std::filesystem::remove(diskImagePath);
     }
 
-    TEST_CASE("fillData maps the Rocky Linux 9 answerfile provisioner into the cluster model")
+    TEST_CASE("fillData maps the Rocky Linux 9 answerfile provisioner into the "
+              "cluster model")
     {
         initializeOptionsSingleton();
 
@@ -342,14 +346,14 @@ TEST_SUITE("opencattus::models::answerfile")
                 Cluster cluster;
                 cluster.fillData(answerfile);
 
-                CHECK(cluster.getProvisioner()
-                    == Cluster::Provisioner::xCAT);
+                CHECK(cluster.getProvisioner() == Cluster::Provisioner::xCAT);
                 CHECK(cluster.getHeadnode().getOS().getPlatform()
                     == opencattus::models::OS::Platform::el9);
             } catch (const std::exception& e) {
                 FAIL(std::string(e.what()));
             } catch (...) {
-                FAIL("non-std exception while filling cluster for Rocky Linux 9 xCAT");
+                FAIL("non-std exception while filling cluster for Rocky Linux "
+                     "9 xCAT");
             }
 
             std::filesystem::remove(answerfilePath);
@@ -374,8 +378,8 @@ TEST_SUITE("opencattus::models::answerfile")
             } catch (const std::exception& e) {
                 FAIL(std::string(e.what()));
             } catch (...) {
-                FAIL(
-                    "non-std exception while filling cluster for Rocky Linux 9 Confluent");
+                FAIL("non-std exception while filling cluster for Rocky Linux "
+                     "9 Confluent");
             }
 
             std::filesystem::remove(answerfilePath);
@@ -429,16 +433,15 @@ TEST_SUITE("opencattus::models::answerfile")
             = tempIsoPath("opencattus-cluster-provisioner-confluent-el10");
         std::ofstream(diskImagePath).close();
         writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
-            interfaces.front(), std::nullopt, true, "confluent",
-            std::nullopt, "rocky", "10.1");
+            interfaces.front(), std::nullopt, true, "confluent", std::nullopt,
+            "rocky", "10.1");
 
         try {
             AnswerFile answerfile(answerfilePath);
             Cluster cluster;
             cluster.fillData(answerfile);
 
-            CHECK(cluster.getProvisioner()
-                == Cluster::Provisioner::Confluent);
+            CHECK(cluster.getProvisioner() == Cluster::Provisioner::Confluent);
             CHECK(cluster.getHeadnode().getOS().getDistro()
                 == opencattus::models::OS::Distro::Rocky);
             CHECK(cluster.getHeadnode().getOS().getPlatform()
@@ -446,7 +449,8 @@ TEST_SUITE("opencattus::models::answerfile")
         } catch (const std::exception& e) {
             FAIL(std::string(e.what()));
         } catch (...) {
-            FAIL("non-std exception while filling cluster for Rocky Linux 10 Confluent");
+            FAIL("non-std exception while filling cluster for Rocky Linux 10 "
+                 "Confluent");
         }
 
         std::filesystem::remove(answerfilePath);
@@ -466,8 +470,8 @@ TEST_SUITE("opencattus::models::answerfile")
             = tempIsoPath("opencattus-cluster-provisioner-confluent-alma10");
         std::ofstream(diskImagePath).close();
         writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
-            interfaces.front(), std::nullopt, true, "confluent",
-            std::nullopt, "alma", "10.1");
+            interfaces.front(), std::nullopt, true, "confluent", std::nullopt,
+            "alma", "10.1");
 
         try {
             AnswerFile answerfile(answerfilePath);
@@ -477,7 +481,8 @@ TEST_SUITE("opencattus::models::answerfile")
         } catch (const std::exception& e) {
             FAIL(std::string(e.what()));
         } catch (...) {
-            FAIL("non-std exception while loading AlmaLinux shorthand answerfile");
+            FAIL("non-std exception while loading AlmaLinux shorthand "
+                 "answerfile");
         }
 
         std::filesystem::remove(answerfilePath);
@@ -508,8 +513,7 @@ TEST_SUITE("opencattus::models::answerfile")
             answerfile.dumpFile(outputPath);
 
             REQUIRE(std::filesystem::exists(outputPath));
-            const auto dumped
-                = opencattus::services::files::read(outputPath);
+            const auto dumped = opencattus::services::files::read(outputPath);
             CHECK(dumped.contains("administrator_email=foo@example.com"));
             CHECK_FALSE(
                 dumped.contains("admm_keyfilestrator_email=foo@example.com"));
@@ -525,7 +529,8 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(diskImagePath);
     }
 
-    TEST_CASE("dumpData preserves headnode connection addresses instead of network base addresses")
+    TEST_CASE("dumpData preserves headnode connection addresses instead of "
+              "network base addresses")
     {
         initializeOptionsSingleton();
 
@@ -551,8 +556,7 @@ TEST_SUITE("opencattus::models::answerfile")
             cluster.dumpData(outputPath);
 
             REQUIRE(std::filesystem::exists(outputPath));
-            const auto dumped
-                = opencattus::services::files::read(outputPath);
+            const auto dumped = opencattus::services::files::read(outputPath);
             CHECK(dumped.contains("ip_address=192.168.30.254"));
             CHECK(dumped.contains("ip_address=192.168.124.10"));
             CHECK_FALSE(dumped.contains("ip_address=192.168.30.0"));
@@ -580,8 +584,7 @@ TEST_SUITE("opencattus::models::answerfile")
             = tempAnswerfilePath("opencattus-cluster-roundtrip-source");
         const auto outputPath
             = tempAnswerfilePath("opencattus-cluster-roundtrip-output");
-        const auto diskImagePath
-            = tempIsoPath("opencattus-cluster-roundtrip");
+        const auto diskImagePath = tempIsoPath("opencattus-cluster-roundtrip");
         std::ofstream(diskImagePath).close();
         writeAnswerfile(sourcePath, diskImagePath, interfaces.front(),
             interfaces.front(), interfaces.back(), true, "confluent",
@@ -626,7 +629,8 @@ TEST_SUITE("opencattus::models::answerfile")
         } catch (const std::exception& e) {
             FAIL(std::string(e.what()));
         } catch (...) {
-            FAIL("non-std exception while round-tripping cluster answerfile data");
+            FAIL("non-std exception while round-tripping cluster answerfile "
+                 "data");
         }
 
         std::filesystem::remove(sourcePath);
@@ -646,8 +650,8 @@ TEST_SUITE("opencattus::models::answerfile")
         const auto diskImagePath
             = tempIsoPath("opencattus-answerfile-ofed-legacy-alias");
         std::ofstream(diskImagePath).close();
-        writeAnswerfile(
-            answerfilePath, diskImagePath, interfaces.front(), interfaces.front());
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front());
         appendOFEDSection(answerfilePath, "mellanox", "latest-3.2-LTS");
 
         try {
@@ -680,8 +684,8 @@ TEST_SUITE("opencattus::models::answerfile")
         const auto diskImagePath
             = tempIsoPath("opencattus-answerfile-ofed-doca");
         std::ofstream(diskImagePath).close();
-        writeAnswerfile(
-            answerfilePath, diskImagePath, interfaces.front(), interfaces.front());
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front());
         appendOFEDSection(answerfilePath, "doca", "latest");
 
         try {
@@ -715,8 +719,8 @@ TEST_SUITE("opencattus::models::answerfile")
             = tempAnswerfilePath("opencattus-cluster-ofed-output");
         const auto diskImagePath = tempIsoPath("opencattus-cluster-ofed");
         std::ofstream(diskImagePath).close();
-        writeAnswerfile(sourcePath, diskImagePath, interfaces.front(),
-            interfaces.front());
+        writeAnswerfile(
+            sourcePath, diskImagePath, interfaces.front(), interfaces.front());
         appendOFEDSection(sourcePath, "doca", "latest-3.2-LTS");
 
         try {

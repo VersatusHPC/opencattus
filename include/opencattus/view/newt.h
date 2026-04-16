@@ -86,27 +86,23 @@ public:
 
     void okCancelMessage(const char* message) override;
     void okCancelMessage(const char* title, const char* message) override;
-    void okCancelMessagePairs(
-        const char* title, const char* message, const View::FieldEntries& pairs)
-        override;
+    void okCancelMessagePairs(const char* title, const char* message,
+        const View::FieldEntries& pairs) override;
 
     std::pair<int, std::vector<std::string>> multipleSelectionMenu(
         const char* title, const char* message, const char* help,
-        View::MultipleSelectionEntries items)
-        override;
+        View::MultipleSelectionEntries items) override;
 
     std::string listMenuImpl(const char* title, const char* message,
-        const std::vector<std::string>& items, const char* helpMessage)
-        override;
+        const std::vector<std::string>& items,
+        const char* helpMessage) override;
 
     std::vector<std::string> collectListMenuImpl(const char* title,
         const char* message, const std::vector<std::string>& items,
-        const char* helpMessage, View::ListButtonCallback addCallback)
-        override;
+        const char* helpMessage, View::ListButtonCallback addCallback) override;
 
     View::FieldEntries fieldMenuImpl(const char* title, const char* message,
-        const View::FieldEntries& items, const char* helpMessage)
-        override;
+        const View::FieldEntries& items, const char* helpMessage) override;
 
     // TODO:
     //  * Better template?
@@ -296,8 +292,8 @@ public:
      * into a percent (a 0 to 100 value)
      */
     bool progressMenu(const char* title, const char* message,
-        opencattus::services::CommandProxy&&, View::ProgressCallback fPercent)
-        override;
+        opencattus::services::CommandProxy&&,
+        View::ProgressCallback fPercent) override;
 
     // TODO:
     //  * Optimize for std::string_view and std::string.
@@ -387,9 +383,8 @@ public:
         throw std::runtime_error("Invalid return path on newt library");
     }
 
-    bool yesNoQuestion(
-        const char* title, const char* message, const char* helpMessage)
-        override;
+    bool yesNoQuestion(const char* title, const char* message,
+        const char* helpMessage) override;
 };
 
 #endif // OPENCATTUS_NEWT_H_

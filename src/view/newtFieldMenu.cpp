@@ -36,9 +36,8 @@ View::FieldEntries Newt::fieldMenuImpl(const char* title, const char* message,
     bool stay = true;
     while (stay) {
         returnValue = newtWinEntries(const_cast<char*>(title),
-            const_cast<char*>(message), m_suggestedWidth, m_flexDown,
-            m_flexUp, m_dataWidth, field.get(),
-            const_cast<char*>(TUIText::Buttons::ok),
+            const_cast<char*>(message), m_suggestedWidth, m_flexDown, m_flexUp,
+            m_dataWidth, field.get(), const_cast<char*>(TUIText::Buttons::ok),
             const_cast<char*>(TUIText::Buttons::cancel),
             const_cast<char*>(TUIText::Buttons::help), nullptr);
         stay = false;

@@ -60,8 +60,7 @@ auto parseVersionString(std::string_view raw)
 
 auto parseArchitecture(std::string_view raw) -> std::optional<OS::Arch>
 {
-    const auto normalized
-        = opencattus::utils::string::lower(std::string(raw));
+    const auto normalized = opencattus::utils::string::lower(std::string(raw));
     if (normalized.contains("x86_64")) {
         return OS::Arch::x86_64;
     }
@@ -89,14 +88,12 @@ auto makeOperatingSystem(
             return OS(distro, OS::Platform::el10,
                 static_cast<unsigned>(minorVersion), arch);
         default:
-            throw std::runtime_error(
-                fmt::format("Unsupported OS version {}.{}", majorVersion,
-                    minorVersion));
+            throw std::runtime_error(fmt::format(
+                "Unsupported OS version {}.{}", majorVersion, minorVersion));
     }
 }
 
-auto inferVersionComboFromIso(
-    OS::Distro distro, std::string_view isoName)
+auto inferVersionComboFromIso(OS::Distro distro, std::string_view isoName)
     -> std::optional<PresenterNodesVersionCombo>
 {
     const auto arch = parseArchitecture(isoName);
@@ -183,15 +180,15 @@ PresenterNodesVersionCombo PresenterNodesOperationalSystem::promptVersion(
 
         const auto parsedVersion = parseVersionString(metadata[0].second);
         if (!parsedVersion.has_value()) {
-            m_view->message(
-                Messages::title, Messages::OperationalSystemVersion::invalidVersion);
+            m_view->message(Messages::title,
+                Messages::OperationalSystemVersion::invalidVersion);
             continue;
         }
 
         const auto parsedArch = parseArchitecture(metadata[1].second);
         if (!parsedArch.has_value()) {
-            m_view->message(
-                Messages::title, Messages::OperationalSystemVersion::invalidArch);
+            m_view->message(Messages::title,
+                Messages::OperationalSystemVersion::invalidArch);
             continue;
         }
 
@@ -237,8 +234,7 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
         std::string distroDownloadURL
             = getDownloadURL(selectedDistro->second, versioncombo);
         std::string isoName
-            = distroDownloadURL.substr(
-                distroDownloadURL.find_last_of('/') + 1);
+            = distroDownloadURL.substr(distroDownloadURL.find_last_of('/') + 1);
 
         //@TODO Implement newt GUI progress bar
         auto command = Singleton<IRunner>::get()->executeCommandIter(
@@ -362,15 +358,14 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
             Messages::OperationalSystem::question, isos,
             Messages::OperationalSystem::help);
 
-        const auto selectedIsoPath
-            = fmt::format("{}/{}", isoDirectoryPath.data()->second, selectedIso);
+        const auto selectedIsoPath = fmt::format(
+            "{}/{}", isoDirectoryPath.data()->second, selectedIso);
         m_model->setDiskImage(selectedIsoPath);
         const auto versioncombo = promptVersion(selectedDistro->second,
             inferVersionComboFromIso(selectedDistro->second, selectedIso));
         m_model->getHeadnode().setOS(
             makeOperatingSystem(selectedDistro->second, versioncombo));
-        LOG_DEBUG("Selected ISO: {}",
-            selectedIsoPath);
+        LOG_DEBUG("Selected ISO: {}", selectedIsoPath);
     }
 }
 
