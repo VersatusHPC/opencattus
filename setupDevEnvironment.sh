@@ -73,20 +73,49 @@ install_conan_user() {
   "$python_bin" -m pip install --user conan
 }
 
+install_ninja_user() {
+  if command -v ninja >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if dnf -y install ninja-build; then
+    return 0
+  fi
+
+  python_bin=$(python_bootstrap_bin)
+
+  if [ ! -x "$python_bin" ]; then
+    echo "Unable to locate a supported Python interpreter at $python_bin"
+    exit 3
+  fi
+
+  echo "ninja-build is not available from the configured repositories; installing ninja via pip"
+  "$python_bin" -m pip install --user --upgrade pip
+  "$python_bin" -m pip install --user ninja
+}
+
 # OS relevant settings
 redhat() {
   if [ "$(id -u)" -eq 0 ]; then
-    subscription-manager refresh
+    if ! subscription-manager refresh; then
+      echo "subscription-manager refresh failed; continuing with existing repository configuration"
+    fi
   else
-    sudo subscription-manager refresh
+    if ! sudo subscription-manager refresh; then
+      echo "subscription-manager refresh failed; continuing with existing repository configuration"
+    fi
   fi
 
   if [ "$os_version" -eq 10 ]; then
     dnf config-manager --set-enabled \
-      "codeready-builder-beta-for-rhel-${os_version}-x86_64-rpms"
+      "codeready-builder-beta-for-rhel-${os_version}-x86_64-rpms" ||
+      dnf config-manager --set-enabled \
+        "codeready-builder-for-rhel-${os_version}-x86_64-rpms" ||
+      echo "CodeReady Builder repo is not available; relying on the currently configured repositories"
   else
     dnf config-manager --set-enabled \
-      "codeready-builder-for-rhel-${os_version}-x86_64-rpms"
+      "codeready-builder-for-rhel-${os_version}-x86_64-rpms" ||
+      echo "CodeReady Builder repo is not available; relying on the currently configured repositories"
   fi
 
   add_epel;
@@ -151,7 +180,7 @@ case $(cut -f 3 -d : /etc/system-release-cpe) in
 esac
 
 # Build toolset, packages and utils
-dnf -y install rsync git gcc-c++ gdb cmake ccache ninja-build llvm-toolset \
+dnf -y install rsync git gcc-c++ gdb cmake ccache llvm-toolset \
   lldb compiler-rt
 
 case "$os_version" in
@@ -177,6 +206,7 @@ esac
 
 # Install Conan as user
 install_conan_user
+install_ninja_user
 
 # Required libraries
 dnf -y install newt-devel

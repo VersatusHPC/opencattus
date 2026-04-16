@@ -788,13 +788,14 @@ check_config() {
         [[ "${APPLICATION_NETWORK_ENABLED}" == "1" ]] || die \
             "OFED_ENABLED=1 requires APPLICATION_NETWORK_ENABLED=1"
     fi
-    if is_distro_major_el8; then
-        [[ "${DISTRO_ID}" == "rocky" ]] || die \
-            "The current EL8 validation lab only targets Rocky Linux 8"
-    fi
+    case "${DISTRO_ID}" in
+        rocky|alma|ol|rhel)
+            ;;
+        *)
+            die "Unsupported DISTRO_ID ${DISTRO_ID}; expected rocky, alma, ol, or rhel"
+            ;;
+    esac
     if is_distro_major_el10; then
-        [[ "${DISTRO_ID}" == "rocky" ]] || die \
-            "The current EL10 bootstrap lab only targets Rocky Linux 10"
         [[ "${PROVISIONER}" == "confluent" ]] || die \
             "EL10 bootstrap is Confluent-only; xCAT remains out of scope for this lab"
     fi
@@ -1170,11 +1171,61 @@ remote_available_kernel() {
         | tr -d '\r'
 }
 
+seed_rhel_local_mirror_repo() {
+    [[ "${DISTRO_ID}" == "rhel" ]] || return 0
+    [[ -n "${OPENCATTUS_MIRROR_URL}" ]] || return 0
+
+    local codeready_section=""
+    if is_distro_major_el10; then
+        codeready_section=$(cat <<EOF
+[opencattus-rocky-crb-fallback]
+name=OpenCATTUS Rocky ${DISTRO_MAJOR} CRB fallback for RHEL build dependencies
+baseurl=https://dl.rockylinux.org/pub/rocky/${DISTRO_MAJOR}/CRB/\$basearch/os/
+enabled=1
+gpgcheck=1
+gpgkey=https://dl.rockylinux.org/pub/rocky/RPM-GPG-KEY-Rocky-${DISTRO_MAJOR}
+includepkgs=glibmm2.68-devel,cairomm1.16-devel,libsigc++30-devel,pangomm2.48-devel
+
+EOF
+)
+    else
+        codeready_section=$(cat <<EOF
+[opencattus-rhel-crb]
+name=OpenCATTUS local RHEL ${DISTRO_MAJOR} CodeReady Builder
+baseurl=${OPENCATTUS_MIRROR_URL}/rhel/codeready-builder-for-rhel-${DISTRO_MAJOR}-\$basearch-rpms/
+enabled=1
+gpgcheck=0
+
+EOF
+)
+    fi
+
+    ssh_remote "if ! sudo find /etc/yum.repos.d -maxdepth 1 -name '*.repo' | grep -q .; then
+        sudo mkdir -p /etc/yum.repos.d &&
+        sudo tee /etc/yum.repos.d/opencattus-rhel-local.repo >/dev/null <<'EOF_REPO'
+[opencattus-rhel-baseos]
+name=OpenCATTUS local RHEL ${DISTRO_MAJOR} BaseOS
+baseurl=${OPENCATTUS_MIRROR_URL}/rhel/rhel-${DISTRO_MAJOR}-for-\$basearch-baseos-rpms/
+enabled=1
+gpgcheck=0
+
+[opencattus-rhel-appstream]
+name=OpenCATTUS local RHEL ${DISTRO_MAJOR} AppStream
+baseurl=${OPENCATTUS_MIRROR_URL}/rhel/rhel-${DISTRO_MAJOR}-for-\$basearch-appstream-rpms/
+enabled=1
+gpgcheck=0
+
+${codeready_section}
+EOF_REPO
+    fi"
+}
+
 prepare_headnode() {
     local running_kernel
     local available_kernel
 
     wait_for_headnode_ssh
+    seed_rhel_local_mirror_repo
 
     log "Checking headnode repository state"
     ssh_remote "if ! sudo find /etc/yum.repos.d -maxdepth 1 -name '*.repo' | grep -q .; then
@@ -1217,6 +1268,11 @@ prepare_headnode() {
     if [[ "${running_kernel}" != "${available_kernel}" ]]; then
         log "Updating headnode kernel from ${running_kernel} to ${available_kernel}"
         ssh_remote "sudo dnf install -y kernel"
+        if [[ "${DISTRO_ID}" == "ol" ]]; then
+            log "Setting Oracle Linux default kernel to ${available_kernel}"
+            ssh_remote "sudo grubby --set-default '/boot/vmlinuz-${available_kernel}' &&
+                [[ \$(sudo grubby --default-kernel) == '/boot/vmlinuz-${available_kernel}' ]]"
+        fi
         ssh_remote "sudo reboot" >/dev/null 2>&1 || true
         sleep 10
         wait_for_headnode_ssh
@@ -1802,13 +1858,47 @@ parse_args() {
     }
 }
 
+restore_exported_environment() {
+    local snapshot=$1
+    local entry
+    local name
+    local value
+    local -a preserved_vars=(
+        OPENCATTUS_BINARY
+        OPENCATTUS_SOURCE_DIR
+        REMOTE_BUILD_PRESET
+        REMOTE_BUILD_PRESET_BUILD
+        REMOTE_BUILD_JOBS
+    )
+    local preserved_var
+
+    while IFS= read -r -d '' entry; do
+        name=${entry%%=*}
+        value=${entry#*=}
+
+        [[ "${name}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+        for preserved_var in "${preserved_vars[@]}"; do
+            if [[ "${name}" == "${preserved_var}" ]]; then
+                printf -v "${name}" '%s' "${value}"
+                export "${name}"
+                break
+            fi
+        done
+    done <"${snapshot}"
+}
+
 main() {
     parse_args "$@"
 
     if [[ -n "${CONFIG_FILE}" ]]; then
         [[ -f "${CONFIG_FILE}" ]] || die "Config file not found: ${CONFIG_FILE}"
+        local exported_env_snapshot
+        exported_env_snapshot=$(mktemp)
+        env -0 >"${exported_env_snapshot}"
         # shellcheck disable=SC1090
         source "${CONFIG_FILE}"
+        restore_exported_environment "${exported_env_snapshot}"
+        rm -f "${exported_env_snapshot}"
     fi
 
     load_defaults

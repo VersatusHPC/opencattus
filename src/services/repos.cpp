@@ -374,6 +374,10 @@ struct RepoConfigVars final {
     std::string zabbixVersion; // major.minor, ex: 6.4
     std::string ofedVersion; // major.minor, ex: 6.4
     std::string ofedRepoTarget; // repo OS target, ex: 9.6 or 10
+    std::string cudaGPGKey; // NVIDIA CUDA repository key filename
+    std::string rhelBaseMirrorGPGKey; // optional local mirror GPG key
+    std::string rhelCodeReadyMirrorRepo; // local mirror override for RHEL CRB
+    std::string rhelCodeReadyMirrorGPGKey; // optional local mirror GPG key
 };
 
 // Represents a Mirror Repository
@@ -717,7 +721,12 @@ class RepoConfigParser final {
             fmt::arg("xcatVersion", vars.xcatVersion),
             fmt::arg("ohpcVersion", vars.ohpcVersion),
             fmt::arg("ofedVersion", vars.ofedVersion),
-            fmt::arg("ofedRepoTarget", vars.ofedRepoTarget));
+            fmt::arg("ofedRepoTarget", vars.ofedRepoTarget),
+            fmt::arg("cudaGPGKey", vars.cudaGPGKey),
+            fmt::arg("rhelBaseMirrorGPGKey", vars.rhelBaseMirrorGPGKey),
+            fmt::arg("rhelCodeReadyMirrorRepo", vars.rhelCodeReadyMirrorRepo),
+            fmt::arg(
+                "rhelCodeReadyMirrorGPGKey", vars.rhelCodeReadyMirrorGPGKey));
     };
 
 public:
@@ -738,8 +747,14 @@ public:
         for (const auto& repoGroup : repoNames) {
             RepoConfig repo;
 
-            // repoId.id (no placeholders)
-            repo.repoId.id = repoGroup;
+            // repoId.id
+            try {
+                repo.repoId.id = interpolateVars(repoGroup, vars);
+            } catch (const fmt::format_error& e) {
+                opencattus::functions::abort(
+                    "Failed to format repository id for repo '{}': {}",
+                    repoGroup, e.what());
+            }
 
             // name
             auto name = file.getString(repoGroup, "name");
@@ -782,8 +797,11 @@ public:
             auto mirrorGpgkey = file.getStringOpt(repoGroup, "mirror.gpgkey");
             if (mirrorGpgkey) {
                 try {
-                    repo.mirror.gpgkey
+                    const auto value
                         = interpolateVars(mirrorGpgkey.value(), vars);
+                    repo.mirror.gpgkey = value.empty()
+                        ? std::nullopt
+                        : std::make_optional(value);
                 } catch (const fmt::format_error& e) {
                     opencattus::functions::abort(
                         "Failed to format mirror.gpgkey for repo '{}': {}",
@@ -812,8 +830,11 @@ public:
                 = file.getStringOpt(repoGroup, "upstream.gpgkey");
             if (upstreamGpgkey) {
                 try {
-                    repo.upstream.gpgkey
+                    const auto value
                         = interpolateVars(upstreamGpgkey.value(), vars);
+                    repo.upstream.gpgkey = value.empty()
+                        ? std::nullopt
+                        : std::make_optional(value);
                 } catch (const fmt::format_error& e) {
                     opencattus::functions::abort(
                         "Failed to format upstream.gpgkey for repo '{}': {}",
@@ -843,6 +864,7 @@ public:
             .zabbixVersion = "6.4",
             .ofedVersion = "latest-3.2-LTS",
             .ofedRepoTarget = "9",
+            .cudaGPGKey = "D42D0685.pub",
         })
     {
         RepoConfFile conffile;
@@ -989,6 +1011,69 @@ std::string defaultDOCARepoTargetFor(
     }
 }
 
+std::string defaultCUDAGPGKeyFor(const OS& osinfo)
+{
+    switch (osinfo.getPlatform()) {
+        case OS::Platform::el8:
+        case OS::Platform::el9:
+            return "D42D0685.pub";
+        case OS::Platform::el10:
+            return "CDF6BA43.pub";
+        default:
+            throw std::runtime_error(
+                fmt::format("Unsupported CUDA repository baseline for EL{}",
+                    osinfo.getMajorVersion()));
+    }
+}
+
+std::string defaultRHELCodeReadyMirrorRepoFor(const OS& osinfo)
+{
+    const auto arch = opencattus::utils::enums::toString(osinfo.getArch());
+    switch (osinfo.getPlatform()) {
+        case OS::Platform::el8:
+        case OS::Platform::el9:
+            return fmt::format("rhel/codeready-builder-for-rhel-{}-{}-rpms/",
+                osinfo.getMajorVersion(), arch);
+        case OS::Platform::el10:
+            return fmt::format(
+                "rocky/linux/{}/CRB/{}/os/", osinfo.getMajorVersion(), arch);
+        default:
+            throw std::runtime_error(fmt::format(
+                "Unsupported RHEL CodeReady mirror baseline for EL{}",
+                osinfo.getMajorVersion()));
+    }
+}
+
+std::string defaultRHELBaseMirrorGPGKeyFor(const OS& osinfo)
+{
+    switch (osinfo.getPlatform()) {
+        case OS::Platform::el8:
+        case OS::Platform::el9:
+            return "rhel/RPM-GPG-KEY-redhat-release";
+        case OS::Platform::el10:
+            return "";
+        default:
+            throw std::runtime_error(fmt::format(
+                "Unsupported RHEL BaseOS mirror signing baseline for EL{}",
+                osinfo.getMajorVersion()));
+    }
+}
+
+std::string defaultRHELCodeReadyMirrorGPGKeyFor(const OS& osinfo)
+{
+    switch (osinfo.getPlatform()) {
+        case OS::Platform::el8:
+        case OS::Platform::el9:
+            return "rhel/RPM-GPG-KEY-redhat-release";
+        case OS::Platform::el10:
+            return "";
+        default:
+            throw std::runtime_error(fmt::format(
+                "Unsupported RHEL CodeReady mirror signing baseline for EL{}",
+                osinfo.getMajorVersion()));
+    }
+}
+
 TEST_CASE("RepoConfigParser")
 {
 #ifdef BUILD_TESTING
@@ -1016,6 +1101,7 @@ TEST_CASE("RepoConfigParser")
             .zabbixVersion = "7.0",
             .ofedVersion = "latest",
             .ofedRepoTarget = "10",
+            .cudaGPGKey = "CDF6BA43.pub",
         });
     const auto ohpcOpt = el10Conf.find("OpenHPC");
     REQUIRE(ohpcOpt.has_value() == true);
@@ -1035,6 +1121,10 @@ TEST_CASE("defaultDOCARepoTargetFor uses explicit EL baselines")
               OS(models::OS::Distro::Rocky, OS::Platform::el9, 7),
               "latest-2.9-LTS")
         == "9.6");
+    CHECK(defaultDOCARepoTargetFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el9, 7),
+              "latest-3.2-LTS")
+        == "9");
     CHECK(defaultDOCARepoTargetFor(
               OS(models::OS::Distro::Rocky, OS::Platform::el9, 7), "latest")
         == "9");
@@ -1056,7 +1146,116 @@ TEST_CASE("defaultDOCARepoTargetFor uses explicit EL baselines")
 #endif
 }
 
+TEST_CASE("defaultCUDAGPGKeyFor tracks NVIDIA CUDA repo keys by EL release")
+{
+#ifdef BUILD_TESTING
+    CHECK(defaultCUDAGPGKeyFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el8, 10))
+        == "D42D0685.pub");
+    CHECK(defaultCUDAGPGKeyFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el9, 7))
+        == "D42D0685.pub");
+    CHECK(defaultCUDAGPGKeyFor(
+              OS(models::OS::Distro::Rocky, OS::Platform::el10, 1))
+        == "CDF6BA43.pub");
+#endif
+}
+
+TEST_CASE("defaultRHELCodeReadyMirrorRepoFor follows the local mirror layout")
+{
+#ifdef BUILD_TESTING
+    CHECK(defaultRHELBaseMirrorGPGKeyFor(
+              OS(models::OS::Distro::RHEL, OS::Platform::el9, 7))
+        == "rhel/RPM-GPG-KEY-redhat-release");
+    CHECK(defaultRHELBaseMirrorGPGKeyFor(
+        OS(models::OS::Distro::RHEL, OS::Platform::el10, 1))
+            .empty());
+    CHECK(defaultRHELCodeReadyMirrorRepoFor(
+              OS(models::OS::Distro::RHEL, OS::Platform::el9, 7))
+        == "rhel/codeready-builder-for-rhel-9-x86_64-rpms/");
+    CHECK(defaultRHELCodeReadyMirrorGPGKeyFor(
+              OS(models::OS::Distro::RHEL, OS::Platform::el9, 7))
+        == "rhel/RPM-GPG-KEY-redhat-release");
+    CHECK(defaultRHELCodeReadyMirrorRepoFor(
+              OS(models::OS::Distro::RHEL, OS::Platform::el10, 1))
+        == "rocky/linux/10/CRB/x86_64/os/");
+    CHECK(defaultRHELCodeReadyMirrorGPGKeyFor(
+        OS(models::OS::Distro::RHEL, OS::Platform::el10, 1))
+            .empty());
+#endif
+}
+
 TEST_CASE("RepoConfigParser emits explicit DOCA repo targets")
+{
+#ifdef BUILD_TESTING
+    const auto el9Conf29 = RepoConfigParser::parseTest("repos/repos.conf",
+        RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.3.3",
+            .ohpcVersion = "3",
+            .osversion = "9.7",
+            .releasever = "9",
+            .xcatVersion = "latest",
+            .zabbixVersion = "6.4",
+            .ofedVersion = "latest-2.9-LTS",
+            .ofedRepoTarget = "9.6",
+            .cudaGPGKey = "D42D0685.pub",
+        });
+    const auto el9Doca29 = el9Conf29.find("doca");
+    REQUIRE(el9Doca29.has_value() == true);
+    CHECK(el9Doca29->upstream.repo
+        == "https://linux.mellanox.com/public/repo/doca/latest-2.9-LTS/"
+           "rhel9.6/x86_64/");
+    REQUIRE(el9Doca29->upstream.gpgkey.has_value() == true);
+    CHECK(el9Doca29->upstream.gpgkey.value()
+        == "https://linux.mellanox.com/public/repo/doca/latest-2.9-LTS/"
+           "rhel9.6/x86_64/GPG-KEY-Mellanox.pub");
+
+    const auto el9Conf32 = RepoConfigParser::parseTest("repos/repos.conf",
+        RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.3.3",
+            .ohpcVersion = "3",
+            .osversion = "9.7",
+            .releasever = "9",
+            .xcatVersion = "latest",
+            .zabbixVersion = "6.4",
+            .ofedVersion = "latest-3.2-LTS",
+            .ofedRepoTarget = "9",
+            .cudaGPGKey = "D42D0685.pub",
+        });
+    const auto el9Doca32 = el9Conf32.find("doca");
+    REQUIRE(el9Doca32.has_value() == true);
+    CHECK(el9Doca32->upstream.repo
+        == "https://linux.mellanox.com/public/repo/doca/latest-3.2-LTS/"
+           "rhel9/x86_64/");
+    REQUIRE(el9Doca32->upstream.gpgkey.has_value() == true);
+    CHECK(el9Doca32->upstream.gpgkey.value()
+        == "https://linux.mellanox.com/public/repo/doca/latest-3.2-LTS/"
+           "rhel9/x86_64/GPG-KEY-Mellanox.pub");
+
+    const auto el10Conf = RepoConfigParser::parseTest("repos/repos.conf",
+        RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.4.0",
+            .ohpcVersion = "4",
+            .osversion = "10.1",
+            .releasever = "10",
+            .xcatVersion = "latest",
+            .zabbixVersion = "7.0",
+            .ofedVersion = "latest",
+            .ofedRepoTarget = "10",
+            .cudaGPGKey = "CDF6BA43.pub",
+        });
+    const auto el10Doca = el10Conf.find("doca");
+    REQUIRE(el10Doca.has_value() == true);
+    CHECK(el10Doca->upstream.repo
+        == "https://linux.mellanox.com/public/repo/doca/latest/rhel10/"
+           "x86_64/");
+#endif
+}
+
+TEST_CASE("RepoConfigParser emits CUDA repository URLs")
 {
 #ifdef BUILD_TESTING
     const auto el9Conf = RepoConfigParser::parseTest("repos/repos.conf",
@@ -1070,16 +1269,17 @@ TEST_CASE("RepoConfigParser emits explicit DOCA repo targets")
             .zabbixVersion = "6.4",
             .ofedVersion = "latest-2.9-LTS",
             .ofedRepoTarget = "9.6",
+            .cudaGPGKey = "D42D0685.pub",
         });
-    const auto el9Doca = el9Conf.find("doca");
-    REQUIRE(el9Doca.has_value() == true);
-    CHECK(el9Doca->upstream.repo
-        == "https://linux.mellanox.com/public/repo/doca/latest-2.9-LTS/"
-           "rhel9.6/x86_64/");
-    REQUIRE(el9Doca->upstream.gpgkey.has_value() == true);
-    CHECK(el9Doca->upstream.gpgkey.value()
-        == "https://linux.mellanox.com/public/repo/doca/latest-2.9-LTS/"
-           "rhel9.6/x86_64/GPG-KEY-Mellanox.pub");
+    const auto el9Cuda = el9Conf.find("cuda");
+    REQUIRE(el9Cuda.has_value() == true);
+    CHECK(el9Cuda->upstream.repo
+        == "https://developer.download.nvidia.com/compute/cuda/repos/rhel9/"
+           "x86_64/");
+    REQUIRE(el9Cuda->upstream.gpgkey.has_value() == true);
+    CHECK(el9Cuda->upstream.gpgkey.value()
+        == "https://developer.download.nvidia.com/compute/cuda/repos/rhel9/"
+           "x86_64/D42D0685.pub");
 
     const auto el9ModernLtsConf
         = RepoConfigParser::parseTest("repos/repos.conf",
@@ -1093,6 +1293,7 @@ TEST_CASE("RepoConfigParser emits explicit DOCA repo targets")
                 .zabbixVersion = "6.4",
                 .ofedVersion = "latest-3.2-LTS",
                 .ofedRepoTarget = "9",
+                .cudaGPGKey = "D42D0685.pub",
             });
     const auto el9ModernLtsDoca = el9ModernLtsConf.find("doca");
     REQUIRE(el9ModernLtsDoca.has_value() == true);
@@ -1115,13 +1316,17 @@ TEST_CASE("RepoConfigParser emits explicit DOCA repo targets")
             .zabbixVersion = "7.0",
             .ofedVersion = "latest",
             .ofedRepoTarget = "10",
+            .cudaGPGKey = "CDF6BA43.pub",
         });
-    const auto el10Doca = el10Conf.find("doca");
-    REQUIRE(el10Doca.has_value() == true);
-    CHECK(el10Doca->upstream.repo
-        == "https://linux.mellanox.com/public/repo/doca/latest/rhel10/"
+    const auto el10Cuda = el10Conf.find("cuda");
+    REQUIRE(el10Cuda.has_value() == true);
+    CHECK(el10Cuda->upstream.repo
+        == "https://developer.download.nvidia.com/compute/cuda/repos/rhel10/"
            "x86_64/");
-
+    REQUIRE(el10Cuda->upstream.gpgkey.has_value() == true);
+    CHECK(el10Cuda->upstream.gpgkey.value()
+        == "https://developer.download.nvidia.com/compute/cuda/repos/rhel10/"
+           "x86_64/CDF6BA43.pub");
     const auto el10ModernLtsConf
         = RepoConfigParser::parseTest("repos/repos.conf",
             RepoConfigVars {
@@ -1134,12 +1339,80 @@ TEST_CASE("RepoConfigParser emits explicit DOCA repo targets")
                 .zabbixVersion = "7.0",
                 .ofedVersion = "latest-3.2-LTS",
                 .ofedRepoTarget = "10",
+                .cudaGPGKey = "CDF6BA43.pub",
             });
     const auto el10ModernLtsDoca = el10ModernLtsConf.find("doca");
     REQUIRE(el10ModernLtsDoca.has_value() == true);
     CHECK(el10ModernLtsDoca->upstream.repo
         == "https://linux.mellanox.com/public/repo/doca/latest-3.2-LTS/"
            "rhel10/x86_64/");
+#endif
+}
+
+TEST_CASE("RepoConfigParser interpolates distro repository ids")
+{
+#ifdef BUILD_TESTING
+    const auto el9OracleConf = RepoConfigParser::parseTest("repos/oracle.conf",
+        RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.3.3",
+            .ohpcVersion = "3",
+            .osversion = "9.7",
+            .releasever = "9",
+            .xcatVersion = "latest",
+            .zabbixVersion = "6.4",
+            .ofedVersion = "latest-2.9-LTS",
+            .ofedRepoTarget = "9.6",
+            .cudaGPGKey = "D42D0685.pub",
+        });
+    CHECK(el9OracleConf.find("OLAppStream").has_value() == true);
+    CHECK(el9OracleConf.find("ol9_codeready_builder").has_value() == true);
+
+    const auto el10RHELConf = RepoConfigParser::parseTest("repos/rhel.conf",
+        RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.4.0",
+            .ohpcVersion = "4",
+            .osversion = "10.1",
+            .releasever = "10",
+            .xcatVersion = "latest",
+            .zabbixVersion = "7.0",
+            .ofedVersion = "latest",
+            .ofedRepoTarget = "10",
+            .cudaGPGKey = "CDF6BA43.pub",
+            .rhelBaseMirrorGPGKey = "",
+            .rhelCodeReadyMirrorRepo = "rocky/linux/10/CRB/x86_64/os/",
+            .rhelCodeReadyMirrorGPGKey = "",
+        });
+    const auto el10RHELAppStream = el10RHELConf.find("rhel-10-appstream");
+    REQUIRE(el10RHELAppStream.has_value() == true);
+    CHECK(el10RHELAppStream->mirror.repo
+        == "rhel/rhel-10-for-x86_64-appstream-rpms/");
+    CHECK(el10RHELAppStream->mirror.gpgkey.has_value() == false);
+    const auto el10RHELBase = el10RHELConf.find("rhel-10-baseos");
+    REQUIRE(el10RHELBase.has_value() == true);
+    CHECK(el10RHELBase->mirror.repo == "rhel/rhel-10-for-x86_64-baseos-rpms/");
+    CHECK(el10RHELBase->mirror.gpgkey.has_value() == false);
+    const auto el10RHELCRB = el10RHELConf.find("rhel-10-codeready-builder");
+    REQUIRE(el10RHELCRB.has_value() == true);
+    CHECK(el10RHELCRB->mirror.repo == "rocky/linux/10/CRB/x86_64/os/");
+    CHECK(el10RHELCRB->mirror.gpgkey.has_value() == false);
+
+    const auto el10AlmaConf = RepoConfigParser::parseTest("repos/alma.conf",
+        RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.4.0",
+            .ohpcVersion = "4",
+            .osversion = "10.1",
+            .releasever = "10",
+            .xcatVersion = "latest",
+            .zabbixVersion = "7.0",
+            .ofedVersion = "latest",
+            .ofedRepoTarget = "10",
+            .cudaGPGKey = "CDF6BA43.pub",
+        });
+    CHECK(el10AlmaConf.find("AlmaLinuxAppStream").has_value() == true);
+    CHECK(el10AlmaConf.find("AlmaLinuxCRB").has_value() == true);
 #endif
 }
 
@@ -1434,6 +1707,52 @@ TEST_CASE("RepoAdapter")
     REQUIRE(ohpcRepo.baseurl().has_value() == true);
     CHECK(ohpcRepo.baseurl().value().starts_with(opts.mirrorBaseUrl));
 
+    const auto el10RHELConf = RepoConfigParser::parseTest("repos/rhel.conf",
+        RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.4.0",
+            .ohpcVersion = "4",
+            .osversion = "10.1",
+            .releasever = "10",
+            .xcatVersion = "latest",
+            .zabbixVersion = "7.0",
+            .ofedVersion = "latest",
+            .ofedRepoTarget = "10",
+            .cudaGPGKey = "CDF6BA43.pub",
+            .rhelBaseMirrorGPGKey = "",
+            .rhelCodeReadyMirrorRepo = "rocky/linux/10/CRB/x86_64/os/",
+            .rhelCodeReadyMirrorGPGKey = "",
+        });
+    const auto rhelBaseOpt = el10RHELConf.find("rhel-10-baseos");
+    REQUIRE(rhelBaseOpt.has_value() == true);
+    const auto rhelBaseRepo = RepoConfAdapter<TrueMirrorExistenceChecker,
+        TrueMirrorExistenceChecker>::fromConfig(rhelBaseOpt.value());
+    REQUIRE(rhelBaseRepo.baseurl().has_value() == true);
+    CHECK(rhelBaseRepo.baseurl().value()
+        == "https://mirror.example.com/rhel/rhel-10-for-x86_64-baseos-rpms");
+    CHECK(rhelBaseRepo.gpgcheck() == false);
+    CHECK(rhelBaseRepo.gpgkey().has_value() == false);
+
+    const auto rhelAppStreamOpt = el10RHELConf.find("rhel-10-appstream");
+    REQUIRE(rhelAppStreamOpt.has_value() == true);
+    const auto rhelAppStreamRepo = RepoConfAdapter<TrueMirrorExistenceChecker,
+        TrueMirrorExistenceChecker>::fromConfig(rhelAppStreamOpt.value());
+    REQUIRE(rhelAppStreamRepo.baseurl().has_value() == true);
+    CHECK(rhelAppStreamRepo.baseurl().value()
+        == "https://mirror.example.com/rhel/rhel-10-for-x86_64-appstream-rpms");
+    CHECK(rhelAppStreamRepo.gpgcheck() == false);
+    CHECK(rhelAppStreamRepo.gpgkey().has_value() == false);
+
+    const auto rhelCRBOpt = el10RHELConf.find("rhel-10-codeready-builder");
+    REQUIRE(rhelCRBOpt.has_value() == true);
+    const auto rhelCRBRepo = RepoConfAdapter<TrueMirrorExistenceChecker,
+        TrueMirrorExistenceChecker>::fromConfig(rhelCRBOpt.value());
+    REQUIRE(rhelCRBRepo.baseurl().has_value() == true);
+    CHECK(rhelCRBRepo.baseurl().value()
+        == "https://mirror.example.com/rocky/linux/10/CRB/x86_64/os");
+    CHECK(rhelCRBRepo.gpgcheck() == false);
+    CHECK(rhelCRBRepo.gpgkey().has_value() == false);
+
     initializeSingletonsOptions(std::make_unique<const Options>(Options {
         .enableMirrors = false,
         .mirrorBaseUrl = opts.mirrorBaseUrl,
@@ -1462,11 +1781,10 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
             case OS::Distro::AlmaLinux:
                 switch (platform) {
                     case OS::Platform::el8:
-                        return "\"AlmaLinux 8 - PowerTools\"";
+                        return "AlmaLinuxPowerTools";
                     case OS::Platform::el9:
                     case OS::Platform::el10:
-                        return fmt::format(
-                            "\"AlmaLinux {} - CRB\"", majorVersion);
+                        return "AlmaLinuxCRB";
                     default:
                         throw std::runtime_error("Unsupported platform");
                 }
@@ -1505,6 +1823,7 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
 
         switch (distro) {
             case OS::Distro::AlmaLinux:
+                addToOutput("AlmaLinuxAppStream");
                 addToOutput("AlmaLinuxBaseOS");
                 addToOutput("{}", resolveCodeReadyBuilderName(osinfo));
                 break;
@@ -1515,12 +1834,15 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
                 break;
             }
             case OS::Distro::RHEL:
+                addToOutput("rhel-{releasever}-appstream",
+                    fmt::arg("releasever", majorVersion));
                 addToOutput("rhel-{releasever}-baseos",
                     fmt::arg("releasever", majorVersion));
                 addToOutput("rhel-{releasever}-codeready-builder",
                     fmt::arg("releasever", majorVersion));
                 break;
             case OS::Distro::OL:
+                addToOutput("OLAppStream");
                 addToOutput("OLBaseOS");
                 addToOutput("ol{releasever}_codeready_builder",
                     fmt::arg("releasever", majorVersion));
@@ -1573,6 +1895,7 @@ TEST_CASE("RepoNames")
         .zabbixVersion = "6.4",
         .ofedVersion = "latest-3.2-LTS",
         .ofedRepoTarget = "9",
+        .cudaGPGKey = "D42D0685.pub",
     };
     const RepoConfigVars& varsEl8 = RepoConfigVars {
         .arch = "x86_64",
@@ -1584,6 +1907,7 @@ TEST_CASE("RepoNames")
         .zabbixVersion = "6.4",
         .ofedVersion = "latest-3.2-LTS",
         .ofedRepoTarget = "8",
+        .cudaGPGKey = "D42D0685.pub",
     };
 
     // RHEL
@@ -1595,6 +1919,7 @@ TEST_CASE("RepoNames")
         // fmt::print("Repos: {}\n", fmt::join(enabledRepos, ","));
         CHECK(enabledRepos
             == std::vector<std::string> {
+                "rhel-9-appstream",
                 "rhel-9-baseos",
                 "rhel-9-codeready-builder",
                 "epel",
@@ -1615,8 +1940,9 @@ TEST_CASE("RepoNames")
         const auto enabledRepos = enabler.resolveReposNames(osinfo, conffiles);
         CHECK(enabledRepos
             == std::vector<std::string> {
+                "AlmaLinuxAppStream",
                 "AlmaLinuxBaseOS",
-                "\"AlmaLinux 9 - CRB\"",
+                "AlmaLinuxCRB",
                 "epel",
                 "OpenHPC",
                 "OpenHPC-Updates",
@@ -1635,8 +1961,9 @@ TEST_CASE("RepoNames")
         const auto enabledRepos = enabler.resolveReposNames(osinfo, conffiles);
         CHECK(enabledRepos
             == std::vector<std::string> {
+                "AlmaLinuxAppStream",
                 "AlmaLinuxBaseOS",
-                "\"AlmaLinux 8 - PowerTools\"",
+                "AlmaLinuxPowerTools",
                 "epel",
                 "OpenHPC",
                 "OpenHPC-Updates",
@@ -1659,6 +1986,7 @@ TEST_CASE("RepoNames")
             .zabbixVersion = "7.0",
             .ofedVersion = "latest",
             .ofedRepoTarget = "10",
+            .cudaGPGKey = "CDF6BA43.pub",
         };
         const auto conffiles = RepoConfigParser::load<ShouldUseVaultService>(
             "repos/", osinfo, el10Vars);
@@ -1727,6 +2055,7 @@ TEST_CASE("RepoNames")
         // fmt::print("Repos: {}", fmt::join(enabledRepos, ","));
         CHECK(enabledRepos
             == std::vector<std::string> {
+                "OLAppStream",
                 "OLBaseOS",
                 "ol9_codeready_builder",
                 "epel",
@@ -1803,6 +2132,7 @@ TEST_CASE("RepoGenerator")
         .zabbixVersion = "6.4",
         .ofedVersion = "latest-3.2-LTS",
         .ofedRepoTarget = "9",
+        .cudaGPGKey = "D42D0685.pub",
     };
     opencattus::Singleton<const Options>::init(
         std::make_unique<const Options>(opts));
@@ -1822,11 +2152,11 @@ TEST_CASE("RepoGenerator")
         >();
     const auto generatedCount1
         = generator.generate(conffiles, osinfo, upstreamPath);
-    CHECK(generatedCount1 == 17);
+    CHECK(generatedCount1 == 18);
 
     const auto generatedCount2
         = generator.generate(conffiles, osinfo, upstreamPath);
-    CHECK(generatedCount2 == 17);
+    CHECK(generatedCount2 == 18);
 
     // Generate the other files so we can look at them
     const auto generatorMirror
@@ -1856,6 +2186,7 @@ TEST_SUITE("opencattus::services::repos [slow]")
     // Repositories from these files are not checked against Versatus Mirrors
     constexpr auto blacklistedMirrorFiles = {
         "almalinux.repo",
+        "cuda.repo",
         "nvidia.repo",
         "influxdata.repo",
         "mlnx-doca.repo",
@@ -2000,6 +2331,11 @@ void RepoManager::initializeDefaultRepositories()
         .zabbixVersion = opts->zabbixVersion,
         .ofedVersion = ofedVersion,
         .ofedRepoTarget = defaultDOCARepoTargetFor(osinfo, ofedVersion),
+        .cudaGPGKey = defaultCUDAGPGKeyFor(osinfo),
+        .rhelBaseMirrorGPGKey = defaultRHELBaseMirrorGPGKeyFor(osinfo),
+        .rhelCodeReadyMirrorRepo = defaultRHELCodeReadyMirrorRepoFor(osinfo),
+        .rhelCodeReadyMirrorGPGKey
+        = defaultRHELCodeReadyMirrorGPGKeyFor(osinfo),
     };
 
     switch (osinfo.getPackageType()) {

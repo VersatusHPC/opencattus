@@ -35,12 +35,12 @@ jobs:
             }
           done
 
-          pkg-config --exists glibmm-2.4 || {
+          pkg-config --exists glibmm-2.4 || pkg-config --exists glibmm-2.68 || {
             echo "Missing glibmm development files on self-hosted runner" >&2
             exit 1
           }
 
-          pkg-config --exists newt || {
+          pkg-config --exists newt || pkg-config --exists libnewt || {
             echo "Missing newt development files on self-hosted runner" >&2
             exit 1
           }
