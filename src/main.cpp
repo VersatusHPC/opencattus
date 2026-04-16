@@ -4,9 +4,13 @@
  */
 
 #include <cctype>
-#include <chrono>
+#include <cerrno>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
+#include <unistd.h>
+#include <utility>
+#include <vector>
 
 #include <opencattus/const.h>
 #include <opencattus/dbus_client.h>
@@ -97,20 +101,81 @@ int runTestCommand(const std::string& testCommand,
     return EXIT_SUCCESS;
 }
 
-auto generatedTuiAnswerfilePath() -> std::filesystem::path
+class ScopedFileRemoval {
+private:
+    std::filesystem::path m_path;
+
+public:
+    explicit ScopedFileRemoval(std::filesystem::path path)
+        : m_path(std::move(path))
+    {
+    }
+
+    ScopedFileRemoval(const ScopedFileRemoval&) = delete;
+    ScopedFileRemoval& operator=(const ScopedFileRemoval&) = delete;
+    ScopedFileRemoval(ScopedFileRemoval&&) = delete;
+    ScopedFileRemoval& operator=(ScopedFileRemoval&&) = delete;
+
+    ~ScopedFileRemoval()
+    {
+        std::error_code error;
+        if (!m_path.empty() && !std::filesystem::remove(m_path, error)
+            && error) {
+            LOG_WARN("Failed to remove temporary TUI answerfile {}: {}",
+                m_path.string(), error.message());
+        }
+    }
+};
+
+auto createTemporaryTuiAnswerfilePath() -> std::filesystem::path
 {
-    const auto suffix
-        = std::chrono::system_clock::now().time_since_epoch().count();
-    return std::filesystem::temp_directory_path()
-        / fmt::format("opencattus-tui-{}.ini", suffix);
+    auto pathTemplate
+        = (std::filesystem::temp_directory_path() / "opencattus-tui-XXXXXX")
+              .string();
+    std::vector<char> mutableTemplate(pathTemplate.begin(), pathTemplate.end());
+    mutableTemplate.push_back('\0');
+
+    const int descriptor = mkstemp(mutableTemplate.data());
+    if (descriptor == -1) {
+        throw std::runtime_error(
+            fmt::format("Unable to create temporary TUI answerfile: {}",
+                std::strerror(errno)));
+    }
+
+    const auto path = std::filesystem::path(mutableTemplate.data());
+    std::error_code permissionError;
+    std::filesystem::permissions(path,
+        std::filesystem::perms::owner_read
+            | std::filesystem::perms::owner_write,
+        std::filesystem::perm_options::replace, permissionError);
+    if (permissionError) {
+        close(descriptor);
+        std::error_code removeError;
+        std::filesystem::remove(path, removeError);
+        throw std::runtime_error(fmt::format(
+            "Unable to restrict temporary TUI answerfile permissions on {}: {}",
+            path.string(), permissionError.message()));
+    }
+
+    if (close(descriptor) != 0) {
+        std::error_code removeError;
+        std::filesystem::remove(path, removeError);
+        throw std::runtime_error(
+            fmt::format("Unable to close temporary TUI answerfile {}: {}",
+                path.string(), std::strerror(errno)));
+    }
+
+    return path;
 }
 
 auto generateAnswerfileFromTuiModel(opencattus::models::Cluster& model)
     -> std::unique_ptr<opencattus::models::AnswerFile>
 {
-    const auto path = generatedTuiAnswerfilePath();
+    const auto path = createTemporaryTuiAnswerfilePath();
+    const ScopedFileRemoval cleanup(path);
+
     model.dumpData(path);
-    LOG_INFO("Generated TUI answerfile at {}", path.string());
+    LOG_INFO("Generated temporary TUI answerfile at {}", path.string());
     return std::make_unique<opencattus::models::AnswerFile>(path);
 }
 
