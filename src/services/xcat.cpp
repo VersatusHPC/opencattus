@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib> // setenv / getenv
 #include <optional>
 #include <ranges>
@@ -573,6 +574,58 @@ std::string buildDHCPInterfacesCommand(std::string_view interface)
         "chdef -t site dhcpinterfaces={}", formatDHCPInterfaces(interface));
 }
 
+std::string shellSingleQuote(std::string_view value);
+
+std::string buildNetworkDefinitionName(const Network& network)
+{
+    const auto formatAddress = [](const auto& address) {
+        auto formatted = address.to_string();
+        std::ranges::replace(formatted, '.', '_');
+        return formatted;
+    };
+
+    return fmt::format("{}-{}", formatAddress(network.getAddress()),
+        formatAddress(network.getSubnetMask()));
+}
+
+std::string defaultDHCPDynamicRangeFor(const Network& network)
+{
+    const auto subnetAddress = network.getAddress().to_v4().to_uint();
+    const auto subnetMask = network.getSubnetMask().to_v4().to_uint();
+    const auto broadcastAddress = subnetAddress | ~subnetMask;
+    const auto firstUsableAddress = subnetAddress + 1;
+    const auto lastUsableAddress = broadcastAddress - 1;
+
+    if (lastUsableAddress < firstUsableAddress) {
+        throw std::invalid_argument(
+            "Management network is too small for an xCAT DHCP dynamic range");
+    }
+
+    // Keep the discovery pool near the top of the subnet so it stays away
+    // from the static node allocations that typically start at the low end.
+    const auto preferredRangeEnd = lastUsableAddress > firstUsableAddress + 2
+        ? lastUsableAddress - 2
+        : lastUsableAddress;
+    constexpr std::uint32_t preferredRangeSize = 100;
+    const auto availableAddresses = preferredRangeEnd - firstUsableAddress + 1;
+    const auto rangeSize = std::min(preferredRangeSize, availableAddresses);
+    const auto rangeStart = preferredRangeEnd - rangeSize + 1;
+
+    return fmt::format("{}-{}",
+        boost::asio::ip::make_address_v4(rangeStart).to_string(),
+        boost::asio::ip::make_address_v4(preferredRangeEnd).to_string());
+}
+
+std::string buildDHCPDynamicRangeCommand(
+    const Network& network, std::string_view interface)
+{
+    return fmt::format(
+        "chdef -t network {} net={} mask={} mgtifname={} dynamicrange={}",
+        buildNetworkDefinitionName(network), network.getAddress().to_string(),
+        network.getSubnetMask().to_string(), interface,
+        shellSingleQuote(defaultDHCPDynamicRangeFor(network)));
+}
+
 std::string buildPrecreateMyPostscriptsCommand(bool enabled)
 {
     return fmt::format(
@@ -804,11 +857,15 @@ void XCAT::setup() const
         }
         std::this_thread::sleep_for(std::chrono::seconds(2));
     }
-    setDHCPInterfaces(cluster()
-            ->getHeadnode()
-            .getConnection(Network::Profile::Management)
-            .getInterface()
-            .value());
+    const auto& managementConnection
+        = cluster()->getHeadnode().getConnection(Network::Profile::Management);
+    const auto managementInterface
+        = managementConnection.getInterface().value();
+    const auto& managementNetwork
+        = cluster()->getNetwork(Network::Profile::Management);
+
+    setDHCPInterfaces(managementInterface);
+    setDHCPDynamicRange(managementNetwork, managementInterface);
     setPrecreateMyPostscripts(true);
     setDomain(cluster()->getDomainName());
 }
@@ -818,6 +875,13 @@ void XCAT::setDHCPInterfaces(std::string_view interface)
 {
     auto runner = opencattus::utils::singleton::runner();
     runner->checkCommand(buildDHCPInterfacesCommand(interface));
+}
+
+void XCAT::setDHCPDynamicRange(
+    const Network& network, std::string_view interface)
+{
+    auto runner = opencattus::utils::singleton::runner();
+    runner->checkCommand(buildDHCPDynamicRangeCommand(network, interface));
 }
 
 void XCAT::setPrecreateMyPostscripts(bool enabled)
@@ -1688,6 +1752,49 @@ TEST_CASE("buildDHCPInterfacesCommand passes a raw site assignment")
 {
     CHECK(buildDHCPInterfacesCommand("oc-mgmt0")
         == "chdef -t site dhcpinterfaces=oc-mgmt0");
+}
+
+TEST_CASE("buildNetworkDefinitionName matches xCAT network keys")
+{
+    Network managementNetwork(Network::Profile::Management);
+    managementNetwork.setAddress("192.168.30.0");
+    managementNetwork.setSubnetMask("255.255.255.0");
+
+    CHECK(buildNetworkDefinitionName(managementNetwork)
+        == "192_168_30_0-255_255_255_0");
+}
+
+TEST_CASE("defaultDHCPDynamicRangeFor keeps the discovery pool near the top")
+{
+    Network managementNetwork(Network::Profile::Management);
+    managementNetwork.setAddress("192.168.30.0");
+    managementNetwork.setSubnetMask("255.255.255.0");
+
+    CHECK(defaultDHCPDynamicRangeFor(managementNetwork)
+        == "192.168.30.153-192.168.30.252");
+}
+
+TEST_CASE("defaultDHCPDynamicRangeFor scales to wider management subnets")
+{
+    Network managementNetwork(Network::Profile::Management);
+    managementNetwork.setAddress("172.26.0.0");
+    managementNetwork.setSubnetMask("255.255.0.0");
+
+    CHECK(defaultDHCPDynamicRangeFor(managementNetwork)
+        == "172.26.255.153-172.26.255.252");
+}
+
+TEST_CASE("buildDHCPDynamicRangeCommand updates the xCAT network table")
+{
+    Network managementNetwork(Network::Profile::Management);
+    managementNetwork.setAddress("192.168.30.0");
+    managementNetwork.setSubnetMask("255.255.255.0");
+
+    CHECK(buildDHCPDynamicRangeCommand(managementNetwork, "oc-mgmt0")
+        == "chdef -t network 192_168_30_0-255_255_255_0 "
+           "net=192.168.30.0 mask=255.255.255.0 "
+           "mgtifname=oc-mgmt0 "
+           "dynamicrange='192.168.30.153-192.168.30.252'");
 }
 
 TEST_CASE(
