@@ -8,8 +8,8 @@ HPC cluster up and running as quick as possible. That's OpenCATTUS.
 Its goal is to enhance the installation and maintenance experience, making it
 user-friendly, creating an easy-to-use questionnaire built with a familiar
 user interface, for gathering and verifying the required cluster information.
-For experienced users, an unattended mode will be available in future releases
-with a classic configuration file.
+For experienced users, unattended installation is available through the
+answerfile workflow.
 
 # User documentation
 
