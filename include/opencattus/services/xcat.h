@@ -14,6 +14,7 @@
 #include <fmt/ranges.h> // for std::vector formatters
 
 #include <opencattus/const.h>
+#include <opencattus/network.h>
 #include <opencattus/services/execution.h>
 #include <opencattus/services/log.h>
 #include <opencattus/services/provisioner.h>
@@ -71,6 +72,8 @@ private:
     Image m_stateless;
 
     static void setDHCPInterfaces(std::string_view interface);
+    static void setDHCPDynamicRange(
+        const Network& network, std::string_view interface);
     static void setPrecreateMyPostscripts(bool enabled);
     static void setDomain(std::string_view domain);
 
