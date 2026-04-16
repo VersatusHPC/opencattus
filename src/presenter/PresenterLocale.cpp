@@ -3,18 +3,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <opencattus/patterns/singleton.h>
 #include <opencattus/presenter/PresenterLocale.h>
-#include <opencattus/services/osservice.h>
-#include <opencattus/utils/singleton.h>
 
 namespace opencattus::presenter {
 
 PresenterLocale::PresenterLocale(
-    std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view)
+    std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view)
     : Presenter(model, view)
 {
-    const auto osservice = opencattus::utils::singleton::osservice();
-    auto availableLocales = osservice->getAvailableLocales();
+    auto availableLocales
+        = opencattus::Singleton<IRunner>::get()->checkOutput("locale -a");
+    if (availableLocales.empty()) {
+        m_view->fatalMessage(Messages::title,
+            "No locales were discovered on this system. Verify that "
+            "'locale -a' works and try again.");
+    }
 
     const auto& selectedLocale = m_view->listMenu(
         Messages::title, Messages::question, availableLocales, Messages::help);

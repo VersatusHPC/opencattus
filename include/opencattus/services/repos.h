@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <opencattus/concepts.h>
@@ -64,6 +65,12 @@ class RepoManager final {
     std::unique_ptr<Impl> m_impl;
 
 public:
+    struct RepositorySelection final {
+        std::string id;
+        std::string name;
+        bool enabled;
+    };
+
     ~RepoManager(); // required by Impl opaque type
     using Repositories
         = std::unordered_map<std::string, std::unique_ptr<IRepository>>;
@@ -87,6 +94,10 @@ public:
     );
     */
 
+    [[nodiscard]] static std::vector<RepositorySelection>
+    defaultRepositoriesFor(const OS& osinfo, std::string_view ofedVersion,
+        const std::optional<std::vector<std::string>>& enabledRepositories
+        = std::nullopt);
     void initializeDefaultRepositories();
     void enable(const std::string& repo);
     void enable(const std::vector<std::string>& repos);
@@ -101,6 +112,9 @@ public:
     [[nodiscard]] std::vector<std::unique_ptr<const IRepository>> repoFile(
         const std::string& repo) const;
 };
+
+[[nodiscard]] std::vector<std::string> expandSelectedRepositoryIds(
+    const std::vector<std::string>& repositoryIds);
 
 };
 #endif // OPENCATTUS_REPOS_H_

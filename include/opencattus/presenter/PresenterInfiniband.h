@@ -25,12 +25,20 @@ private:
                 = "Choose the desired Infiniband stack";
             static constexpr const auto help
                 = Presenter::Messages::Placeholder::help;
+
+            struct Version {
+                static constexpr const auto question
+                    = "Enter the OFED/DOCA version to use";
+                static constexpr const auto help
+                    = Presenter::Messages::Placeholder::help;
+                static constexpr const auto field = "Version";
+            };
         };
     };
 
 public:
     PresenterInfiniband(std::unique_ptr<Cluster>& model,
-        std::unique_ptr<Newt>& view, opencattus::presenter::NetworkCreator& nc);
+        std::unique_ptr<View>& view, opencattus::presenter::NetworkCreator& nc);
 };
 
 };

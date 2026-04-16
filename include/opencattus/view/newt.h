@@ -6,6 +6,7 @@
 #ifndef OPENCATTUS_NEWT_H_
 #define OPENCATTUS_NEWT_H_
 
+#include <algorithm>
 #include <boost/lexical_cast.hpp>
 #include <fmt/format.h>
 #include <iostream>
@@ -63,9 +64,16 @@ protected:
     int m_dataWidth;
     int m_maxListHeight;
 
+    [[nodiscard]] int fieldDialogWidth(std::size_t longestLabelWidth) const;
+    [[nodiscard]] int listDialogWidth(std::size_t longestItemWidth,
+        std::string_view message, std::string_view title) const;
+    [[nodiscard]] int listHeight(std::size_t itemCount) const;
+    void refreshScreenMetrics();
+
     void abort() override;
     void helpMessage(const char*) override;
     static bool hasEmptyField(const struct newtWinEntry*);
+    static bool allowsEmptyField(const struct newtWinEntry&);
 
 public:
     Newt();
@@ -78,17 +86,30 @@ public:
 
     ~Newt() override;
 
-    void message(const char*);
-    void message(const char*, const char*);
+    void message(const char*) override;
+    void message(const char*, const char*) override;
 
-    void fatalMessage(const char*, const char*);
+    void fatalMessage(const char*, const char*) override;
 
-    void okCancelMessage(const char* message);
-    void okCancelMessage(const char* title, const char* message);
+    void okCancelMessage(const char* message) override;
+    void okCancelMessage(const char* title, const char* message) override;
+    void okCancelMessagePairs(const char* title, const char* message,
+        const View::FieldEntries& pairs) override;
 
-    std::pair<int, std::vector<std::string>> multipleSelectionMenu(
+    std::pair<int, std::vector<std::string>> checkboxSelectionMenu(
         const char* title, const char* message, const char* help,
-        std::vector<std::tuple<std::string, std::string, bool>> items);
+        View::MultipleSelectionEntries items) override;
+
+    std::string listMenuImpl(const char* title, const char* message,
+        const std::vector<std::string>& items,
+        const char* helpMessage) override;
+
+    std::vector<std::string> collectListMenuImpl(const char* title,
+        const char* message, const std::vector<std::string>& items,
+        const char* helpMessage, View::ListButtonCallback addCallback) override;
+
+    View::FieldEntries fieldMenuImpl(const char* title, const char* message,
+        const View::FieldEntries& items, const char* helpMessage) override;
 
     // TODO:
     //  * Better template?
@@ -105,21 +126,24 @@ public:
             newMessage += fmt::format("{} -> {}\n", pair.first, pair.second);
         }
 
-        returnValue = newtWinChoice(const_cast<char*>(title),
-            const_cast<char*>(TUIText::Buttons::ok),
-            const_cast<char*>(TUIText::Buttons::cancel),
-            const_cast<char*>(newMessage.c_str()));
+        while (true) {
+            returnValue = newtWinChoice(const_cast<char*>(title),
+                const_cast<char*>(TUIText::Buttons::ok),
+                const_cast<char*>(TUIText::Buttons::cancel),
+                const_cast<char*>(newMessage.c_str()));
 
-        switch (returnValue) {
-            case 0:
-                /* F12 is pressed, and we don't care; continue to case 1 */
-            case 1:
-                break;
-            case 2:
-                abort();
-                break;
-            default:
-                throw std::runtime_error("Out of bounds in a switch statement");
+            switch (returnValue) {
+                case 0:
+                    continue;
+                case 1:
+                    return;
+                case 2:
+                    abort();
+                    break;
+                default:
+                    throw std::runtime_error(
+                        "Out of bounds in a switch statement");
+            }
         }
     }
 
@@ -168,13 +192,20 @@ public:
             std::begin(items), std::end(items));
 
         auto cStrings = convertToNewtList(tempStrings);
+        std::size_t longestItemWidth = 0;
+        for (const auto& item : tempStrings) {
+            longestItemWidth = std::max(longestItemWidth, item.size());
+        }
+        const auto dialogWidth = listDialogWidth(longestItemWidth,
+            message == nullptr ? "" : message, title == nullptr ? "" : title);
 
         bool stay = true;
         while (stay) {
             returnValue = newtWinMenu(const_cast<char*>(title),
-                const_cast<char*>(message), m_suggestedWidth, m_flexDown,
-                m_flexUp, m_maxListHeight, const_cast<char**>(cStrings.data()),
-                &selector, const_cast<char*>(TUIText::Buttons::ok),
+                const_cast<char*>(message), dialogWidth, m_flexDown, m_flexUp,
+                listHeight(tempStrings.size()),
+                const_cast<char**>(cStrings.data()), &selector,
+                const_cast<char*>(TUIText::Buttons::ok),
                 const_cast<char*>(TUIText::Buttons::cancel),
                 const_cast<char*>(TUIText::Buttons::add),
                 const_cast<char*>(TUIText::Buttons::remove),
@@ -184,7 +215,8 @@ public:
 
             switch (returnValue) {
                 case 0:
-                    /* F12 is pressed, and we don't care; continue to case 1 */
+                    stay = true;
+                    break;
                 case 1:
                     return tempStrings;
                 case 2:
@@ -233,24 +265,36 @@ public:
         // TODO: Check types to avoid this copy (C++20 concepts?)
         std::vector<std::string> tempStrings(
             std::begin(items), std::end(items));
+        if (tempStrings.empty()) {
+            fatalMessage(
+                title, "This menu has no available options to display.");
+        }
 
         // Newt expects a NULL terminated array of C style strings
         std::vector<const char*> cStrings = convertToNewtList(tempStrings);
+        std::size_t longestItemWidth = 0;
+        for (const auto& item : tempStrings) {
+            longestItemWidth = std::max(longestItemWidth, item.size());
+        }
+        const auto dialogWidth = listDialogWidth(longestItemWidth,
+            message == nullptr ? "" : message, title == nullptr ? "" : title);
 
         bool stay = true;
 
         while (stay) {
             returnValue = newtWinMenu(const_cast<char*>(title),
-                const_cast<char*>(message), m_suggestedWidth, m_flexDown,
-                m_flexUp, m_maxListHeight, const_cast<char**>(cStrings.data()),
-                &selector, const_cast<char*>(TUIText::Buttons::ok),
+                const_cast<char*>(message), dialogWidth, m_flexDown, m_flexUp,
+                listHeight(tempStrings.size()),
+                const_cast<char**>(cStrings.data()), &selector,
+                const_cast<char*>(TUIText::Buttons::ok),
                 const_cast<char*>(TUIText::Buttons::cancel),
                 const_cast<char*>(TUIText::Buttons::help), nullptr);
             stay = false;
 
             switch (returnValue) {
                 case 0:
-                    /* F12 is pressed, and we don't care; continue to case 1 */
+                    stay = true;
+                    break;
                 case 1:
                     return tempStrings[boost::lexical_cast<std::size_t>(
                         selector)];
@@ -279,9 +323,7 @@ public:
      */
     bool progressMenu(const char* title, const char* message,
         opencattus::services::CommandProxy&&,
-        std::function<std::optional<double>(
-            opencattus::services::CommandProxy&)>
-            fPercent);
+        View::ProgressCallback fPercent) override;
 
     // TODO:
     //  * Optimize for std::string_view and std::string.
@@ -321,13 +363,18 @@ public:
         field[arraySize].flags = 0;
 
         T returnArray;
+        std::size_t maxLabelWidth = 0;
+        for (const auto& item : items) {
+            maxLabelWidth = std::max(maxLabelWidth, item.first.size());
+        }
+        const auto dialogWidth = fieldDialogWidth(maxLabelWidth);
 
         bool stay = true;
 
         while (stay) {
             returnValue = newtWinEntries(const_cast<char*>(title),
-                const_cast<char*>(message), m_suggestedWidth, m_flexDown,
-                m_flexUp, m_dataWidth, field.get(),
+                const_cast<char*>(message), dialogWidth, m_flexDown, m_flexUp,
+                m_dataWidth, field.get(),
                 const_cast<char*>(TUIText::Buttons::ok),
                 const_cast<char*>(TUIText::Buttons::cancel),
                 const_cast<char*>(TUIText::Buttons::help), nullptr);
@@ -335,7 +382,8 @@ public:
 
             switch (returnValue) {
                 case 0:
-                    /* F12 is pressed, and we don't care; continue to case 1 */
+                    stay = true;
+                    break;
                 case 1:
                     // TODO: The view should now check for this, it's a passive
                     // view
@@ -371,8 +419,8 @@ public:
         throw std::runtime_error("Invalid return path on newt library");
     }
 
-    bool yesNoQuestion(
-        const char* title, const char* message, const char* helpMessage);
+    bool yesNoQuestion(const char* title, const char* message,
+        const char* helpMessage) override;
 };
 
 #endif // OPENCATTUS_NEWT_H_

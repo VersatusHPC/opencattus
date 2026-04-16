@@ -10,17 +10,137 @@
 #include <opencattus/utils/enums.h>
 #include <opencattus/utils/formatters.h>
 
+#include <algorithm>
 #include <arpa/inet.h> /* inet_*() functions */
 #include <boost/asio.hpp>
+#include <cstdint>
+#include <fstream>
 #include <ifaddrs.h>
+#include <net/if.h>
+#include <optional>
 #include <regex>
 #include <resolv.h>
+#include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
+
+#ifdef BUILD_TESTING
+#include <doctest/doctest.h>
+#else
+#define DOCTEST_CONFIG_DISABLE
+#include <doctest/doctest.h>
+#endif
 
 #if __cpp_lib_starts_ends_with < 201711L
 #include <boost/algorithm/string.hpp>
 #endif
+
+namespace {
+
+auto gatewayFromRouteHex(std::string_view rawGateway) -> std::optional<address>
+{
+    try {
+        const auto raw = static_cast<std::uint32_t>(
+            std::stoul(std::string(rawGateway), nullptr, 16));
+        if (raw == 0) {
+            return std::nullopt;
+        }
+
+        return boost::asio::ip::address_v4(ntohl(raw));
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+}
+
+auto parseGatewayFromProcRoute(std::istream& routes, std::string_view interface)
+    -> std::optional<address>
+{
+    std::string line;
+    std::getline(routes, line);
+
+    while (std::getline(routes, line)) {
+        std::istringstream fields(line);
+        std::string iface;
+        std::string destination;
+        std::string gateway;
+        fields >> iface >> destination >> gateway;
+
+        if (iface != interface || destination != "00000000") {
+            continue;
+        }
+
+        return gatewayFromRouteHex(gateway);
+    }
+
+    return std::nullopt;
+}
+
+auto parseFirstAddressToken(std::string_view raw) -> std::optional<address>
+{
+    std::string normalized(raw);
+    std::ranges::replace(normalized, ',', ' ');
+
+    std::istringstream tokens(normalized);
+    std::string token;
+    while (tokens >> token) {
+        boost::system::error_code ec;
+        auto candidate = boost::asio::ip::make_address(token, ec);
+        if (!ec && !candidate.is_unspecified()) {
+            return candidate;
+        }
+    }
+
+    return std::nullopt;
+}
+
+auto parseGatewayFromNetworkManagerDevice(std::istream& device)
+    -> std::optional<address>
+{
+    static constexpr std::string_view routersPrefix = "dhcp4.routers=";
+
+    std::string line;
+    while (std::getline(device, line)) {
+        if (!line.starts_with(routersPrefix)) {
+            continue;
+        }
+
+        return parseFirstAddressToken(
+            std::string_view(line).substr(routersPrefix.size()));
+    }
+
+    return std::nullopt;
+}
+
+auto fetchGatewayFromProcRouteFile(std::string_view interface)
+    -> std::optional<address>
+{
+    std::ifstream routes("/proc/net/route");
+    if (!routes) {
+        return std::nullopt;
+    }
+
+    return parseGatewayFromProcRoute(routes, interface);
+}
+
+auto fetchGatewayFromNetworkManagerDeviceFile(const std::string& interface)
+    -> std::optional<address>
+{
+    const auto ifindex = if_nametoindex(interface.c_str());
+    if (ifindex == 0) {
+        return std::nullopt;
+    }
+
+    std::ifstream device(
+        fmt::format("/run/NetworkManager/devices/{}", ifindex));
+    if (!device) {
+        return std::nullopt;
+    }
+
+    return parseGatewayFromNetworkManagerDevice(device);
+}
+
+} // namespace
 
 Network::Network()
     : Network(Profile::External)
@@ -260,50 +380,52 @@ void Network::setGateway(const std::string& gateway)
     }
 }
 
-// FIXME: It's fetching the broadcast address instead
 address Network::fetchGateway(const std::string& interface)
 {
-    struct ifaddrs *ifaddr, *ifa;
-
-    if (getifaddrs(&ifaddr) == -1)
-        throw std::runtime_error(
-            fmt::format("Cannot get interfaces: {}", std::strerror(errno)));
-
-    for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
-        if (ifa->ifa_dstaddr == nullptr)
-            continue;
-
-        if (ifa->ifa_dstaddr->sa_family != AF_INET)
-            continue;
-
-        // TODO: Check for leaks since we can't run freeifaddrs before return
-        if (std::strcmp(ifa->ifa_name, interface.c_str()) == 0) {
-
-            boost::system::error_code ec;
-            address result
-                = boost::asio::ip::make_address(ifa->ifa_dstaddr->sa_data, ec);
-
-            if (ec.value() != boost::system::errc::success) {
-                LOG_TRACE("interface {} returned an error while getting "
-                          "gateway address ({}): {}",
-                    interface, ifa->ifa_dstaddr->sa_data, ec.message());
-                continue;
-            }
-
-            if (result.is_unspecified())
-                continue;
-
-            LOG_TRACE("Got gateway address {} from interface {}",
-                result.to_string(), interface);
-
-            return result;
-        }
+    if (const auto routeGateway = fetchGatewayFromProcRouteFile(interface);
+        routeGateway.has_value()) {
+        LOG_TRACE("Got gateway address {} from route table for interface {}",
+            routeGateway->to_string(), interface);
+        return routeGateway.value();
     }
 
-    freeifaddrs(ifaddr);
+    if (const auto dhcpGateway
+        = fetchGatewayFromNetworkManagerDeviceFile(interface);
+        dhcpGateway.has_value()) {
+        LOG_TRACE("Got gateway address {} from NetworkManager DHCP data for "
+                  "interface {}",
+            dhcpGateway->to_string(), interface);
+        return dhcpGateway.value();
+    }
+
+    LOG_TRACE(
+        "Interface {} does not have a gateway IP address defined", interface);
     return {};
-    throw std::runtime_error(fmt::format(
-        "Interface {} does not have a gateway IP address defined", interface));
+}
+
+TEST_CASE("parseGatewayFromProcRoute reads the default route for an interface")
+{
+    std::istringstream routes(
+        "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\t"
+        "Window\tIRTT\n"
+        "bond0\t00000000\t0100140A\t0003\t0\t0\t300\t00000000\t0\t0\t0\n"
+        "bond1\t00000000\t010115AC\t0003\t0\t0\t301\t00000000\t0\t0\t0\n");
+
+    const auto gateway = parseGatewayFromProcRoute(routes, "bond1");
+
+    REQUIRE(gateway.has_value());
+    CHECK(gateway->to_string() == "172.21.1.1");
+}
+
+TEST_CASE("parseGatewayFromNetworkManagerDevice reads DHCP routers")
+{
+    std::istringstream device("dhcp4.domain_name_servers=10.20.0.1\n"
+                              "dhcp4.routers=10.20.0.1\n");
+
+    const auto gateway = parseGatewayFromNetworkManagerDevice(device);
+
+    REQUIRE(gateway.has_value());
+    CHECK(gateway->to_string() == "10.20.0.1");
 }
 
 uint16_t Network::getVLAN() const { return m_vlan; }

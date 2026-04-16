@@ -23,7 +23,10 @@ namespace {
 #if GLIBMM_MINOR_VERSION >= 68
     using KeyFileHandle = Glib::RefPtr<Glib::KeyFile>;
 
-    auto makeKeyFileHandle() -> KeyFileHandle { return Glib::KeyFile::create(); }
+    auto makeKeyFileHandle() -> KeyFileHandle
+    {
+        return Glib::KeyFile::create();
+    }
 
     auto glibErrorMessage(const Glib::Error& error) -> std::string
     {
@@ -73,10 +76,10 @@ struct KeyFile::Impl {
         , m_keyfile(makeKeyFileHandle()) { };
 };
 
-KeyFile::KeyFile(const fs::path& path)
+KeyFile::KeyFile(const fs::path& path, bool loadExisting)
     : m_impl(std::make_unique<KeyFile::Impl>(path))
 {
-    if (opencattus::functions::exists(path)) {
+    if (loadExisting && opencattus::functions::exists(path)) {
         m_impl->m_keyfile->load_from_file(path);
     }
 }
@@ -84,12 +87,12 @@ KeyFile::KeyFile(const fs::path& path)
 KeyFile::~KeyFile() = default;
 
 namespace {
-std::vector<std::string> toStrings(const std::vector<Glib::ustring>& input)
-{
-    return input | std::views::transform([](const auto& group) {
-        return group.raw();
-    }) | std::ranges::to<std::vector<std::string>>();
-}
+    std::vector<std::string> toStrings(const std::vector<Glib::ustring>& input)
+    {
+        return input | std::views::transform([](const auto& group) {
+            return group.raw();
+        }) | std::ranges::to<std::vector<std::string>>();
+    }
 }
 
 std::vector<std::string> KeyFile::listAllPrefixedEntries(

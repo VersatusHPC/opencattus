@@ -96,13 +96,13 @@ enum class Level { Off, Critical, Error, Warn, Info, Debug, Trace };
  *
  * @param level The logging level as a size_t.
  */
-void init(std::size_t level);
+void init(std::size_t level, bool enableTerminalSink = true);
 /**
  * @brief Initializes the logging system with a specified logging level.
  *
  * @param level The logging level as a Level enum. Default is Level::Info.
  */
-void init(Level level = Level::Info);
+void init(Level level = Level::Info, bool enableTerminalSink = true);
 /**
  * @brief Shuts down the logging system.
  *

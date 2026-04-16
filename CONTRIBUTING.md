@@ -53,6 +53,11 @@ To ensure consistency throughout the source code, keep these rules in mind as yo
 * License headers **must** be included in all files.
 * We use [clang-format](https://clang.llvm.org/docs/ClangFormat.html) to keep the coding style consistent.
   ``.clang-format`` file is shipped within the source, please use it.
+  The pinned formatter major version lives in ``.clang-format-version``.
+  For local changes, run `./format-changed.sh` before pushing or
+  `./format-changed.sh --check` to mirror the CI formatting check.
+  If your default binary is a different major version, point ``CLANG_FORMAT_BIN``
+  at a compatible executable first.
 * The code is written in modern C++ (specifically C++23) and is **not** using any deprecated features.
   We will **not** support any deprecated features.
 * External libraries are not only allowed but stimulated. Don't reinvent the wheel.

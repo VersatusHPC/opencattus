@@ -4,7 +4,9 @@
  */
 
 #include <cctype>
+#include <chrono>
 #include <cstdlib>
+#include <filesystem>
 
 #include <opencattus/const.h>
 #include <opencattus/dbus_client.h>
@@ -95,6 +97,23 @@ int runTestCommand(const std::string& testCommand,
     return EXIT_SUCCESS;
 }
 
+auto generatedTuiAnswerfilePath() -> std::filesystem::path
+{
+    const auto suffix
+        = std::chrono::system_clock::now().time_since_epoch().count();
+    return std::filesystem::temp_directory_path()
+        / fmt::format("opencattus-tui-{}.ini", suffix);
+}
+
+auto generateAnswerfileFromTuiModel(opencattus::models::Cluster& model)
+    -> std::unique_ptr<opencattus::models::AnswerFile>
+{
+    const auto path = generatedTuiAnswerfilePath();
+    model.dumpData(path);
+    LOG_INFO("Generated TUI answerfile at {}", path.string());
+    return std::make_unique<opencattus::models::AnswerFile>(path);
+}
+
 }; // anonymous namespace
 
 /**
@@ -107,6 +126,8 @@ int main(int argc, const char** argv)
     // factory should return constant options, we also mutate the options during
     // the tests
     auto optsMut = options::factory(argc, argv);
+    const bool shouldRunInteractiveQuestionnaire
+        = optsMut->answerfile.empty() && optsMut->testCommand.empty();
 
     if (optsMut->parsingError) {
         fmt::print("Parsing error: {}", optsMut->error);
@@ -132,7 +153,8 @@ int main(int argc, const char** argv)
         fmt::print("Roles: {}", roles);
         return EXIT_SUCCESS;
     }
-    Log::init(optsMut->logLevelInput);
+    optsMut->enableTUI = shouldRunInteractiveQuestionnaire;
+    Log::init(optsMut->logLevelInput, !optsMut->enableTUI);
 
 #ifndef NDEBUG
     LOG_DEBUG("Log level set to: {}\n", optsMut->logLevelInput)
@@ -174,8 +196,6 @@ int main(int argc, const char** argv)
         LOG_ERROR("CLI feature not implemented.\n");
         return EXIT_FAILURE;
     }
-    optsMut->enableTUI
-        = optsMut->answerfile.empty() && optsMut->testCommand.empty();
 
     // Initialize options singleton making it const
     LOG_DEBUG("Initializing command line options");
@@ -200,18 +220,30 @@ int main(int argc, const char** argv)
     model->printData();
 #endif
 
+    if (opts->enableTUI) {
+        // Entrypoint; if the view is constructed it will start the TUI.
+        std::unique_ptr<View> view = std::make_unique<Newt>();
+        auto presenter
+            = std::make_unique<opencattus::presenter::PresenterInstall>(
+                model, view);
+        answerfile = generateAnswerfileFromTuiModel(*model);
+
+        if (opts->dumpAnswerfile.empty() && !opts->dryRun) {
+            Log::init(opts->logLevelInput, true);
+        }
+    }
+
     if (!opts->dumpAnswerfile.empty()) {
         model->dumpData(opts->dumpAnswerfile);
         Log::shutdown();
         return EXIT_SUCCESS;
     }
 
-    if (opts->enableTUI) {
-        // Entrypoint; if the view is constructed it will start the TUI.
-        auto view = std::make_unique<Newt>();
-        auto presenter
-            = std::make_unique<opencattus::presenter::PresenterInstall>(
-                model, view);
+    if (opts->dryRun && opts->enableTUI) {
+        LOG_INFO("Dry run questionnaire complete; skipping the installation "
+                 "engine");
+        Log::shutdown();
+        return EXIT_SUCCESS;
     }
 
     initializeSingletonsModel(std::move(model), std::move(answerfile));

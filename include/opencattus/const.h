@@ -12,7 +12,7 @@ namespace opencattus {
 #define PRODUCT_NAME "OpenCATTUS"
 constexpr const char* productName = PRODUCT_NAME;
 
-#define PRODUCT_VERSION "0.1 Alpha"
+#define PRODUCT_VERSION "1.0"
 constexpr const char* productVersion = PRODUCT_VERSION;
 
 #define PRODUCT_URL "https://github.com/versatushpc/opencattus"

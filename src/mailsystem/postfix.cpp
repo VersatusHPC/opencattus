@@ -202,9 +202,10 @@ void Postfix::createFiles(const std::filesystem::path& basedir)
             break;
         case Profile::SASL:
         case Profile::Relay:
-            if (m_domain && m_port) {
+            if (m_smtp_server && m_port) {
                 baseini.setString("", "relayhost",
-                    fmt::format("[{}]:{}", m_domain.value(), m_port.value()));
+                    fmt::format(
+                        "[{}]:{}", m_smtp_server.value(), m_port.value()));
             }
             break;
     }

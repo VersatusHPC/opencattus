@@ -571,14 +571,14 @@ readme_directory = /usr/share/doc/postfix-2.10.1/README_FILES
 # the server certificate first, then the issuing CA(s) (bottom-up order).
 #
 #smtpd_tls_cert_file = /etc/pki/tls/certs/postfix.pem
-smtpd_tls_cert_file = /etc/pki/tls/certs/{fqdn}.cer
+smtpd_tls_cert_file = /etc/pki/tls/certs/localhost.crt
 
 # The full pathname of a file with the Postfix SMTP server RSA private key
 # in PEM format. The private key must be accessible without a pass-phrase,
 # i.e. it must not be encrypted.
 #
 #smtpd_tls_key_file = /etc/pki/tls/private/postfix.key
-smtpd_tls_key_file = /etc/pki/tls/private/{fqdn}.key
+smtpd_tls_key_file = /etc/pki/tls/private/localhost.key
 
 # Announce STARTTLS support to remote SMTP clients, but do not require that
 # clients use TLS encryption (opportunistic TLS inbound).

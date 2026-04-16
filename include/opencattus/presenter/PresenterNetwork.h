@@ -12,7 +12,7 @@
 #include <opencattus/models/cluster.h>
 #include <opencattus/network.h>
 #include <opencattus/services/log.h>
-#include <opencattus/view/newt.h>
+#include <opencattus/view/view.h>
 
 #include <memory>
 #include <utility>
@@ -39,7 +39,12 @@ private:
 public:
     bool addNetworkInformation(NetworkCreatorData&& data);
 
-    bool checkIfInterfaceRegistered(std::string_view interface);
+    [[nodiscard]] bool canUseInterface(
+        std::string_view interface, Network::Profile requestedProfile) const;
+    [[nodiscard]] const NetworkCreatorData* findByInterface(
+        std::string_view interface) const;
+    [[nodiscard]] const NetworkCreatorData* findByProfile(
+        Network::Profile profile) const;
 
     void saveNetworksToModel(Cluster& model);
 
@@ -74,6 +79,21 @@ private:
                 = "Fill the required network details";
             static constexpr const auto help
                 = Presenter::Messages::Placeholder::help;
+        };
+
+        struct Error {
+            static constexpr const auto sharedIP
+                = "The service network cannot reuse the management IP address";
+            static constexpr const auto sharedSubnet
+                = "The service network must use a separate subnet from the "
+                  "management network";
+            static constexpr const auto sharedDetailsInvalid
+                = "The shared service network details are invalid";
+            static constexpr const auto gatewayDetailsInvalid
+                = "IP address, subnet mask, and gateway must be valid IPv4 "
+                  "addresses";
+            static constexpr const auto gatewayOutsideSubnet
+                = "Gateway must be inside the selected subnet";
         };
 
         struct IP {
@@ -123,12 +143,12 @@ private:
 
     std::vector<std::string> retrievePossibleInterfaces(NetworkCreator& nc);
 
-    void createNetwork(
-        const std::vector<std::string>& interfaceList, NetworkCreatorData& ncd);
+    void createNetwork(const std::vector<std::string>& interfaceList,
+        NetworkCreator& nc, NetworkCreatorData& ncd);
 
 public:
     PresenterNetwork(std::unique_ptr<Cluster>& model,
-        std::unique_ptr<Newt>& view, NetworkCreator& nc,
+        std::unique_ptr<View>& view, NetworkCreator& nc,
         Network::Profile profile = Network::Profile::External,
         Network::Type type = Network::Type::Ethernet);
 };

@@ -21,11 +21,15 @@ private:
         struct SLURM {
             static constexpr const auto title = "SLURM settings";
             static constexpr const auto question
-                = "Enter the default partition name for SLURM";
+                = "Enter the SLURM controller settings. The accounting "
+                  "storage password will reuse the slurmdbd password.";
             static constexpr const auto help
                 = Presenter::Messages::Placeholder::help;
 
             static constexpr const auto partition = "Partition name";
+            static constexpr const auto mariadbRootPassword
+                = "MariaDB root password";
+            static constexpr const auto slurmDBPassword = "slurmdbd password";
         };
 
         struct PBS {
@@ -40,7 +44,7 @@ private:
 
 public:
     PresenterQueueSystem(
-        std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view);
+        std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view);
 };
 
 };

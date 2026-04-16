@@ -3,7 +3,7 @@ from conan.tools.cmake import cmake_layout, CMakeToolchain, CMake
 
 class MyProjectConan(ConanFile):
     name = "OpenCATTUS"
-    version = "0.1.1"
+    version = "1.0.0"
     settings = "os", "arch", "compiler", "build_type"
 
     def requirements(self):
@@ -36,4 +36,3 @@ class MyProjectConan(ConanFile):
         cmake = CMake(self)
         cmake.configure()
         cmake.build()
-

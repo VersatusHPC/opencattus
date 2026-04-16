@@ -366,12 +366,12 @@ struct RepoConfig final {
 // the parsing
 struct RepoConfigVars final {
     std::string arch; // ex: x86_64
-    std::string beegfsVersion; // beegfs_<version>, ex: beegfs_7.3.3
+    std::string beegfsVersion; // latest-stable or beegfs_<version>
     std::string ohpcVersion; // major, ex: 3
     std::string osversion; // major.minor, ex: 9.5
     std::string releasever; // major, ex: 9
     std::string xcatVersion; // major.minor, ex: 2.17 or latest
-    std::string zabbixVersion; // major.minor, ex: 6.4
+    std::string zabbixVersion; // major.minor LTS, ex: 7.0
     std::string ofedVersion; // major.minor, ex: 6.4
     std::string ofedRepoTarget; // repo OS target, ex: 9.6 or 10
     std::string cudaGPGKey; // NVIDIA CUDA repository key filename
@@ -856,12 +856,12 @@ public:
     static RepoConfFile parseTest(const std::filesystem::path& path,
         const RepoConfigVars& vars = RepoConfigVars {
             .arch = "x86_64",
-            .beegfsVersion = "beegfs_7.3.3",
+            .beegfsVersion = "latest-stable",
             .ohpcVersion = "3",
             .osversion = "9.5",
             .releasever = "9",
             .xcatVersion = "latest",
-            .zabbixVersion = "6.4",
+            .zabbixVersion = "7.0",
             .ofedVersion = "latest-3.2-LTS",
             .ofedRepoTarget = "9",
             .cudaGPGKey = "D42D0685.pub",
@@ -912,6 +912,28 @@ public:
     }
 };
 
+auto repoConfigBasePath() -> std::filesystem::path
+{
+    constexpr auto localSourceTreePath = std::string_view("repos");
+    constexpr auto localBuildTreePath = std::string_view("../repos");
+
+    if (opencattus::functions::exists(RepoConfigParser::defaultPath)) {
+        return std::filesystem::path(RepoConfigParser::defaultPath);
+    }
+    if (opencattus::functions::exists(localSourceTreePath)) {
+        LOG_DEBUG(
+            "Using source-tree repository config path {}", localSourceTreePath);
+        return std::filesystem::path(localSourceTreePath);
+    }
+    if (opencattus::functions::exists(localBuildTreePath)) {
+        LOG_DEBUG(
+            "Using build-tree repository config path {}", localBuildTreePath);
+        return std::filesystem::path(localBuildTreePath);
+    }
+
+    return std::filesystem::path(RepoConfigParser::defaultPath);
+}
+
 std::string defaultOpenHPCVersionFor(const OS& osinfo)
 {
     switch (osinfo.getPlatform()) {
@@ -926,6 +948,16 @@ std::string defaultOpenHPCVersionFor(const OS& osinfo)
                 fmt::format("Unsupported OpenHPC repository baseline for EL{}",
                     osinfo.getMajorVersion()));
     }
+}
+
+std::string defaultZabbixVersionFor(std::string_view requestedVersion)
+{
+    if (requestedVersion.empty() || requestedVersion == "latest-lts"
+        || requestedVersion == "lts") {
+        return "7.0";
+    }
+
+    return std::string(requestedVersion);
 }
 
 std::optional<std::pair<int, int>> parseDocaLtsVersion(
@@ -1089,6 +1121,11 @@ TEST_CASE("RepoConfigParser")
     CHECK(epel.upstream.repo
         == "https://download.fedoraproject.org/pub/epel/9/Everything/"
            "x86_64/");
+    const auto zabbixOpt = conffile.find("zabbix");
+    REQUIRE(zabbixOpt.has_value() == true);
+    CHECK(zabbixOpt->mirror.repo == "zabbix/zabbix/7.0/rhel/9/x86_64/");
+    CHECK(zabbixOpt->upstream.repo
+        == "https://repo.zabbix.com/zabbix/7.0/rhel/9/x86_64/");
 
     const auto el10Conf = RepoConfigParser::parseTest("repos/repos.conf",
         RepoConfigVars {
@@ -1146,6 +1183,16 @@ TEST_CASE("defaultDOCARepoTargetFor uses explicit EL baselines")
 #endif
 }
 
+TEST_CASE("defaultZabbixVersionFor resolves latest LTS alias")
+{
+#ifdef BUILD_TESTING
+    CHECK(defaultZabbixVersionFor("") == "7.0");
+    CHECK(defaultZabbixVersionFor("latest-lts") == "7.0");
+    CHECK(defaultZabbixVersionFor("lts") == "7.0");
+    CHECK(defaultZabbixVersionFor("7.2") == "7.2");
+#endif
+}
+
 TEST_CASE("defaultCUDAGPGKeyFor tracks NVIDIA CUDA repo keys by EL release")
 {
 #ifdef BUILD_TESTING
@@ -1196,7 +1243,7 @@ TEST_CASE("RepoConfigParser emits explicit DOCA repo targets")
             .osversion = "9.7",
             .releasever = "9",
             .xcatVersion = "latest",
-            .zabbixVersion = "6.4",
+            .zabbixVersion = "7.0",
             .ofedVersion = "latest-2.9-LTS",
             .ofedRepoTarget = "9.6",
             .cudaGPGKey = "D42D0685.pub",
@@ -1219,7 +1266,7 @@ TEST_CASE("RepoConfigParser emits explicit DOCA repo targets")
             .osversion = "9.7",
             .releasever = "9",
             .xcatVersion = "latest",
-            .zabbixVersion = "6.4",
+            .zabbixVersion = "7.0",
             .ofedVersion = "latest-3.2-LTS",
             .ofedRepoTarget = "9",
             .cudaGPGKey = "D42D0685.pub",
@@ -1266,7 +1313,7 @@ TEST_CASE("RepoConfigParser emits CUDA repository URLs")
             .osversion = "9.7",
             .releasever = "9",
             .xcatVersion = "latest",
-            .zabbixVersion = "6.4",
+            .zabbixVersion = "7.0",
             .ofedVersion = "latest-2.9-LTS",
             .ofedRepoTarget = "9.6",
             .cudaGPGKey = "D42D0685.pub",
@@ -1290,7 +1337,7 @@ TEST_CASE("RepoConfigParser emits CUDA repository URLs")
                 .osversion = "9.7",
                 .releasever = "9",
                 .xcatVersion = "latest",
-                .zabbixVersion = "6.4",
+                .zabbixVersion = "7.0",
                 .ofedVersion = "latest-3.2-LTS",
                 .ofedRepoTarget = "9",
                 .cudaGPGKey = "D42D0685.pub",
@@ -1360,7 +1407,7 @@ TEST_CASE("RepoConfigParser emits oneAPI and ZFS repository URLs")
             .osversion = "9.7",
             .releasever = "9",
             .xcatVersion = "latest",
-            .zabbixVersion = "6.4",
+            .zabbixVersion = "7.0",
             .ofedVersion = "latest-2.9-LTS",
             .ofedRepoTarget = "9.6",
             .cudaGPGKey = "D42D0685.pub",
@@ -1393,7 +1440,7 @@ TEST_CASE("RepoConfigParser interpolates distro repository ids")
             .osversion = "9.7",
             .releasever = "9",
             .xcatVersion = "latest",
-            .zabbixVersion = "6.4",
+            .zabbixVersion = "7.0",
             .ofedVersion = "latest-2.9-LTS",
             .ofedRepoTarget = "9.6",
             .cudaGPGKey = "D42D0685.pub",
@@ -1886,22 +1933,6 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
         addToOutput("epel");
         addToOutput("OpenHPC");
         addToOutput("OpenHPC-Updates");
-        addToOutput("rpmfusion");
-        addToOutput("elrepo");
-        addToOutput("oneAPI");
-        addToOutput("zfs");
-        switch (osinfo.getPlatform()) {
-            case OS::Platform::el8:
-                addToOutput("beegfs");
-                break;
-            case OS::Platform::el9:
-                addToOutput("beegfs");
-                break;
-            case OS::Platform::el10:
-                break;
-            default:
-                throw std::runtime_error("Unsupported platform");
-        }
         return output;
     }
 
@@ -1909,7 +1940,7 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
         const OS& osinfo, const RepoConfigVars& vars)
     {
         const auto& conffiles = RepoConfigParser::load<UseVaultService>(
-            RepoConfigParser::defaultPath, osinfo, vars);
+            repoConfigBasePath(), osinfo, vars);
         return resolveReposNames(osinfo, conffiles);
     }
 };
@@ -1927,7 +1958,7 @@ TEST_CASE("RepoNames")
         .osversion = "9.4",
         .releasever = "9",
         .xcatVersion = "latest",
-        .zabbixVersion = "6.4",
+        .zabbixVersion = "7.0",
         .ofedVersion = "latest-3.2-LTS",
         .ofedRepoTarget = "9",
         .cudaGPGKey = "D42D0685.pub",
@@ -1939,7 +1970,7 @@ TEST_CASE("RepoNames")
         .osversion = "8.10",
         .releasever = "8",
         .xcatVersion = "latest",
-        .zabbixVersion = "6.4",
+        .zabbixVersion = "7.0",
         .ofedVersion = "latest-3.2-LTS",
         .ofedRepoTarget = "8",
         .cudaGPGKey = "D42D0685.pub",
@@ -1960,11 +1991,6 @@ TEST_CASE("RepoNames")
                 "epel",
                 "OpenHPC",
                 "OpenHPC-Updates",
-                "rpmfusion",
-                "elrepo",
-                "oneAPI",
-                "zfs",
-                "beegfs",
             });
     }
 
@@ -1983,11 +2009,6 @@ TEST_CASE("RepoNames")
                 "epel",
                 "OpenHPC",
                 "OpenHPC-Updates",
-                "rpmfusion",
-                "elrepo",
-                "oneAPI",
-                "zfs",
-                "beegfs",
             });
     }
 
@@ -2006,11 +2027,6 @@ TEST_CASE("RepoNames")
                 "epel",
                 "OpenHPC",
                 "OpenHPC-Updates",
-                "rpmfusion",
-                "elrepo",
-                "oneAPI",
-                "zfs",
-                "beegfs",
             });
     }
     // Rocky EL10
@@ -2040,10 +2056,6 @@ TEST_CASE("RepoNames")
                 "epel",
                 "OpenHPC",
                 "OpenHPC-Updates",
-                "rpmfusion",
-                "elrepo",
-                "oneAPI",
-                "zfs",
             });
     }
 
@@ -2062,11 +2074,6 @@ TEST_CASE("RepoNames")
                 "epel",
                 "OpenHPC",
                 "OpenHPC-Updates",
-                "rpmfusion",
-                "elrepo",
-                "oneAPI",
-                "zfs",
-                "beegfs",
             });
     }
 
@@ -2085,11 +2092,6 @@ TEST_CASE("RepoNames")
                 "epel",
                 "OpenHPC",
                 "OpenHPC-Updates",
-                "rpmfusion",
-                "elrepo",
-                "oneAPI",
-                "zfs",
-                "beegfs",
             });
     }
 
@@ -2108,11 +2110,6 @@ TEST_CASE("RepoNames")
                 "epel",
                 "OpenHPC",
                 "OpenHPC-Updates",
-                "rpmfusion",
-                "elrepo",
-                "oneAPI",
-                "zfs",
-                "beegfs",
             });
     }
 }
@@ -2156,7 +2153,7 @@ struct RepoGenerator final {
     static std::size_t generate(const OS& osinfo, const RepoConfigVars& vars)
     {
         const auto conffiles = RepoConfigParser::load<ShouldUseVaultService>(
-            RepoConfigParser::defaultPath, osinfo, vars);
+            repoConfigBasePath(), osinfo, vars);
         return generate(conffiles, osinfo, RPMRepoManager::basedir);
     }
 };
@@ -2178,7 +2175,7 @@ TEST_CASE("RepoGenerator")
         .osversion = "9.4",
         .releasever = "9",
         .xcatVersion = "latest",
-        .zabbixVersion = "6.4",
+        .zabbixVersion = "7.0",
         .ofedVersion = "latest-3.2-LTS",
         .ofedRepoTarget = "9",
         .cudaGPGKey = "D42D0685.pub",
@@ -2334,6 +2331,156 @@ RepoManager::RepoManager()
 {
 }
 
+auto buildRepoConfigVars(const OS& osinfo, std::string_view ofedVersion)
+    -> RepoConfigVars
+{
+    const auto opts = opencattus::utils::singleton::options();
+    const auto resolvedOfedVersion = ofedVersion.empty()
+        ? std::string("latest")
+        : std::string(ofedVersion);
+
+    return RepoConfigVars {
+        .arch = opencattus::utils::enums::toString(osinfo.getArch()),
+        .beegfsVersion = opts->beegfsVersion,
+        .ohpcVersion = defaultOpenHPCVersionFor(osinfo),
+        .osversion = osinfo.getVersion(),
+        .releasever = fmt::format("{}", osinfo.getMajorVersion()),
+        .xcatVersion = opts->xcatVersion,
+        .zabbixVersion = defaultZabbixVersionFor(opts->zabbixVersion),
+        .ofedVersion = resolvedOfedVersion,
+        .ofedRepoTarget = defaultDOCARepoTargetFor(osinfo, resolvedOfedVersion),
+        .cudaGPGKey = defaultCUDAGPGKeyFor(osinfo),
+        .rhelBaseMirrorGPGKey = defaultRHELBaseMirrorGPGKeyFor(osinfo),
+        .rhelCodeReadyMirrorRepo = defaultRHELCodeReadyMirrorRepoFor(osinfo),
+        .rhelCodeReadyMirrorGPGKey
+        = defaultRHELCodeReadyMirrorGPGKeyFor(osinfo),
+    };
+}
+
+std::vector<std::string> expandSelectedRepositoryIds(
+    const std::vector<std::string>& repositoryIds)
+{
+    static const auto dependencies
+        = std::unordered_map<std::string, std::vector<std::string>> {
+              { "beegfs", { "grafana", "influxdata" } },
+          };
+
+    std::vector<std::string> expanded;
+    expanded.reserve(repositoryIds.size() + 2);
+    auto seen = std::unordered_set<std::string> {};
+
+    const auto append
+        = [&](const std::string& repoId, auto&& appendSelf) -> void {
+        if (!seen.insert(repoId).second) {
+            return;
+        }
+
+        expanded.emplace_back(repoId);
+        if (const auto it = dependencies.find(repoId);
+            it != dependencies.end()) {
+            for (const auto& dependency : it->second) {
+                appendSelf(dependency, appendSelf);
+            }
+        }
+    };
+
+    for (const auto& repositoryId : repositoryIds) {
+        append(repositoryId, append);
+    }
+
+    return expanded;
+}
+
+std::vector<RepoManager::RepositorySelection>
+RepoManager::defaultRepositoriesFor(const OS& osinfo,
+    std::string_view ofedVersion,
+    const std::optional<std::vector<std::string>>& enabledRepositories)
+{
+    struct NoVaultLookup final {
+        static bool shouldUseVault(const OS& osinfo)
+        {
+            static_cast<void>(osinfo);
+            return false;
+        }
+    };
+
+    const auto vars = buildRepoConfigVars(osinfo, ofedVersion);
+    const auto conffiles = RepoConfigParser::load<NoVaultLookup>(
+        repoConfigBasePath(), osinfo, vars);
+    auto enabledRepoIds = RepoNames<>::resolveReposNames(osinfo, conffiles);
+    if (enabledRepositories.has_value()) {
+        const auto expandedSelectedRepositories
+            = expandSelectedRepositoryIds(enabledRepositories.value());
+        enabledRepoIds.insert(enabledRepoIds.end(),
+            expandedSelectedRepositories.begin(),
+            expandedSelectedRepositories.end());
+    }
+    const auto enabledSet = std::unordered_set<std::string>(
+        enabledRepoIds.begin(), enabledRepoIds.end());
+    std::map<std::string, RepositorySelection> selections;
+
+    const auto appendSelections = [&](const RepoConfFile& confFile) {
+        for (const auto& [filename, configs] : confFile.files()) {
+            static_cast<void>(filename);
+            for (const auto& config : configs) {
+                selections.insert_or_assign(config.repoId.id,
+                    RepositorySelection {
+                        .id = config.repoId.id,
+                        .name = config.repoId.name,
+                        .enabled = enabledSet.contains(config.repoId.id),
+                    });
+            }
+        }
+    };
+
+    appendSelections(conffiles.distroRepos);
+    appendSelections(conffiles.nonDistroRepos);
+
+    std::vector<RepositorySelection> output;
+    output.reserve(selections.size());
+    for (const auto& [id, selection] : selections) {
+        static_cast<void>(id);
+        output.emplace_back(selection);
+    }
+
+    return output;
+}
+
+TEST_CASE("expandSelectedRepositoryIds enables BeeGFS monitoring dependencies")
+{
+    CHECK(expandSelectedRepositoryIds({ "beegfs" })
+        == std::vector<std::string> { "beegfs", "grafana", "influxdata" });
+}
+
+TEST_CASE("defaultRepositoriesFor keeps mandatory repositories enabled when "
+          "optional repositories are selected")
+{
+    opencattus::services::initializeSingletonsOptions(
+        std::make_unique<const Options>(Options {}));
+    const auto osinfo
+        = OS(models::OS::Distro::Rocky, OS::Platform::el9, 6, OS::Arch::x86_64);
+    const auto selections = RepoManager::defaultRepositoriesFor(
+        osinfo, "latest", std::vector<std::string> { "cuda", "beegfs" });
+
+    const auto enabled = [&selections](std::string_view repoId) {
+        const auto it = std::ranges::find_if(selections,
+            [repoId](const auto& selection) { return selection.id == repoId; });
+        REQUIRE(it != selections.end());
+        return it->enabled;
+    };
+
+    CHECK(enabled("appstream"));
+    CHECK(enabled("baseos"));
+    CHECK(enabled("crb"));
+    CHECK(enabled("epel"));
+    CHECK(enabled("OpenHPC"));
+    CHECK(enabled("OpenHPC-Updates"));
+    CHECK(enabled("cuda"));
+    CHECK(enabled("beegfs"));
+    CHECK(enabled("grafana"));
+    CHECK(enabled("influxdata"));
+}
+
 inline void RPMRepository::valid() const
 {
     auto isValid = (!id().empty() && !name().empty()
@@ -2368,35 +2515,35 @@ void RepoManager::initializeDefaultRepositories()
     LOG_INFO("RepoManager initialization");
     auto cluster = opencattus::Singleton<models::Cluster>::get();
     auto osinfo = cluster->getHeadnode().getOS();
-    auto ofedVersion = cluster->getOFED()->getVersion();
+    const auto ofedVersion = cluster->getOFED().has_value()
+        ? cluster->getOFED()->getVersion()
+        : std::string("latest");
+    const auto vars = buildRepoConfigVars(osinfo, ofedVersion);
+    const auto repositories = defaultRepositoriesFor(
+        osinfo, ofedVersion, cluster->getEnabledRepositories());
 
-    const auto vars = RepoConfigVars {
-        .arch = opencattus::utils::enums::toString(osinfo.getArch()),
-        .beegfsVersion = opts->beegfsVersion,
-        .ohpcVersion = defaultOpenHPCVersionFor(osinfo),
-        .osversion = osinfo.getVersion(),
-        .releasever = fmt::format("{}", osinfo.getMajorVersion()),
-        .xcatVersion = opts->xcatVersion,
-        .zabbixVersion = opts->zabbixVersion,
-        .ofedVersion = ofedVersion,
-        .ofedRepoTarget = defaultDOCARepoTargetFor(osinfo, ofedVersion),
-        .cudaGPGKey = defaultCUDAGPGKeyFor(osinfo),
-        .rhelBaseMirrorGPGKey = defaultRHELBaseMirrorGPGKeyFor(osinfo),
-        .rhelCodeReadyMirrorRepo = defaultRHELCodeReadyMirrorRepoFor(osinfo),
-        .rhelCodeReadyMirrorGPGKey
-        = defaultRHELCodeReadyMirrorGPGKeyFor(osinfo),
-    };
+    std::vector<std::string> managedRepoIds;
+    managedRepoIds.reserve(repositories.size());
+    std::vector<std::string> enabledRepoIds;
+    for (const auto& repository : repositories) {
+        managedRepoIds.emplace_back(repository.id);
+        if (repository.enabled) {
+            enabledRepoIds.emplace_back(repository.id);
+        }
+    }
 
     switch (osinfo.getPackageType()) {
         case OS::PackageType::RPM: {
             // Generate the repository files
             RPMRepositoryGenerator::generate(vars);
-            // Get the names of repositories to enable
-            const auto repos = RepoNames<>::resolveReposNames(osinfo, vars);
             // Load the base directory, /etc/yum.repos.d/*.repo files
             m_impl->rpm.loadBaseDir();
-            // Enable the repositories
-            m_impl->rpm.enable(repos, true);
+            if (!managedRepoIds.empty()) {
+                m_impl->rpm.enable(managedRepoIds, false);
+            }
+            if (!enabledRepoIds.empty()) {
+                m_impl->rpm.enable(enabledRepoIds, true);
+            }
 
             LOG_INFO("Enabling dnf keepcache option, use `dnf config-manager "
                      "--save --setopt=keepcache=False` to disable it")

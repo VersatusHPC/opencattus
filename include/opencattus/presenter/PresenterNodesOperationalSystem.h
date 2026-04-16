@@ -8,6 +8,7 @@
 
 #include <opencattus/presenter/Presenter.h>
 #include <optional>
+#include <tuple>
 
 namespace opencattus::presenter {
 
@@ -49,6 +50,8 @@ private:
 
             static constexpr const auto nonExistent
                 = "The specified directory do not exist";
+            static constexpr const auto notReadable
+                = "The specified path is not a readable directory";
         };
 
         struct OperationalSystemDistro {
@@ -59,14 +62,22 @@ private:
         };
 
         struct OperationalSystemVersion {
-            static constexpr const auto question = "Choose your distro version";
+            static constexpr const auto question
+                = "Enter the distro version and architecture";
             static constexpr const auto rhelError
                 = "Unfortunately, we do not support downloading Red Hat "
                   "Enterprise Linux yet.\n"
                   "Please download the ISO yourself and put in an appropriate "
                   "location.";
+            static constexpr const auto invalidVersion
+                = "Use the version format MAJOR.MINOR, for example 9.6";
+            static constexpr const auto invalidArch
+                = "Supported architectures are x86_64 and ppc64le";
             static constexpr const auto help
                 = Presenter::Messages::Placeholder::help;
+
+            static constexpr const auto version = "Version";
+            static constexpr const auto architecture = "Architecture";
         };
 
         struct OperationalSystem {
@@ -74,16 +85,23 @@ private:
                 = "Choose your operational system ISO";
             static constexpr const auto help
                 = Presenter::Messages::Placeholder::help;
+            static constexpr const auto noneFound
+                = "No ISO matching the selected distro was found in the "
+                  "provided directory";
+            static constexpr const auto downloadMissing
+                = "Download an ISO for this distro instead? Choose No to enter "
+                  "another directory.";
         };
     };
 
-    std::optional<PresenterNodesVersionCombo> selectVersion(OS::Distro distro);
+    PresenterNodesVersionCombo promptVersion(OS::Distro distro,
+        std::optional<PresenterNodesVersionCombo> initial = std::nullopt);
     std::string getDownloadURL(
         OS::Distro distro, PresenterNodesVersionCombo version);
 
 public:
     PresenterNodesOperationalSystem(
-        std::unique_ptr<Cluster>& model, std::unique_ptr<Newt>& view);
+        std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view);
 };
 
 };

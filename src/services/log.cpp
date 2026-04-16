@@ -10,14 +10,18 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
-void Log::init(std::size_t level) { init(static_cast<Level>(level)); }
+#ifdef BUILD_TESTING
+#include <doctest/doctest.h>
+#endif
 
-void Log::init(Level level)
+void Log::init(std::size_t level, bool enableTerminalSink)
+{
+    init(static_cast<Level>(level), enableTerminalSink);
+}
+
+void Log::init(Level level, bool enableTerminalSink)
 {
     const auto& pattern { "%^[%Y-%m-%d %H:%M:%S.%e] %v%$" };
-
-    auto stderrSink = std::make_shared<spdlog::sinks::stderr_color_sink_mt>();
-    stderrSink->set_pattern(pattern);
 
     const auto& logfile = fmt::format(
         "{}.log", boost::to_lower_copy(std::string { productName }));
@@ -26,7 +30,15 @@ void Log::init(Level level)
         = std::make_shared<spdlog::sinks::basic_file_sink_st>(logfile);
     fileSink->set_pattern(pattern);
 
-    std::vector<spdlog::sink_ptr> sinks { stderrSink, fileSink };
+    std::vector<spdlog::sink_ptr> sinks { fileSink };
+    if (enableTerminalSink) {
+        auto stderrSink
+            = std::make_shared<spdlog::sinks::stderr_color_sink_mt>();
+        stderrSink->set_pattern(pattern);
+        sinks.insert(sinks.begin(), stderrSink);
+    }
+
+    spdlog::drop(productName);
     auto logger = std::make_shared<spdlog::logger>(
         productName, sinks.begin(), sinks.end());
 
@@ -67,3 +79,21 @@ void Log::init(Level level)
 }
 
 void Log::shutdown() { spdlog::shutdown(); }
+
+#ifdef BUILD_TESTING
+TEST_CASE("Log::init disables terminal sink for TUI mode")
+{
+    Log::init(Log::Level::Info, false);
+    const auto logger = spdlog::get(productName);
+    REQUIRE(logger != nullptr);
+    CHECK(logger->sinks().size() == 1);
+}
+
+TEST_CASE("Log::init keeps terminal sink for non-TUI mode")
+{
+    Log::init(Log::Level::Info, true);
+    const auto logger = spdlog::get(productName);
+    REQUIRE(logger != nullptr);
+    CHECK(logger->sinks().size() == 2);
+}
+#endif

@@ -63,7 +63,7 @@ std::string buildNodeDefinitionScript(
         R"(
 nodedefine {nodeName}
 nodeattrib {nodeName} net.ipv4_address={nodeIp}/{nodeCIDR}
-nodeattrib {nodeName} bmcuser={bmcuser} bmcpass={bmcpass} crypted.rootpassword={rootpwd} crypted.grubpassword={grubpwd}
+nodeattrib {nodeName} crypted.rootpassword={rootpwd} crypted.grubpassword={grubpwd}
 )",
         fmt::arg("nodeName", node.getHostname()),
         fmt::arg("nodeIp",
@@ -75,9 +75,15 @@ nodeattrib {nodeName} bmcuser={bmcuser} bmcpass={bmcpass} crypted.rootpassword={
                 node.getConnection(Network::Profile::Management)
                     .getNetwork()
                     ->getSubnetMask())),
-        fmt::arg("bmcuser", node.getBMC()->getUsername()),
-        fmt::arg("bmcpass", node.getBMC()->getPassword()),
         fmt::arg("rootpwd", rootpwd), fmt::arg("grubpwd", rootpwd));
+
+    if (const auto& bmc = node.getBMC(); bmc) {
+        script += fmt::format("nodeattrib {nodeName} bmcuser={bmcuser} "
+                              "bmcpass={bmcpass}\n",
+            fmt::arg("nodeName", node.getHostname()),
+            fmt::arg("bmcuser", bmc->getUsername()),
+            fmt::arg("bmcpass", bmc->getPassword()));
+    }
 
     if (const auto& macOpt
         = node.getConnection(Network::Profile::Management).getMAC();
@@ -711,8 +717,8 @@ rm -rf $scratchdir || :
 }
 
 namespace {
-auto makeConfluentTestNode(std::optional<std::string_view> mac = std::nullopt)
-    -> opencattus::models::Node
+auto makeConfluentTestNode(std::optional<std::string_view> mac = std::nullopt,
+    bool includeBMC = true) -> opencattus::models::Node
 {
     using opencattus::models::CPU;
     using opencattus::models::Node;
@@ -733,7 +739,11 @@ auto makeConfluentTestNode(std::optional<std::string_view> mac = std::nullopt)
 
     OS os(OS::Distro::Rocky, OS::Platform::el9, 7);
     CPU cpu(1, 2, 1);
-    BMC bmc("192.168.30.101", "admin", "pa'ss", 0, 9600, BMC::kind::IPMI);
+    std::optional<BMC> bmc = std::nullopt;
+    if (includeBMC) {
+        bmc.emplace(
+            "192.168.30.101", "admin", "pa'ss", 0, 9600, BMC::kind::IPMI);
+    }
 
     Node node("n01", os, cpu, std::move(connections), bmc);
     node.setNodeRootPassword(std::string("labroot"));
@@ -793,6 +803,20 @@ TEST_CASE("buildNodeDefinitionScript emits a MAC assignment only when the "
 
         CHECK_FALSE(script.contains("net.hwaddr="));
         CHECK(script.contains("bmcpass=pa'ss"));
+    }
+
+    SUBCASE("without bmc")
+    {
+        const auto script = buildNodeDefinitionScript(
+            makeConfluentTestNode(std::nullopt, false), "rocky-9.7-x86_64");
+
+        CHECK(script.contains("nodeattrib n01 "
+                              "crypted.rootpassword=labroot "
+                              "crypted.grubpassword=labroot"));
+        CHECK_FALSE(script.contains("bmcuser="));
+        CHECK_FALSE(script.contains("bmcpass="));
+        CHECK(
+            script.contains("nodedeploy -p n01 -n rocky-9.7-x86_64-diskless"));
     }
 }
 
