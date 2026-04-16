@@ -25,6 +25,14 @@ private:
                 = "Choose the desired Infiniband stack";
             static constexpr const auto help
                 = Presenter::Messages::Placeholder::help;
+
+            struct Version {
+                static constexpr const auto question
+                    = "Enter the OFED/DOCA version to use";
+                static constexpr const auto help
+                    = Presenter::Messages::Placeholder::help;
+                static constexpr const auto field = "Version";
+            };
         };
     };
 

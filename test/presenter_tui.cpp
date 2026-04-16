@@ -23,6 +23,7 @@
 #include <opencattus/models/answerfile.h>
 #include <opencattus/models/cluster.h>
 #include <opencattus/patterns/singleton.h>
+#include <opencattus/presenter/PresenterInfiniband.h>
 #include <opencattus/presenter/PresenterInstall.h>
 #include <opencattus/presenter/PresenterMailSystem.h>
 #include <opencattus/presenter/PresenterNetwork.h>
@@ -40,6 +41,7 @@ using opencattus::models::AnswerFile;
 using opencattus::models::Cluster;
 using opencattus::presenter::NetworkCreator;
 using opencattus::presenter::NetworkCreatorData;
+using opencattus::presenter::PresenterInfiniband;
 using opencattus::presenter::PresenterInstall;
 using opencattus::presenter::PresenterMailSystem;
 using opencattus::presenter::PresenterNetwork;
@@ -346,6 +348,12 @@ auto usableHostInterfaces() -> std::vector<std::string>
     return usable;
 }
 
+auto hasInfinibandInterface() -> bool
+{
+    return std::ranges::any_of(Connection::fetchInterfaces(),
+        [](const auto& interface) { return interface.starts_with("ib"); });
+}
+
 void initializePresenterTestEnvironment(
     ScriptedRunner::Outputs outputs = ScriptedRunner::Outputs { })
 {
@@ -536,11 +544,48 @@ TEST_SUITE("opencattus::presenter::tui")
             });
     }
 
+    TEST_CASE("infiniband questionnaire persists an explicit OFED version")
+    {
+        initializePresenterTestEnvironment(defaultRunnerOutputs());
+
+        if (!hasInfinibandInterface()) {
+            MESSAGE("Skipping PresenterInfiniband TUI test: need an "
+                    "Infiniband interface");
+            return;
+        }
+
+        const auto interfaces = usableHostInterfaces();
+        if (interfaces.empty()) {
+            MESSAGE("Skipping PresenterInfiniband TUI test: need a usable "
+                    "interface for the application network");
+            return;
+        }
+
+        auto model = std::make_unique<Cluster>();
+        auto state = std::make_shared<ScriptedViewState>();
+        state->responses = {
+            yesNo(true),
+            select("Doca"),
+            fields({ "latest-3.2-LTS" }),
+            select(interfaces.front()),
+            fields({ "172.16.0.254", "255.255.255.0", "",
+                "application.cluster.example.com", "1.1.1.1" }),
+        };
+        std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
+
+        NetworkCreator nc;
+        PresenterInfiniband(model, view, nc);
+        nc.saveNetworksToModel(*model);
+
+        REQUIRE(model->getOFED().has_value());
+        CHECK(model->getOFED()->getKind() == OFED::Kind::Doca);
+        CHECK(model->getOFED()->getVersion() == "latest-3.2-LTS");
+    }
+
     TEST_CASE("presenter install can drive the questionnaire end to end")
     {
         initializePresenterTestEnvironment(defaultRunnerOutputs());
 
-        const auto allInterfaces = Connection::fetchInterfaces();
         const auto interfaces = usableHostInterfaces();
         if (interfaces.size() < 2) {
             MESSAGE("Skipping PresenterInstall TUI test: need at least two "
@@ -586,8 +631,7 @@ TEST_SUITE("opencattus::presenter::tui")
             yesNo(false),
         };
 
-        if (std::find(allInterfaces.begin(), allInterfaces.end(), "ib0")
-            != allInterfaces.end()) {
+        if (hasInfinibandInterface()) {
             state->responses.insert(
                 state->responses.begin() + 12, yesNo(false));
         }
