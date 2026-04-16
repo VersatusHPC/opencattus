@@ -1349,6 +1349,39 @@ TEST_CASE("RepoConfigParser emits CUDA repository URLs")
 #endif
 }
 
+TEST_CASE("RepoConfigParser emits oneAPI and ZFS repository URLs")
+{
+#ifdef BUILD_TESTING
+    const auto el9Conf = RepoConfigParser::parseTest("repos/repos.conf",
+        RepoConfigVars {
+            .arch = "x86_64",
+            .beegfsVersion = "beegfs_7.3.3",
+            .ohpcVersion = "3",
+            .osversion = "9.7",
+            .releasever = "9",
+            .xcatVersion = "latest",
+            .zabbixVersion = "6.4",
+            .ofedVersion = "latest-2.9-LTS",
+            .ofedRepoTarget = "9.6",
+            .cudaGPGKey = "D42D0685.pub",
+        });
+
+    const auto oneApi = el9Conf.find("oneAPI");
+    REQUIRE(oneApi.has_value() == true);
+    CHECK(oneApi->upstream.repo == "https://yum.repos.intel.com/oneapi/");
+    REQUIRE(oneApi->upstream.gpgkey.has_value() == true);
+    CHECK(oneApi->upstream.gpgkey.value()
+        == "https://yum.repos.intel.com/intel-gpg-keys/"
+           "GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB");
+
+    const auto zfs = el9Conf.find("zfs");
+    REQUIRE(zfs.has_value() == true);
+    CHECK(
+        zfs->upstream.repo == "http://download.zfsonlinux.org/epel/9/x86_64/");
+    CHECK(zfs->upstream.gpgkey.has_value() == false);
+#endif
+}
+
 TEST_CASE("RepoConfigParser interpolates distro repository ids")
 {
 #ifdef BUILD_TESTING
@@ -1855,6 +1888,8 @@ template <typename UseVaultService = RockyLinux> struct RepoNames {
         addToOutput("OpenHPC-Updates");
         addToOutput("rpmfusion");
         addToOutput("elrepo");
+        addToOutput("oneAPI");
+        addToOutput("zfs");
         switch (osinfo.getPlatform()) {
             case OS::Platform::el8:
                 addToOutput("beegfs");
@@ -1927,6 +1962,8 @@ TEST_CASE("RepoNames")
                 "OpenHPC-Updates",
                 "rpmfusion",
                 "elrepo",
+                "oneAPI",
+                "zfs",
                 "beegfs",
             });
     }
@@ -1948,6 +1985,8 @@ TEST_CASE("RepoNames")
                 "OpenHPC-Updates",
                 "rpmfusion",
                 "elrepo",
+                "oneAPI",
+                "zfs",
                 "beegfs",
             });
     }
@@ -1969,6 +2008,8 @@ TEST_CASE("RepoNames")
                 "OpenHPC-Updates",
                 "rpmfusion",
                 "elrepo",
+                "oneAPI",
+                "zfs",
                 "beegfs",
             });
     }
@@ -2001,6 +2042,8 @@ TEST_CASE("RepoNames")
                 "OpenHPC-Updates",
                 "rpmfusion",
                 "elrepo",
+                "oneAPI",
+                "zfs",
             });
     }
 
@@ -2021,6 +2064,8 @@ TEST_CASE("RepoNames")
                 "OpenHPC-Updates",
                 "rpmfusion",
                 "elrepo",
+                "oneAPI",
+                "zfs",
                 "beegfs",
             });
     }
@@ -2042,6 +2087,8 @@ TEST_CASE("RepoNames")
                 "OpenHPC-Updates",
                 "rpmfusion",
                 "elrepo",
+                "oneAPI",
+                "zfs",
                 "beegfs",
             });
     }
@@ -2063,6 +2110,8 @@ TEST_CASE("RepoNames")
                 "OpenHPC-Updates",
                 "rpmfusion",
                 "elrepo",
+                "oneAPI",
+                "zfs",
                 "beegfs",
             });
     }
@@ -2152,11 +2201,11 @@ TEST_CASE("RepoGenerator")
         >();
     const auto generatedCount1
         = generator.generate(conffiles, osinfo, upstreamPath);
-    CHECK(generatedCount1 == 18);
+    CHECK(generatedCount1 == 19);
 
     const auto generatedCount2
         = generator.generate(conffiles, osinfo, upstreamPath);
-    CHECK(generatedCount2 == 18);
+    CHECK(generatedCount2 == 19);
 
     // Generate the other files so we can look at them
     const auto generatorMirror
