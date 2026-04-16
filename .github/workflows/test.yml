@@ -2,6 +2,8 @@ name: Self-Hosted CI
 
 on:
   push:
+    branches:
+      - master
   pull_request:
   workflow_dispatch:
 
@@ -113,6 +115,20 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Verify Podman runner state
+        run: |
+          set -euo pipefail
+          command -v podman >/dev/null || {
+            echo "Missing required command on self-hosted runner: podman" >&2
+            exit 1
+          }
+
+          # Self-hosted runners occasionally keep stale rootless Podman state
+          # after reboots or package updates. Try the recommended repair first
+          # so container-based jobs can recover without manual intervention.
+          podman system migrate || true
+          podman info >/dev/null
 
       - name: Build RPM in ${{ matrix.el }} container
         run: |
