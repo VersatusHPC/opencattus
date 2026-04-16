@@ -32,7 +32,11 @@ private:
                 = Presenter::Messages::Placeholder::help;
 
             static constexpr const auto destination
-                = "Additional destinations (comma-separated)";
+                = "Additional domains (optional)";
+            static constexpr const auto tlsOverrideQuestion
+                = "Do you want to override the default TLS certificate paths?";
+            static constexpr const auto tlsPathsQuestion
+                = "Enter the TLS certificate paths to override the defaults";
             static constexpr const auto certFile = "TLS certificate file";
             static constexpr const auto keyFile = "TLS key file";
         };

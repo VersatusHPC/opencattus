@@ -15,6 +15,7 @@
 #include <opencattus/presenter/PresenterNodesOperationalSystem.h>
 #include <opencattus/presenter/PresenterProvisioner.h>
 #include <opencattus/presenter/PresenterQueueSystem.h>
+#include <opencattus/presenter/PresenterRepository.h>
 #include <opencattus/presenter/PresenterTime.h>
 #include <opencattus/presenter/PresenterWelcome.h>
 
@@ -54,10 +55,6 @@ PresenterInstall::PresenterInstall(
 #if 1 // Hostname and domain
     Call<PresenterHostId>();
 #endif
-
-    // Repository configuration still happens during execution. The previous
-    // TUI repository screen depended on post-init singletons and did not
-    // persist anything into the model.
 
     NetworkCreator nc;
 #if 1 // Networking
@@ -103,6 +100,7 @@ PresenterInstall::PresenterInstall(
 #if 1 // Compute nodes formation details
     Call<PresenterNodesOperationalSystem>();
     Call<PresenterProvisioner>();
+    Call<PresenterRepository>();
     Call<PresenterNodes>();
 #endif
 

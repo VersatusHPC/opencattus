@@ -15,22 +15,24 @@ void Newt::okCancelMessage(const char* title, const char* message)
     int returnValue;
 
     /* Information about the installation scheme */
-    returnValue = newtWinChoice(const_cast<char*>(title),
-        const_cast<char*>(TUIText::Buttons::ok),
-        const_cast<char*>(TUIText::Buttons::cancel),
-        const_cast<char*>(message));
+    while (true) {
+        returnValue = newtWinChoice(const_cast<char*>(title),
+            const_cast<char*>(TUIText::Buttons::ok),
+            const_cast<char*>(TUIText::Buttons::cancel),
+            const_cast<char*>(message));
 
-    switch (returnValue) {
-        case 0:
-            /* F12 is pressed, and we don't care; continue to case 1 */
-        case 1:
-            break;
-        case 2:
-            abort();
-            break;
-        default:
-            throw std::runtime_error(
-                "Something happened. Please run the software again");
+        switch (returnValue) {
+            case 0:
+                continue;
+            case 1:
+                return;
+            case 2:
+                abort();
+                break;
+            default:
+                throw std::runtime_error(
+                    "Something happened. Please run the software again");
+        }
     }
 }
 
@@ -45,20 +47,23 @@ void Newt::okCancelMessagePairs(
         newMessage += fmt::format("{} -> {}\n", pair.first, pair.second);
     }
 
-    returnValue = newtWinChoice(const_cast<char*>(title),
-        const_cast<char*>(TUIText::Buttons::ok),
-        const_cast<char*>(TUIText::Buttons::cancel),
-        const_cast<char*>(newMessage.c_str()));
+    while (true) {
+        returnValue = newtWinChoice(const_cast<char*>(title),
+            const_cast<char*>(TUIText::Buttons::ok),
+            const_cast<char*>(TUIText::Buttons::cancel),
+            const_cast<char*>(newMessage.c_str()));
 
-    switch (returnValue) {
-        case 0:
-        case 1:
-            break;
-        case 2:
-            abort();
-            break;
-        default:
-            throw std::runtime_error("Out of bounds in a switch statement");
+        switch (returnValue) {
+            case 0:
+                continue;
+            case 1:
+                return;
+            case 2:
+                abort();
+                break;
+            default:
+                throw std::runtime_error("Out of bounds in a switch statement");
+        }
     }
 }
 

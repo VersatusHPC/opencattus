@@ -15,6 +15,11 @@ PresenterTime::PresenterTime(
     // Timezone area selection
 
     auto availableTimezones = m_model->getTimezone().getAvailableTimezones();
+    if (availableTimezones.empty()) {
+        m_view->fatalMessage(Messages::title,
+            "No timezones were discovered on this system. Verify that "
+            "'timedatectl list-timezones --no-pager' works and try again.");
+    }
 
     std::set<std::string> timezoneAreas;
     for (const auto& tz : availableTimezones)
@@ -36,6 +41,10 @@ PresenterTime::PresenterTime(
         = availableTimezones.equal_range(timezoneArea.data());
     for (auto it = begin; it != end; ++it) {
         timezoneLocations.emplace_back(it->second);
+    }
+    if (timezoneLocations.empty()) {
+        m_view->fatalMessage(Messages::title,
+            "No timezone locations were found for the selected area.");
     }
 
     auto selectedTimezoneLocation

@@ -27,7 +27,7 @@ namespace opencattus::models {
 
 AnswerFile::AnswerFile(const std::filesystem::path& path, bool loadFromDisk)
     : m_path(path)
-    , m_keyfile(path)
+    , m_keyfile(path, false)
 {
     if (loadFromDisk) {
         loadFile(m_path);
@@ -53,10 +53,12 @@ void AnswerFile::loadOptions()
     loadTimeSettings();
     loadHostnameSettings();
     loadSystemSettings();
+    loadRepositories();
     loadNodes();
     loadPostfix();
     loadOFED();
     loadSlurm();
+    loadPBS();
 }
 
 void AnswerFile::dumpNetwork(
@@ -336,6 +338,16 @@ void AnswerFile::dumpOFED()
     }
 }
 
+void AnswerFile::dumpRepositories()
+{
+    if (!repositories.enabled.has_value()) {
+        return;
+    }
+
+    m_keyfile.setString("repositories", "enabled",
+        boost::algorithm::join(repositories.enabled.value(), ", "));
+}
+
 void AnswerFile::dumpOptions()
 {
     LOG_TRACE("Dump answerfile variables")
@@ -348,7 +360,9 @@ void AnswerFile::dumpOptions()
     dumpTimeSettings();
     dumpHostnameSettings();
     dumpSystemSettings();
+    dumpRepositories();
     dumpSlurm();
+    dumpPBS();
 
     dumpNodes();
     dumpOFED();
@@ -394,11 +408,11 @@ void AnswerFile::validateAttribute(const std::string& sectionName,
     const std::string& attributeName, T& objectAttr, const T& genericAttr)
 {
     if constexpr (std::is_same_v<T, std::optional<std::basic_string<char>>>) {
-        if (!objectAttr->empty()) {
+        if (objectAttr.has_value() && !objectAttr->empty()) {
             return;
         }
 
-        if (genericAttr->empty()) {
+        if (!genericAttr.has_value() || genericAttr->empty()) {
             throw std::invalid_argument(
                 fmt::format("{1} must have a \"{0}\" key or you must inform a "
                             "generic \"{0}\" value",
@@ -408,11 +422,11 @@ void AnswerFile::validateAttribute(const std::string& sectionName,
         objectAttr = genericAttr;
     } else if constexpr (std::is_same_v<T,
                              std::optional<boost::asio::ip::address>>) {
-        if (!objectAttr->is_unspecified()) {
+        if (objectAttr.has_value() && !objectAttr->is_unspecified()) {
             return;
         }
 
-        if (genericAttr->is_unspecified()) {
+        if (!genericAttr.has_value() || genericAttr->is_unspecified()) {
             throw std::invalid_argument(
                 fmt::format("{1} must have a \"{0}\" key or you must inform a "
                             "generic \"{0}\" value",
@@ -683,6 +697,15 @@ void AnswerFile::loadNodes()
 
 AFNode AnswerFile::validateNode(AFNode node)
 {
+    const auto hasText = [](const std::optional<std::string>& value) {
+        return value.has_value() && !value->empty();
+    };
+    const auto clearIfEmpty = [](std::optional<std::string>& value) {
+        if (value.has_value() && value->empty()) {
+            value.reset();
+        }
+    };
+
     validateAttribute(
         "node", "node_ip", node.start_ip, nodes.generic->start_ip);
     validateAttribute("node", "node_root_password", node.root_password,
@@ -692,16 +715,27 @@ AFNode AnswerFile::validateNode(AFNode node)
         nodes.generic->cores_per_socket);
     validateAttribute("node", "threads_per_core", node.threads_per_core,
         nodes.generic->threads_per_core);
-    validateAttribute(
-        "node", "bmc_address", node.bmc_address, nodes.generic->bmc_address);
-    validateAttribute(
-        "node", "bmc_username", node.bmc_username, nodes.generic->bmc_username);
-    validateAttribute(
-        "node", "bmc_password", node.bmc_password, nodes.generic->bmc_password);
-    validateAttribute("node", "bmc_serialport", node.bmc_serialport,
-        nodes.generic->bmc_serialport);
-    validateAttribute("node", "bmc_serialspeed", node.bmc_serialspeed,
-        nodes.generic->bmc_serialspeed);
+
+    const auto hasBMC
+        = hasText(node.bmc_address) || hasText(nodes.generic->bmc_address);
+    if (hasBMC) {
+        validateAttribute("node", "bmc_address", node.bmc_address,
+            nodes.generic->bmc_address);
+        validateAttribute("node", "bmc_username", node.bmc_username,
+            nodes.generic->bmc_username);
+        validateAttribute("node", "bmc_password", node.bmc_password,
+            nodes.generic->bmc_password);
+        validateAttribute("node", "bmc_serialport", node.bmc_serialport,
+            nodes.generic->bmc_serialport);
+        validateAttribute("node", "bmc_serialspeed", node.bmc_serialspeed,
+            nodes.generic->bmc_serialspeed);
+    } else {
+        clearIfEmpty(node.bmc_address);
+        clearIfEmpty(node.bmc_username);
+        clearIfEmpty(node.bmc_password);
+        clearIfEmpty(node.bmc_serialport);
+        clearIfEmpty(node.bmc_serialspeed);
+    }
 
     return node;
 }
@@ -794,14 +828,34 @@ void AnswerFile::loadOFED()
     }
 }
 
+void AnswerFile::loadRepositories()
+{
+    if (!m_keyfile.hasGroup("repositories")) {
+        return;
+    }
+
+    repositories.enabled = std::vector<std::string> {};
+    const auto enabled = m_keyfile.getStringOpt("repositories", "enabled");
+    if (!enabled.has_value() || enabled->empty()) {
+        return;
+    }
+
+    std::vector<std::string> values;
+    boost::split(values, enabled.value(), boost::is_any_of(", "),
+        boost::token_compress_on);
+    repositories.enabled = std::move(values);
+}
+
 auto AnswerFile::path() const -> const std::filesystem::path& { return m_path; }
 
 void AnswerFile::loadSlurm()
 {
-    opencattus::functions::abortif(!m_keyfile.hasGroup("slurm"),
-        "slurm section missing in asnwerfile {}", path());
+    if (!m_keyfile.hasGroup("slurm")) {
+        return;
+    }
 
     using namespace opencattus::utils;
+    slurm.enabled = true;
     slurm.mariadb_root_password = optional::unwrap(
         m_keyfile.getStringOpt("slurm", "mariadb_root_password"),
         "mariadb_root_password missing in the answerfile {}", path());
@@ -818,11 +872,46 @@ void AnswerFile::loadSlurm()
 
 void AnswerFile::dumpSlurm()
 {
+    if (!slurm.enabled) {
+        return;
+    }
+
     m_keyfile.setString(
         "slurm", "mariadb_root_password", slurm.mariadb_root_password);
     m_keyfile.setString("slurm", "slurmdb_password", slurm.slurmdb_password);
     m_keyfile.setString("slurm", "storage_password", slurm.storage_password);
     m_keyfile.setString("slurm", "partition_name", slurm.partition_name);
+}
+
+void AnswerFile::loadPBS()
+{
+    if (!m_keyfile.hasGroup("pbs")) {
+        return;
+    }
+
+    pbs.enabled = true;
+    const auto executionPlace
+        = m_keyfile.getStringOpt("pbs", "execution_place").value_or("Shared");
+    const auto parsedExecutionPlace
+        = opencattus::utils::enums::ofStringOpt<PBS::ExecutionPlace>(
+            executionPlace, opencattus::utils::enums::Case::Insensitive);
+    if (!parsedExecutionPlace.has_value()) {
+        throw std::runtime_error(
+            fmt::format("Invalid PBS execution_place '{}' in answerfile {}",
+                executionPlace, path()));
+    }
+
+    pbs.execution_place = parsedExecutionPlace.value();
+}
+
+void AnswerFile::dumpPBS()
+{
+    if (!pbs.enabled) {
+        return;
+    }
+
+    m_keyfile.setString("pbs", "execution_place",
+        opencattus::utils::enums::toString(pbs.execution_place));
 }
 
 };

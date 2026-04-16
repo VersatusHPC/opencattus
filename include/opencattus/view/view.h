@@ -59,7 +59,7 @@ public:
         okCancelMessage(nullptr, message, pairs);
     }
 
-    virtual std::pair<int, std::vector<std::string>> multipleSelectionMenu(
+    virtual std::pair<int, std::vector<std::string>> checkboxSelectionMenu(
         const char* title, const char* message, const char* help,
         MultipleSelectionEntries items)
         = 0;

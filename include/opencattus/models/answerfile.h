@@ -9,6 +9,7 @@
 #include <boost/asio.hpp>
 #include <opencattus/mailsystem/postfix.h>
 #include <opencattus/models/os.h>
+#include <opencattus/models/pbs.h>
 #include <opencattus/ofed.h>
 #include <opencattus/services/files.h>
 #include <opencattus/utils/enums.h>
@@ -129,10 +130,16 @@ private:
     };
 
     struct AFSlurm {
+        bool enabled = false;
         std::string mariadb_root_password;
         std::string slurmdb_password;
         std::string storage_password;
         std::string partition_name;
+    };
+
+    struct AFPBS {
+        bool enabled = false;
+        PBS::ExecutionPlace execution_place = PBS::ExecutionPlace::Shared;
     };
 
     struct AFProvisionerConfig {
@@ -181,6 +188,10 @@ private:
             = opencattus::utils::enums::toString(OFED::Kind::Inbox);
         std::optional<std::string> version = "latest";
         bool enabled = false;
+    };
+
+    struct AFRepositories {
+        std::optional<std::vector<std::string>> enabled;
     };
 
     std::filesystem::path m_path;
@@ -299,6 +310,8 @@ private:
     void loadNVHPC();
     void loadOFED();
     void dumpOFED();
+    void loadRepositories();
+    void dumpRepositories();
 
     void dumpNodes();
 
@@ -364,6 +377,8 @@ private:
 
     void loadSlurm();
     void dumpSlurm();
+    void loadPBS();
+    void dumpPBS();
 
 public:
     AFNetwork external;
@@ -377,7 +392,9 @@ public:
     AFNodes nodes;
     AFPostfix postfix;
     AFOFED ofed;
+    AFRepositories repositories;
     AFSlurm slurm;
+    AFPBS pbs;
 
     /**
      * @brief Loads the answer file from the specified path.

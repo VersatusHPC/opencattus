@@ -58,12 +58,17 @@ PresenterMailSystem::PresenterMailSystem(
             opencattus::utils::enums::toString<Postfix::Profile>(
                 mailSystemProfile));
 
-        auto commonFields = std::to_array<std::pair<std::string, std::string>>(
-            { { Messages::Common::destination, "" },
-                { Messages::Common::certFile, "" },
-                { Messages::Common::keyFile, "" } });
-        commonFields = m_view->fieldMenu(Messages::title,
-            Messages::Common::question, commonFields, Messages::Common::help);
+        constexpr auto commonTitle = Messages::title;
+        constexpr auto commonQuestion = Messages::Common::question;
+        constexpr auto commonHelp = Messages::Common::help;
+        const auto promptCommonFields = [&]() {
+            auto commonFields
+                = std::to_array<std::pair<std::string, std::string>>(
+                    { { Messages::Common::destination, "" } });
+            return m_view->fieldMenu(
+                commonTitle, commonQuestion, commonFields, commonHelp);
+        };
+        const auto commonFields = promptCommonFields();
 
         if (auto destinations
             = parseCommaSeparatedValues(commonFields[0].second);
@@ -71,14 +76,17 @@ PresenterMailSystem::PresenterMailSystem(
             mailSystem.setDestination(std::move(destinations));
         }
 
-        if (!commonFields[1].second.empty()) {
-            mailSystem.setCertFile(
-                std::filesystem::path(commonFields[1].second));
-        }
+        if (m_view->yesNoQuestion(Messages::title,
+                Messages::Common::tlsOverrideQuestion,
+                Messages::Common::help)) {
+            auto tlsFields = std::to_array<std::pair<std::string, std::string>>(
+                { { Messages::Common::certFile, "" },
+                    { Messages::Common::keyFile, "" } });
+            tlsFields = m_view->fieldMenu(commonTitle,
+                Messages::Common::tlsPathsQuestion, tlsFields, commonHelp);
 
-        if (!commonFields[2].second.empty()) {
-            mailSystem.setKeyFile(
-                std::filesystem::path(commonFields[2].second));
+            mailSystem.setCertFile(std::filesystem::path(tlsFields[0].second));
+            mailSystem.setKeyFile(std::filesystem::path(tlsFields[1].second));
         }
 
         switch (mailSystemProfile) {
@@ -87,18 +95,21 @@ PresenterMailSystem::PresenterMailSystem(
             }
 
             case Postfix::Profile::Relay: {
-                auto fields
-                    = std::to_array<std::pair<std::string, std::string>>(
-                        { { Messages::Relay::hostname, "" },
-                            { Messages::Relay::port, "25" } });
-
-                fields = m_view->fieldMenu(Messages::title,
-                    Messages::Relay::question, fields, Messages::Relay::help);
+                constexpr auto relayQuestion = Messages::Relay::question;
+                constexpr auto relayHelp = Messages::Relay::help;
+                const auto promptRelayFields = [&]() {
+                    auto relayFields
+                        = std::to_array<std::pair<std::string, std::string>>(
+                            { { "SMTP server", "" }, { "Port", "25" } });
+                    return m_view->fieldMenu(
+                        commonTitle, relayQuestion, relayFields, relayHelp);
+                };
+                const auto relayFields = promptRelayFields();
 
                 std::size_t i { 0 };
-                mailSystem.setSMTPServer(fields[i++].second);
+                mailSystem.setSMTPServer(relayFields[i++].second);
                 mailSystem.setPort(
-                    boost::lexical_cast<uint16_t>(fields[i++].second));
+                    boost::lexical_cast<uint16_t>(relayFields[i++].second));
 
                 LOG_DEBUG("Set Postfix Relay: {}:{}",
                     mailSystem.getSMTPServer().value(),
@@ -108,22 +119,24 @@ PresenterMailSystem::PresenterMailSystem(
             }
 
             case Postfix::Profile::SASL: {
-                auto fields
-                    = std::to_array<std::pair<std::string, std::string>>(
-                        { { Messages::SASL::hostname, "" },
-                            { Messages::SASL::port, "587" },
-                            { Messages::SASL::username, "" },
-                            { Messages::SASL::password, "" } });
-
-                fields = m_view->fieldMenu(Messages::title,
-                    Messages::SASL::question, fields, Messages::SASL::help);
+                constexpr auto saslQuestion = Messages::SASL::question;
+                constexpr auto saslHelp = Messages::SASL::help;
+                const auto promptSaslFields = [&]() {
+                    auto saslFields
+                        = std::to_array<std::pair<std::string, std::string>>(
+                            { { "SMTP server", "" }, { "Port", "587" },
+                                { "Username", "" }, { "Password", "" } });
+                    return m_view->fieldMenu(
+                        commonTitle, saslQuestion, saslFields, saslHelp);
+                };
+                const auto saslFields = promptSaslFields();
 
                 std::size_t i { 0 };
-                mailSystem.setSMTPServer(fields[i++].second);
+                mailSystem.setSMTPServer(saslFields[i++].second);
                 mailSystem.setPort(
-                    boost::lexical_cast<uint16_t>(fields[i++].second));
-                mailSystem.setUsername(fields[i++].second);
-                mailSystem.setPassword(fields[i++].second);
+                    boost::lexical_cast<uint16_t>(saslFields[i++].second));
+                mailSystem.setUsername(saslFields[i++].second);
+                mailSystem.setPassword(saslFields[i++].second);
 
                 LOG_DEBUG(
                     "Set Postfix SASL: {}:{}\nUsername: {} | Password: {}",

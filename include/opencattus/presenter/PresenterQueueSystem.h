@@ -21,7 +21,8 @@ private:
         struct SLURM {
             static constexpr const auto title = "SLURM settings";
             static constexpr const auto question
-                = "Enter the SLURM controller settings";
+                = "Enter the SLURM controller settings. The accounting "
+                  "storage password will reuse the slurmdbd password.";
             static constexpr const auto help
                 = Presenter::Messages::Placeholder::help;
 
@@ -29,7 +30,6 @@ private:
             static constexpr const auto mariadbRootPassword
                 = "MariaDB root password";
             static constexpr const auto slurmDBPassword = "slurmdbd password";
-            static constexpr const auto storagePassword = "Storage password";
         };
 
         struct PBS {

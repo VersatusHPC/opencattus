@@ -126,6 +126,8 @@ int main(int argc, const char** argv)
     // factory should return constant options, we also mutate the options during
     // the tests
     auto optsMut = options::factory(argc, argv);
+    const bool shouldRunInteractiveQuestionnaire
+        = optsMut->answerfile.empty() && optsMut->testCommand.empty();
 
     if (optsMut->parsingError) {
         fmt::print("Parsing error: {}", optsMut->error);
@@ -151,7 +153,8 @@ int main(int argc, const char** argv)
         fmt::print("Roles: {}", roles);
         return EXIT_SUCCESS;
     }
-    Log::init(optsMut->logLevelInput);
+    optsMut->enableTUI = shouldRunInteractiveQuestionnaire;
+    Log::init(optsMut->logLevelInput, !optsMut->enableTUI);
 
 #ifndef NDEBUG
     LOG_DEBUG("Log level set to: {}\n", optsMut->logLevelInput)
@@ -193,8 +196,6 @@ int main(int argc, const char** argv)
         LOG_ERROR("CLI feature not implemented.\n");
         return EXIT_FAILURE;
     }
-    optsMut->enableTUI
-        = optsMut->answerfile.empty() && optsMut->testCommand.empty();
 
     // Initialize options singleton making it const
     LOG_DEBUG("Initializing command line options");
@@ -219,12 +220,6 @@ int main(int argc, const char** argv)
     model->printData();
 #endif
 
-    if (!opts->dumpAnswerfile.empty()) {
-        model->dumpData(opts->dumpAnswerfile);
-        Log::shutdown();
-        return EXIT_SUCCESS;
-    }
-
     if (opts->enableTUI) {
         // Entrypoint; if the view is constructed it will start the TUI.
         std::unique_ptr<View> view = std::make_unique<Newt>();
@@ -232,6 +227,23 @@ int main(int argc, const char** argv)
             = std::make_unique<opencattus::presenter::PresenterInstall>(
                 model, view);
         answerfile = generateAnswerfileFromTuiModel(*model);
+
+        if (opts->dumpAnswerfile.empty() && !opts->dryRun) {
+            Log::init(opts->logLevelInput, true);
+        }
+    }
+
+    if (!opts->dumpAnswerfile.empty()) {
+        model->dumpData(opts->dumpAnswerfile);
+        Log::shutdown();
+        return EXIT_SUCCESS;
+    }
+
+    if (opts->dryRun && opts->enableTUI) {
+        LOG_INFO("Dry run questionnaire complete; skipping the installation "
+                 "engine");
+        Log::shutdown();
+        return EXIT_SUCCESS;
     }
 
     initializeSingletonsModel(std::move(model), std::move(answerfile));

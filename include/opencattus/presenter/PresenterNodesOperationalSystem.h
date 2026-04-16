@@ -50,6 +50,8 @@ private:
 
             static constexpr const auto nonExistent
                 = "The specified directory do not exist";
+            static constexpr const auto notReadable
+                = "The specified path is not a readable directory";
         };
 
         struct OperationalSystemDistro {
@@ -86,6 +88,9 @@ private:
             static constexpr const auto noneFound
                 = "No ISO matching the selected distro was found in the "
                   "provided directory";
+            static constexpr const auto downloadMissing
+                = "Download an ISO for this distro instead? Choose No to enter "
+                  "another directory.";
         };
     };
 

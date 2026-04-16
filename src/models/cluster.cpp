@@ -6,6 +6,7 @@
 #include <expected>
 #include <memory>
 #include <stdexcept>
+#include <system_error>
 
 #ifndef NDEBUG
 #include <fmt/format.h>
@@ -226,6 +227,19 @@ void Cluster::setOFED(OFED::Kind kind, std::string version)
     m_ofed = OFED(kind, std::move(version));
 }
 
+const std::optional<std::vector<std::string>>&
+Cluster::getEnabledRepositories() const
+{
+    return m_enabledRepositories;
+}
+
+void Cluster::setEnabledRepositories(std::vector<std::string> repositories)
+{
+    m_enabledRepositories = std::move(repositories);
+}
+
+void Cluster::clearEnabledRepositories() { m_enabledRepositories.reset(); }
+
 const std::optional<std::unique_ptr<QueueSystem>>&
 Cluster::getQueueSystem() const
 {
@@ -265,12 +279,36 @@ const DiskImage& Cluster::getDiskImage() const { return m_diskImage; }
 void Cluster::setDiskImage(const std::filesystem::path& diskImagePath)
 {
     // BUG: This does not hanble ~ expansion for userdir
-    if (std::filesystem::exists(diskImagePath)) {
+    std::error_code statusError;
+    if (std::filesystem::exists(diskImagePath, statusError)) {
         m_diskImage.setPath(diskImagePath);
-    } else {
-        throw std::runtime_error(fmt::format(
-            "Disk image path {} doesn't exist", diskImagePath.string()));
+        return;
     }
+
+    const auto opts = opencattus::utils::singleton::options();
+    if (opts->dryRun) {
+        LOG_WARN("Dry Run: Accepting planned disk image path {} before the "
+                 "file exists",
+            diskImagePath.string());
+        m_diskImage.setPath(diskImagePath);
+        return;
+    }
+
+    if (statusError == std::errc::permission_denied) {
+        LOG_WARN("Accepting disk image path {} despite permission error: {}",
+            diskImagePath.string(), statusError.message());
+        m_diskImage.setPath(diskImagePath);
+        return;
+    }
+
+    if (statusError) {
+        throw std::runtime_error(
+            fmt::format("Unable to inspect disk image path {}: {}",
+                diskImagePath.string(), statusError.message()));
+    }
+
+    throw std::runtime_error(fmt::format(
+        "Disk image path {} doesn't exist", diskImagePath.string()));
 }
 
 const std::vector<Node>& Cluster::getNodes() const { return m_nodes; }
@@ -536,13 +574,30 @@ void Cluster::dumpData(const std::filesystem::path& answerfilePath)
             opencattus::utils::enums::toString(ofed->getKind()));
         answerfil.ofed.version = ofed->getVersion();
     }
-    answerfil.slurm.mariadb_root_password = slurmMariaDBRootPassword;
-    answerfil.slurm.slurmdb_password = slurmDBPassword;
-    answerfil.slurm.storage_password = slurmStoragePassword;
-    answerfil.slurm.partition_name = "execution";
+    if (const auto& enabledRepositories = getEnabledRepositories();
+        enabledRepositories.has_value()) {
+        answerfil.repositories.enabled = enabledRepositories.value();
+    }
     if (const auto& queueSystem = getQueueSystem()) {
-        answerfil.slurm.partition_name
-            = std::string(queueSystem.value()->getDefaultQueue());
+        switch (queueSystem.value()->getKind()) {
+            case QueueSystem::Kind::None:
+                break;
+            case QueueSystem::Kind::SLURM:
+                answerfil.slurm.enabled = true;
+                answerfil.slurm.mariadb_root_password
+                    = slurmMariaDBRootPassword;
+                answerfil.slurm.slurmdb_password = slurmDBPassword;
+                answerfil.slurm.storage_password = slurmStoragePassword;
+                answerfil.slurm.partition_name
+                    = std::string(queueSystem.value()->getDefaultQueue());
+                break;
+            case QueueSystem::Kind::PBS: {
+                answerfil.pbs.enabled = true;
+                const auto& pbs = dynamic_cast<PBS*>(queueSystem.value().get());
+                answerfil.pbs.execution_place = pbs->getExecutionPlace();
+                break;
+            }
+        }
     }
     if (const auto& mailSystem = getMailSystem(); mailSystem.has_value()) {
         answerfil.postfix.enabled = true;
@@ -752,9 +807,22 @@ void Cluster::fillData(const AnswerFile& answerfil)
         // Install Inbox OFED by default
         setOFED(OFED::Kind::Inbox);
     }
+    if (answerfil.repositories.enabled.has_value()) {
+        setEnabledRepositories(answerfil.repositories.enabled.value());
+    } else {
+        clearEnabledRepositories();
+    }
 
-    setQueueSystem(QueueSystem::Kind::SLURM);
-    m_queueSystem.value()->setDefaultQueue("execution");
+    if (answerfil.pbs.enabled) {
+        setQueueSystem(QueueSystem::Kind::PBS);
+        const auto& pbs = dynamic_cast<PBS*>(m_queueSystem.value().get());
+        pbs->setExecutionPlace(answerfil.pbs.execution_place);
+    } else {
+        setQueueSystem(QueueSystem::Kind::SLURM);
+        m_queueSystem.value()->setDefaultQueue(answerfil.slurm.enabled
+                ? std::string_view(answerfil.slurm.partition_name)
+                : std::string_view("execution"));
+    }
 
     addNetwork(std::move(managementNetwork));
 
@@ -943,7 +1011,7 @@ void Cluster::fillData(const AnswerFile& answerfil)
 
         Node newNode;
         CPU newNodeCPU;
-        BMC newNodeBMC;
+        std::optional<BMC> newNodeBMC;
 
         std::string nodename = node.hostname.value();
         newNode.setHostname(nodename);
@@ -1004,35 +1072,59 @@ void Cluster::fillData(const AnswerFile& answerfil)
         LOG_TRACE("{} CPU threads per core: {}", newNode.getHostname(),
             newNodeCPU.getThreadsPerCore());
 
-        newNodeBMC.setAddress(node.bmc_address.value());
+        const auto requireBMCField
+            = [&](const std::optional<std::string>& value,
+                  std::string_view fieldName) -> const std::string& {
+            if (!value.has_value() || value->empty()) {
+                throw std::invalid_argument(
+                    fmt::format("Node {} has a BMC address but is missing {}",
+                        newNode.getHostname(), fieldName));
+            }
 
-        LOG_TRACE("{} BMC address: {}", newNode.getHostname(),
-            newNodeBMC.getAddress());
+            return value.value();
+        };
 
-        newNodeBMC.setUsername(node.bmc_username.value());
+        if (node.bmc_address.has_value() && !node.bmc_address->empty()) {
+            newNodeBMC.emplace();
+            newNodeBMC->setAddress(
+                requireBMCField(node.bmc_address, "bmc_address"));
 
-        LOG_TRACE("{} BMC username: {}", newNode.getHostname(),
-            newNodeBMC.getUsername());
+            LOG_TRACE("{} BMC address: {}", newNode.getHostname(),
+                newNodeBMC->getAddress());
 
-        newNodeBMC.setPassword(node.bmc_password.value());
+            newNodeBMC->setUsername(
+                requireBMCField(node.bmc_username, "bmc_username"));
 
-        LOG_TRACE("{} BMC password: {}", newNode.getHostname(),
-            newNodeBMC.getPassword());
+            LOG_TRACE("{} BMC username: {}", newNode.getHostname(),
+                newNodeBMC->getUsername());
 
-        newNodeBMC.setSerialPort(CONVERT_OR_ERROR(bmc_serialport));
+            newNodeBMC->setPassword(
+                requireBMCField(node.bmc_password, "bmc_password"));
 
-        LOG_TRACE("{} BMC serial port: {}", newNode.getHostname(),
-            newNodeBMC.getSerialPort());
+            LOG_TRACE("{} BMC password: {}", newNode.getHostname(),
+                newNodeBMC->getPassword());
 
-        newNodeBMC.setSerialSpeed(CONVERT_OR_ERROR(bmc_serialspeed));
+            newNodeBMC->setSerialPort(convertOrError(
+                requireBMCField(node.bmc_serialport, "bmc_serialport"),
+                "bmc_serialport"));
 
-        LOG_TRACE("{} BMC serial speed: {}", newNode.getHostname(),
-            newNodeBMC.getSerialSpeed());
+            LOG_TRACE("{} BMC serial port: {}", newNode.getHostname(),
+                newNodeBMC->getSerialPort());
+
+            newNodeBMC->setSerialSpeed(convertOrError(
+                requireBMCField(node.bmc_serialspeed, "bmc_serialspeed"),
+                "bmc_serialspeed"));
+
+            LOG_TRACE("{} BMC serial speed: {}", newNode.getHostname(),
+                newNodeBMC->getSerialSpeed());
+        }
 
 #undef CONVERT_OR_ERROR
 
         newNode.setCPU(newNodeCPU);
-        newNode.setBMC(newNodeBMC);
+        if (newNodeBMC.has_value()) {
+            newNode.setBMC(newNodeBMC.value());
+        }
         newNode.setOS(nodeOS);
 
         connection.setMAC(newNode.getMACAddress());
@@ -1088,15 +1180,17 @@ void Cluster::fillData(const AnswerFile& answerfil)
     nodeCPUsPerNode
         = std::stoul(answerfil.nodes.generic->cpus_per_node.value());
     nodeRealMemory = std::stoul(answerfil.nodes.generic->real_memory.value());
-    nodeBMCUsername = answerfil.nodes.generic->bmc_username.value();
-    nodeBMCPassword = answerfil.nodes.generic->bmc_password.value();
+    nodeBMCUsername = answerfil.nodes.generic->bmc_username.value_or("");
+    nodeBMCPassword = answerfil.nodes.generic->bmc_password.value_or("");
     nodeBMCSerialPort
-        = std::stoul(answerfil.nodes.generic->bmc_serialport.value());
+        = std::stoul(answerfil.nodes.generic->bmc_serialport.value_or("0"));
     nodeBMCSerialSpeed
-        = std::stoul(answerfil.nodes.generic->bmc_serialspeed.value());
-    slurmMariaDBRootPassword = answerfil.slurm.mariadb_root_password;
-    slurmDBPassword = answerfil.slurm.slurmdb_password;
-    slurmStoragePassword = answerfil.slurm.storage_password;
+        = std::stoul(answerfil.nodes.generic->bmc_serialspeed.value_or("0"));
+    if (answerfil.slurm.enabled) {
+        slurmMariaDBRootPassword = answerfil.slurm.mariadb_root_password;
+        slurmDBPassword = answerfil.slurm.slurmdb_password;
+        slurmStoragePassword = answerfil.slurm.storage_password;
+    }
 }
 
 }; // namespace opencattus::models {

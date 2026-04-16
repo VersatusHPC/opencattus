@@ -8,8 +8,8 @@
 
 #include <boost/process/v2.hpp>
 
-#include <fmt/format.h>
 #include <array>
+#include <fmt/format.h>
 #include <ranges>
 
 using opencattus::services::CommandProxy;
@@ -45,17 +45,19 @@ CommandProxy runCommandIter(
         boost::process::ipstream pipe_stream;
 
         if (out == Stream::Stderr) {
-            boost::process::child child(
-                command, boost::process::std_in < boost::process::null,
-                boost::process::std_err > pipe_stream);
+            boost::process::child child(command,
+                boost::process::std_in<boost::process::null,
+                    boost::process::std_err>
+                    pipe_stream);
             return CommandProxy { .valid = true,
                 .child = std::move(child),
                 .pipe_stream = std::move(pipe_stream) };
 
         } else {
-            boost::process::child child(
-                command, boost::process::std_in < boost::process::null,
-                boost::process::std_out > pipe_stream);
+            boost::process::child child(command,
+                boost::process::std_in<boost::process::null,
+                    boost::process::std_out>
+                    pipe_stream);
             return CommandProxy { .valid = true,
                 .child = std::move(child),
                 .pipe_stream = std::move(pipe_stream) };
@@ -72,9 +74,10 @@ int runCommand(const std::string& command, std::list<std::string>& output,
     if (!opts->dryRun || overrideDryRun) {
         LOG_DEBUG("Running command: {}", command)
         boost::process::ipstream pipe_stream;
-        boost::process::child child(
-            command, boost::process::std_in < boost::process::null,
-            boost::process::std_out > pipe_stream);
+        boost::process::child child(command,
+            boost::process::std_in<boost::process::null,
+                boost::process::std_out>
+                pipe_stream);
 
         std::string line;
 
@@ -117,8 +120,9 @@ int cmd(std::vector<std::string>& output, std::string_view command)
         boost::process::ipstream pipe_stream;
         // -l for loading /etc/profile.d/* files
         boost::process::child child("/bin/bash", "-lc", script,
-            boost::process::std_in < boost::process::null,
-            boost::process::std_out > pipe_stream);
+            boost::process::std_in<boost::process::null,
+                boost::process::std_out>
+                pipe_stream);
 
         std::string line;
         while (pipe_stream && std::getline(pipe_stream, line)) {
@@ -148,8 +152,9 @@ int cmd(std::string_view command)
         boost::process::ipstream pipe_stream;
         // -l for loading /etc/profile.d/* files
         boost::process::child child("/bin/bash", "-lc", script,
-            boost::process::std_in < boost::process::null,
-            boost::process::std_out > pipe_stream);
+            boost::process::std_in<boost::process::null,
+                boost::process::std_out>
+                pipe_stream);
 
         std::string line;
         while (pipe_stream && std::getline(pipe_stream, line)) {
@@ -300,8 +305,13 @@ int DryRunner::run(const ScriptBuilder& script) { return 0; }
 
 std::vector<std::string> DryRunner::checkOutput(const std::string& cmd)
 {
-    throw std::runtime_error(fmt::format(
-        "Cannot capture the output of a command during dry-run mode: {}", cmd));
+    LOG_WARN("Dry Run: Capturing command output for: {}", cmd);
+    std::list<std::string> output;
+    if (runCommand(cmd, output, true) != 0) {
+        throw std::runtime_error(
+            fmt::format("ERROR: Command failed '{}'", cmd));
+    }
+    return output | std::ranges::to<std::vector>();
 }
 
 CommandProxy DryRunner::executeCommandIter(
@@ -400,7 +410,19 @@ TEST_CASE("Runner executeCommand redirects stdin to null")
     ScopedPipeStdin stdinPipe;
     opencattus::services::Runner runner;
 
-    CHECK(runner.executeCommand(
-              R"cmd(timeout 1 python3 -c "import sys; sys.exit(0 if sys.stdin.read()=='' else 1)")cmd")
+    CHECK(
+        runner.executeCommand(
+            R"cmd(timeout 1 python3 -c "import sys; sys.exit(0 if sys.stdin.read()=='' else 1)")cmd")
         == 0);
+}
+
+TEST_CASE("DryRunner checkOutput captures command output during dry-run")
+{
+    opencattus::Singleton<const opencattus::services::Options>::init(
+        std::make_unique<const opencattus::services::Options>(
+            opencattus::services::Options { .dryRun = true }));
+    opencattus::services::DryRunner runner;
+
+    CHECK(runner.checkOutput(R"cmd(bash -c "printf 'alpha\nbeta\n'")cmd")
+        == std::vector<std::string> { "alpha", "beta" });
 }

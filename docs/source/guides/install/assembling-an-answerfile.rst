@@ -66,6 +66,7 @@ them:
 - ``[network_service]`` for a dedicated service or BMC network
 - ``[network_application]`` for an application fabric such as InfiniBand
 - ``[ofed]`` to enable non-inbox OFED handling
+- ``[repositories]`` to pin the repository IDs selected by the TUI
 - ``[postfix]`` and related subsections for mail relay configuration
 
 For ``[ofed]``, use ``kind=doca`` for the NVIDIA DOCA path. The older
@@ -183,6 +184,17 @@ This section defines the installation ISO, distro, version, and provisioner.
     version=8.10
     provisioner=confluent  # use xcat for the validated EL8 or EL9 xCAT paths
     # kernel is optional and mainly used for specialized flows
+
+Repositories
+~~~~~~~~~~~~
+
+Use this only when you want to override the default repository set. The values
+match the repository IDs presented by the TUI.
+
+.. code-block:: ini
+
+    [repositories]
+    enabled=baseos, appstream, crb, epel, OpenHPC, OpenHPC-Updates, cuda
 
 Nodes
 ~~~~~

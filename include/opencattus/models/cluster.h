@@ -8,9 +8,11 @@
 
 #include "answerfile.h"
 #include <filesystem>
+#include <list>
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <opencattus/diskImage.h>
 #include <opencattus/mailsystem/postfix.h>
@@ -61,6 +63,7 @@ private:
     Headnode m_headnode;
     Provisioner m_provisioner { Provisioner::xCAT };
     std::optional<OFED> m_ofed;
+    std::optional<std::vector<std::string>> m_enabledRepositories;
     std::optional<std::unique_ptr<QueueSystem>> m_queueSystem {};
     std::optional<services::Postfix> m_mailSystem {};
     std::vector<Node> m_nodes;
@@ -177,6 +180,10 @@ public:
 
     std::optional<OFED> getOFED() const;
     void setOFED(OFED::Kind kind, std::string version = "latest");
+    [[nodiscard]] const std::optional<std::vector<std::string>>&
+    getEnabledRepositories() const;
+    void setEnabledRepositories(std::vector<std::string> repositories);
+    void clearEnabledRepositories();
 
     [[nodiscard]] const std::optional<std::unique_ptr<QueueSystem>>&
     getQueueSystem() const;

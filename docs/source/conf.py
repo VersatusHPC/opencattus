@@ -6,8 +6,8 @@ project = 'OpenCATTUS'
 copyright = '2021-2024, Vinícius Ferrão'
 author = 'Vinícius Ferrão'
 
-release = '0.1'
-version = '0.1.0'
+release = '1.0'
+version = '1.0.0'
 
 # -- General configuration
 

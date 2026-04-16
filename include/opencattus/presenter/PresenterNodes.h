@@ -26,6 +26,7 @@ private:
             static constexpr const auto prefix = "Prefix";
             static constexpr const auto padding = "Padding";
             static constexpr const auto startIP = "Compute node first IP";
+            static constexpr const auto bmcStartIP = "BMC first IP (optional)";
             static constexpr const auto rootPassword
                 = "Compute node root password";
             static constexpr const auto confirmRootPassword
@@ -53,8 +54,22 @@ private:
                 = "Prefix must start with a letter";
             static constexpr const auto paddingMax
                 = "We can only support up to 1000 nodes";
+            static constexpr const auto paddingInvalid
+                = "Padding must be a number between 0 and 3";
+            static constexpr const auto startIPInvalid
+                = "Compute node first IP must be a valid IP address";
+            static constexpr const auto bmcStartIPInvalid
+                = "BMC first IP must be a valid IP address";
+            static constexpr const auto bmcStartIPMatchesNode
+                = "BMC first IP cannot match the compute node first IP";
+            static constexpr const auto bmcAddressMatchesNode
+                = "BMC IP address cannot match the compute node IP address";
             static constexpr const auto rootPasswordMismatch
                 = "The compute node root password confirmation does not match";
+            static constexpr const auto topologyInvalid
+                = "Topology values must be valid numbers";
+            static constexpr const auto quantityInvalid
+                = "Node quantity must be a number greater than zero";
         };
 
         struct Quantity {
@@ -70,12 +85,13 @@ private:
 
         struct NodeEntry {
             static constexpr const auto question
-                = "Enter the management MAC and BMC address for node";
+                = "Enter the management MAC and BMC IP address for node";
             static constexpr const auto help
                 = Presenter::Messages::Placeholder::help;
 
             static constexpr const auto macAddress = "Management MAC address";
-            static constexpr const auto bmcAddress = "BMC address";
+            static constexpr const auto bmcAddress
+                = "BMC IP address (optional)";
         };
     };
 

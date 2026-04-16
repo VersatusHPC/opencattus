@@ -85,7 +85,7 @@ public:
     void load();
     void loadData(const std::string& data);
 
-    explicit KeyFile(const std::filesystem::path& path);
+    explicit KeyFile(const std::filesystem::path& path, bool loadExisting = true);
 };
 static_assert(IsKeyFileReadable<KeyFile>);
 static_assert(IsKeyFileWriteable<KeyFile>);

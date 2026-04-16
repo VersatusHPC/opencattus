@@ -6,9 +6,11 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib> // setenv / getenv
+#include <list>
 #include <optional>
 #include <ranges>
 #include <thread>
+#include <vector>
 
 #include <filesystem>
 #include <fmt/format.h>
@@ -687,6 +689,25 @@ void runIpmiCommandWithFallback(std::string_view xcatCommand,
         LOG_WARN("Direct IPMI fallback for {} failed with exit code {}",
             description, directExitCode);
     }
+}
+
+std::string buildBmcNodeSelector(
+    const std::vector<opencattus::models::Node>& nodes)
+{
+    std::string selector;
+
+    for (const auto& node : nodes) {
+        if (!node.getBMC().has_value()) {
+            continue;
+        }
+
+        if (!selector.empty()) {
+            selector += ",";
+        }
+        selector += node.getHostname();
+    }
+
+    return selector;
 }
 }; // namespace{}
 
@@ -1432,16 +1453,27 @@ void XCAT::setNodesImage() const
 
 void XCAT::setNodesBoot()
 {
-    // TODO: Do proper checking if a given node have BMC support, and then issue
-    //  rsetboot only on the compatible machines instead of running in compute.
-    runIpmiCommandWithFallback("rsetboot compute net", "chassis bootdev pxe",
+    const auto nodes = buildBmcNodeSelector(cluster()->getNodes());
+    if (nodes.empty()) {
+        LOG_INFO("Skipping xCAT boot setting because no compute node has BMC");
+        return;
+    }
+
+    runIpmiCommandWithFallback(fmt::format("rsetboot {} net", nodes),
+        "chassis bootdev pxe",
         "PXE boot configuration");
 }
 
 void XCAT::resetNodes()
 {
-    runIpmiCommandWithFallback(
-        "rpower compute reset", "chassis power reset", "node reset");
+    const auto nodes = buildBmcNodeSelector(cluster()->getNodes());
+    if (nodes.empty()) {
+        LOG_INFO("Skipping xCAT node reset because no compute node has BMC");
+        return;
+    }
+
+    runIpmiCommandWithFallback(fmt::format("rpower {} reset", nodes),
+        "chassis power reset", "node reset");
 }
 
 void XCAT::generateOSImageName(ImageType imageType, NodeType nodeType)
@@ -1705,6 +1737,34 @@ TEST_CASE("buildIpmitoolCommand quotes BMC credentials")
               "192.0.2.10", "admin", "pa'ss", "chassis power reset")
         == "ipmitool -I lanplus -H '192.0.2.10' -U 'admin' -P "
            "'pa'\"'\"'ss' chassis power reset");
+}
+
+TEST_CASE("buildBmcNodeSelector includes only nodes with BMC")
+{
+    using opencattus::models::CPU;
+    using opencattus::models::Node;
+    using opencattus::models::OS;
+
+    auto makeNode = [](std::string_view hostname, bool includeBMC) {
+        OS os(OS::Distro::Rocky, OS::Platform::el9, 7);
+        CPU cpu(1, 2, 1);
+        std::list<Connection> connections;
+
+        std::optional<BMC> bmc = std::nullopt;
+        if (includeBMC) {
+            bmc.emplace("192.168.30.101", "admin", "pa'ss", 0, 9600,
+                BMC::kind::IPMI);
+        }
+
+        return Node(hostname, os, cpu, std::move(connections), bmc);
+    };
+
+    CHECK(buildBmcNodeSelector({ makeNode("n01", true),
+              makeNode("n02", false), makeNode("n03", true) })
+        == "n01,n03");
+    CHECK(buildBmcNodeSelector(
+              { makeNode("n01", false), makeNode("n02", false) })
+        .empty());
 }
 
 TEST_CASE("getLocalOtherPkgRepoPath matches xCAT local repo layout")

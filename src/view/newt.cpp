@@ -3,11 +3,98 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <algorithm>
 #include <cstdio> /* sprintf() */
 #include <cstring> /* strlen() */
 #include <newt.h>
 #include <opencattus/functions.h>
 #include <opencattus/view/newt.h>
+#include <string_view>
+
+#ifdef BUILD_TESTING
+#include <doctest/doctest.h>
+#else
+#define DOCTEST_CONFIG_DISABLE
+#include <doctest/doctest.h>
+#endif
+
+namespace {
+
+constexpr int dialogMargin = 6;
+constexpr int minDialogWidth = 20;
+constexpr int maxDialogWidth = 72;
+constexpr int minDataWidth = 18;
+constexpr int maxDataWidth = 28;
+constexpr int minListHeight = 4;
+constexpr int minFieldDialogWidth = 34;
+constexpr int minListDialogWidth = 34;
+
+auto calculateDialogWidth(int cols) -> int
+{
+    return std::min(
+        std::max(cols - dialogMargin, minDialogWidth), maxDialogWidth);
+}
+
+auto calculateDataWidth(int dialogWidth) -> int
+{
+    return std::clamp(dialogWidth / 3, minDataWidth, maxDataWidth);
+}
+
+auto calculateMaxListHeight(int rows) -> int
+{
+    return std::max(rows - 14, minListHeight);
+}
+
+auto calculateFieldDialogWidth(
+    int cols, int baseWidth, int dataWidth, std::size_t longestLabelWidth)
+{
+    const auto desiredWidth = std::max(minFieldDialogWidth,
+        static_cast<int>(longestLabelWidth) + dataWidth + 8);
+    const auto maxWidth
+        = std::min(baseWidth, std::max(cols - 2, minDialogWidth));
+    return std::clamp(desiredWidth, minDialogWidth, maxWidth);
+}
+
+auto maxLineWidth(std::string_view text) -> std::size_t
+{
+    std::size_t longest = 0;
+    std::size_t current = 0;
+
+    for (const auto character : text) {
+        if (character == '\n') {
+            longest = std::max(longest, current);
+            current = 0;
+            continue;
+        }
+
+        ++current;
+    }
+
+    return std::max(longest, current);
+}
+
+auto calculateListDialogWidth(int baseWidth, std::size_t longestItemWidth,
+    std::size_t messageWidth, std::size_t titleWidth) -> int
+{
+    const auto desiredWidth = std::max({ minListDialogWidth,
+        static_cast<int>(longestItemWidth) + 12,
+        static_cast<int>(messageWidth) + 8, static_cast<int>(titleWidth) + 8 });
+
+    return std::min(std::max(desiredWidth, minDialogWidth), baseWidth);
+}
+
+auto calculateListHeight(int maxListHeight, std::size_t itemCount) -> int
+{
+    return std::clamp(
+        static_cast<int>(itemCount), minListHeight, maxListHeight);
+}
+
+auto fieldLabelAllowsEmpty(std::string_view label) -> bool
+{
+    return label.contains("(optional");
+}
+
+} // namespace
 
 Newt::Newt()
     : m_flexDown(2)
@@ -16,26 +103,27 @@ Newt::Newt()
     newtInit();
     newtCls();
 
-    // Get the terminal size
-    newtGetScreenSize(&m_cols, &m_rows);
-    m_suggestedWidth = m_cols / 2;
-    m_dataWidth = m_suggestedWidth * 2 / 3;
-
-    // Line count: title, box top border, padding, text message (var),
-    // padding (before list), padding (after list), button (4), padding,
-    // box bottom border, shadow, status.
-    m_maxListHeight = m_rows - 14;
+    refreshScreenMetrics();
 
     // Push the title to the top left corner
     newtDrawRootText(0, 0, TUIText::title);
 
+#ifndef NDEBUG
+    const auto developmentHeader
+        = fmt::format("{} {}", TUIText::version, TUIText::developmentBuild);
+    const auto headerStart = 0 - static_cast<int>(developmentHeader.size());
+    newtDrawRootText(headerStart, 0, TUIText::version);
+    newtSetColor(NEWT_COLORSET_ROOTTEXT, const_cast<char*>("red"),
+        const_cast<char*>("blue"));
+    newtDrawRootText(
+        headerStart + static_cast<int>(strlen(TUIText::version)) + 1, 0,
+        TUIText::developmentBuild);
+    newtSetColor(NEWT_COLORSET_ROOTTEXT, const_cast<char*>("yellow"),
+        const_cast<char*>("blue"));
+#else
     // Push the product version to the top right corner
     newtDrawRootText(
         0 - static_cast<int>(strlen(TUIText::version)), 0, TUIText::version);
-
-#ifndef NDEBUG
-    newtDrawRootText(0 - static_cast<int>(strlen(TUIText::developmentBuild)), 1,
-        TUIText::developmentBuild);
 #endif
 
     // Add the default help line in the bottom
@@ -44,6 +132,32 @@ Newt::Newt()
 }
 
 Newt::~Newt() { newtFinished(); }
+
+void Newt::refreshScreenMetrics()
+{
+    newtGetScreenSize(&m_cols, &m_rows);
+    m_suggestedWidth = calculateDialogWidth(m_cols);
+    m_dataWidth = calculateDataWidth(m_suggestedWidth);
+    m_maxListHeight = calculateMaxListHeight(m_rows);
+}
+
+int Newt::fieldDialogWidth(const std::size_t longestLabelWidth) const
+{
+    return calculateFieldDialogWidth(
+        m_cols, m_suggestedWidth, m_dataWidth, longestLabelWidth);
+}
+
+int Newt::listDialogWidth(const std::size_t longestItemWidth,
+    std::string_view message, std::string_view title) const
+{
+    return calculateListDialogWidth(m_suggestedWidth, longestItemWidth,
+        maxLineWidth(message), maxLineWidth(title));
+}
+
+int Newt::listHeight(const std::size_t itemCount) const
+{
+    return calculateListHeight(m_maxListHeight, itemCount);
+}
 
 void Newt::abort()
 {
@@ -59,7 +173,7 @@ bool Newt::allowsEmptyField(const struct newtWinEntry& entry)
         return false;
     }
 
-    return std::string_view(entry.text).contains("(optional)");
+    return fieldLabelAllowsEmpty(entry.text);
 }
 
 // TODO: Remove this method; this check must be done outside the view
@@ -121,7 +235,7 @@ bool Newt::progressMenu(const char* title, const char* message,
 
     std::string text;
 
-    auto* form = newtForm(nullptr, nullptr, 0);
+    auto* form = newtForm(nullptr, nullptr, NEWT_FLAG_NOF12);
 
     auto* progress = newtScale(10, -1, 61, 1000);
     auto* label = newtTextbox(-1, -1, 61, 1, NEWT_TEXTBOX_WRAP);
@@ -172,4 +286,31 @@ void Newt::helpMessage(const char* message)
     newtBell();
     newtWinMessage(const_cast<char*>(TUIText::Help::title),
         const_cast<char*>(TUIText::Buttons::ok), const_cast<char*>(message));
+}
+
+TEST_CASE("newt geometry keeps dialogs readable on an 80x24 terminal")
+{
+    CHECK(calculateDialogWidth(80) == 72);
+    CHECK(calculateDataWidth(calculateDialogWidth(80)) == 24);
+    CHECK(calculateMaxListHeight(24) == 10);
+    CHECK(calculateFieldDialogWidth(80, 72, 24, 11) == 43);
+    CHECK(calculateFieldDialogWidth(80, 72, 24, 20) == 52);
+    CHECK(calculateFieldDialogWidth(80, 72, 24, 34) == 66);
+    CHECK(calculateListDialogWidth(72, 10, 24, 15) == 34);
+}
+
+TEST_CASE("newt geometry stays within small terminals")
+{
+    CHECK(calculateDialogWidth(40) == 34);
+    CHECK(calculateDataWidth(calculateDialogWidth(40)) == 18);
+    CHECK(calculateMaxListHeight(18) == 4);
+    CHECK(calculateListHeight(10, 2) == 4);
+    CHECK(calculateListDialogWidth(34, 20, 24, 15) == 34);
+}
+
+TEST_CASE("newt field labels can mark fields optional with extra detail")
+{
+    CHECK(fieldLabelAllowsEmpty("Gateway (optional)"));
+    CHECK(fieldLabelAllowsEmpty("Additional domains (optional)"));
+    CHECK_FALSE(fieldLabelAllowsEmpty("SMTP server"));
 }

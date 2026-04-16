@@ -36,8 +36,8 @@ std::unique_ptr<Options> options::factory(int argc, const char** argv)
         .airGapUrl = "file:///var/repos/",
         .mirrorBaseUrl = "https://mirror.versatushpc.com.br",
         .answerfile = "",
-        .beegfsVersion = "beegfs_7.3.3",
-        .zabbixVersion = "6.4",
+        .beegfsVersion = "latest-stable",
+        .zabbixVersion = "latest-lts",
         .xcatVersion = "latest",
         .dumpAnswerfile = "",
     };
@@ -56,12 +56,12 @@ std::unique_ptr<Options> options::factory(int argc, const char** argv)
         ->default_str("https://mirror.versatushpc.com.br");
     app.add_option(
            "--beegfs-version", opt.beegfsVersion, "BeeGFS default version")
-        ->default_str("beegfs_7.3.3");
+        ->default_str("latest-stable");
     app.add_option("--xcat-version", opt.xcatVersion, "xCAT default version")
         ->default_str("latest");
     app.add_option(
            "--zabbix-version", opt.zabbixVersion, "Zabbix default version")
-        ->default_str("6.4");
+        ->default_str("latest-lts");
     app.add_option("-l,--log-level", opt.logLevelInput,
            "Set log level (integer between 1 and 6)")
         ->default_val(3)
@@ -160,6 +160,24 @@ TEST_CASE("options::factory keeps xcat and beegfs versions independent")
     REQUIRE(options != nullptr);
     CHECK(options->xcatVersion == "el10-fork");
     CHECK(options->beegfsVersion == "beegfs_8.0.0");
+}
+
+TEST_CASE("options::factory defaults BeeGFS to upstream latest stable")
+{
+    const char* argv[] = { "opencattus" };
+    auto options = options::factory(1, argv);
+
+    REQUIRE(options != nullptr);
+    CHECK(options->beegfsVersion == "latest-stable");
+}
+
+TEST_CASE("options::factory defaults Zabbix to the current LTS")
+{
+    const char* argv[] = { "opencattus" };
+    auto options = options::factory(1, argv);
+
+    REQUIRE(options != nullptr);
+    CHECK(options->zabbixVersion == "latest-lts");
 }
 #endif
 

@@ -123,6 +123,105 @@ auto inferVersionComboFromIso(OS::Distro distro, std::string_view isoName)
         std::stoi(match[2].str()), arch.value() };
 }
 
+auto isoMatchesDistro(const OS::Distro distro, std::string_view isoName) -> bool
+{
+    switch (distro) {
+        case OS::Distro::RHEL:
+            return isoName.contains("rhel");
+        case OS::Distro::OL:
+            return isoName.contains("OracleLinux");
+        case OS::Distro::Rocky:
+            return isoName.contains("Rocky");
+        case OS::Distro::AlmaLinux:
+            return isoName.contains("AlmaLinux");
+    }
+
+    return false;
+}
+
+auto isoSearchToken(const OS::Distro distro) -> std::string_view
+{
+    switch (distro) {
+        case OS::Distro::RHEL:
+            return "rhel";
+        case OS::Distro::OL:
+            return "OracleLinux";
+        case OS::Distro::Rocky:
+            return "Rocky";
+        case OS::Distro::AlmaLinux:
+            return "AlmaLinux";
+    }
+
+    return {};
+}
+
+auto exampleIsoName(const OS::Distro distro) -> std::string
+{
+    const auto [major, minor, arch] = defaultVersionComboFor(distro);
+    const auto architecture = opencattus::utils::enums::toString(arch);
+
+    switch (distro) {
+        case OS::Distro::RHEL:
+            return fmt::format(
+                "rhel-{}.{}-{}-dvd.iso", major, minor, architecture);
+        case OS::Distro::OL:
+            return fmt::format(
+                "OracleLinux-R{}-U{}-{}-dvd.iso", major, minor, architecture);
+        case OS::Distro::Rocky:
+            return fmt::format(
+                "Rocky-{}.{}-{}-dvd.iso", major, minor, architecture);
+        case OS::Distro::AlmaLinux:
+            return fmt::format(
+                "AlmaLinux-{}.{}-{}-dvd.iso", major, minor, architecture);
+    }
+
+    return {};
+}
+
+auto formatNoMatchingIsoMessage(
+    const fs::path& directory, const OS::Distro distro) -> std::string
+{
+    return fmt::format(
+        "No ISO matching the selected distro was found in the "
+        "provided directory.\n\nDirectory: {}\nLooked for: *.iso "
+        "filenames containing \"{}\"\nExample: {}",
+        directory.string(), isoSearchToken(distro), exampleIsoName(distro));
+}
+
+auto findMatchingIsos(const fs::path& isoRoot, OS::Distro distro)
+    -> std::optional<std::vector<std::string>>
+{
+    std::error_code ec;
+    if (!fs::is_directory(isoRoot, ec) || ec) {
+        return std::nullopt;
+    }
+
+    std::vector<std::string> isos;
+    fs::directory_iterator entry(isoRoot, ec);
+    if (ec) {
+        return std::nullopt;
+    }
+
+    for (const fs::directory_iterator end; entry != end; entry.increment(ec)) {
+        if (ec) {
+            return std::nullopt;
+        }
+
+        std::error_code fileEc;
+        if (!entry->is_regular_file(fileEc) || fileEc) {
+            continue;
+        }
+
+        const auto formattedIsoName = entry->path().filename().string();
+        if (entry->path().extension() == ".iso"
+            && isoMatchesDistro(distro, formattedIsoName)) {
+            isos.emplace_back(formattedIsoName);
+        }
+    }
+
+    return isos;
+}
+
 } // namespace
 
 namespace opencattus::presenter {
@@ -213,81 +312,102 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
     distros["Rocky Linux"] = OS::Distro::Rocky;
     distros["Oracle Linux"] = OS::Distro::OL;
 
+    const auto downloadSelectedDistro
+        = [&](const std::string& distroName, OS::Distro distro) -> bool {
+        if (distro == OS::Distro::RHEL) {
+            m_view->message(
+                Messages::title, Messages::OperationalSystemVersion::rhelError);
+            return false;
+        }
+
+        const auto versioncombo = promptVersion(distro);
+        std::string distroDownloadURL = getDownloadURL(distro, versioncombo);
+        std::string isoName
+            = distroDownloadURL.substr(distroDownloadURL.find_last_of('/') + 1);
+
+        const auto opts
+            = opencattus::Singleton<const opencattus::services::Options>::get();
+        if (opts->dryRun) {
+            LOG_INFO("Dry Run: Would download {} from {}",
+                fmt::format("/root/{}", isoName), distroDownloadURL);
+        } else {
+            //@TODO Implement newt GUI progress bar
+            auto command = Singleton<IRunner>::get()->executeCommandIter(
+                fmt::format("wget -NP /root {}", distroDownloadURL),
+                opencattus::services::Stream::Stderr);
+
+            auto desc = fmt::format(
+                Messages::OperationalSystemDownloadIso::Progress::download,
+                distroName, distroDownloadURL);
+            m_view->progressMenu(Messages::title, desc.c_str(),
+                std::move(command),
+                [&](opencattus::services::CommandProxy& cmd)
+                    -> std::optional<double> {
+                    auto out = cmd.getline();
+                    if (!out) {
+                        return std::nullopt;
+                    }
+                    std::string line = *out;
+
+                    // If we have a line like ERROR 404: Not Found
+                    // this means, obviously, that we did not found the URL.
+                    if (line.contains("ERROR 404: Not Found")) {
+                        LOG_ERROR("URL {} not found", distroDownloadURL);
+                        return std::nullopt;
+                    }
+
+                    // Line example
+                    //  <<<338950K .......... .......... ..........
+                    //  ..........
+                    //  ..........  3% 31.8M 10m40s>>
+
+                    // TODO: (on the progress bar) maybe allow altering some
+                    // menu parameters (like the text)
+                    std::vector<std::string> slots;
+
+                    boost::split(slots, line, boost::is_any_of("\t\r "),
+                        boost::token_compress_on);
+
+                    if (slots.size() <= 6) {
+                        return std::make_optional(0.0);
+                    }
+
+                    auto num = slots[6].substr(0, slots[6].find_first_of('%'));
+
+                    try {
+                        return std::make_optional(
+                            boost::lexical_cast<double>(num));
+                    } catch (boost::bad_lexical_cast&) {
+                        return std::make_optional(0.0);
+                    }
+                });
+        }
+
+        m_model->setDiskImage(fmt::format("/root/{}", isoName));
+        m_model->getHeadnode().setOS(makeOperatingSystem(distro, versioncombo));
+        LOG_DEBUG("Selected ISO: {}", fmt::format("/root/{}", isoName))
+        return true;
+    };
+
     const auto downloadIso = m_view->yesNoQuestion(Messages::title,
         Messages::OperationalSystemDownloadIso::FirstStage::question,
         Messages::OperationalSystemDirectoryPath::help);
 
     if (downloadIso) {
-        auto distroToDownload = m_view->listMenu(Messages::title,
-            Messages::OperationalSystemDownloadIso::SecondStage::question,
-            distroNames,
-            Messages::OperationalSystemDownloadIso::SecondStage::help);
+        while (true) {
+            auto distroToDownload = m_view->listMenu(Messages::title,
+                Messages::OperationalSystemDownloadIso::SecondStage::question,
+                distroNames,
+                Messages::OperationalSystemDownloadIso::SecondStage::help);
 
-        const auto selectedDistro = distros.find(distroToDownload);
-        LOG_ASSERT(selectedDistro != distros.end(), "selected distro missing");
-        if (selectedDistro->second == OS::Distro::RHEL) {
-            m_view->fatalMessage(
-                Messages::title, Messages::OperationalSystemVersion::rhelError);
+            const auto selectedDistro = distros.find(distroToDownload);
+            LOG_ASSERT(
+                selectedDistro != distros.end(), "selected distro missing");
+            if (downloadSelectedDistro(
+                    selectedDistro->first, selectedDistro->second)) {
+                break;
+            }
         }
-
-        const auto versioncombo = promptVersion(selectedDistro->second);
-        std::string distroDownloadURL
-            = getDownloadURL(selectedDistro->second, versioncombo);
-        std::string isoName
-            = distroDownloadURL.substr(distroDownloadURL.find_last_of('/') + 1);
-
-        //@TODO Implement newt GUI progress bar
-        auto command = Singleton<IRunner>::get()->executeCommandIter(
-            fmt::format("wget -NP /root {}", distroDownloadURL),
-            opencattus::services::Stream::Stderr);
-
-        auto desc = fmt::format(
-            Messages::OperationalSystemDownloadIso::Progress::download,
-            selectedDistro->first, distroDownloadURL);
-        m_view->progressMenu(Messages::title, desc.c_str(), std::move(command),
-            [&](opencattus::services::CommandProxy& cmd)
-                -> std::optional<double> {
-                auto out = cmd.getline();
-                if (!out) {
-                    return std::nullopt;
-                }
-                std::string line = *out;
-
-                // If we have a line like ERROR 404: Not Found
-                // this means, obviously, that we did not found the URL.
-                if (line.contains("ERROR 404: Not Found")) {
-                    LOG_ERROR("URL {} not found", distroDownloadURL);
-                    return std::nullopt;
-                }
-
-                // Line example
-                //  <<<338950K .......... .......... .......... ..........
-                //  ..........  3% 31.8M 10m40s>>
-
-                // TODO: (on the progress bar) maybe allow altering some menu
-                // parameters (like the text)
-                std::vector<std::string> slots;
-
-                boost::split(slots, line, boost::is_any_of("\t\r "),
-                    boost::token_compress_on);
-
-                if (slots.size() <= 6) {
-                    return std::make_optional(0.0);
-                }
-
-                auto num = slots[6].substr(0, slots[6].find_first_of('%'));
-
-                try {
-                    return std::make_optional(boost::lexical_cast<double>(num));
-                } catch (boost::bad_lexical_cast&) {
-                    return std::make_optional(0.0);
-                }
-            });
-
-        m_model->setDiskImage(fmt::format("/root/{}", isoName));
-        m_model->getHeadnode().setOS(
-            makeOperatingSystem(selectedDistro->second, versioncombo));
-        LOG_DEBUG("Selected ISO: {}", fmt::format("/root/{}", isoName))
 
     } else {
         auto isoDirectoryPath
@@ -295,77 +415,79 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
                 { { Messages::OperationalSystemDirectoryPath::field,
                     "/mnt/iso" } });
 
-        while (true) {
-            isoDirectoryPath = m_view->fieldMenu(Messages::title,
-                Messages::OperationalSystemDirectoryPath::question,
-                isoDirectoryPath,
-                Messages::OperationalSystemDirectoryPath::help);
+        bool selectedDiskImage = false;
+        while (!selectedDiskImage) {
+            while (true) {
+                isoDirectoryPath = m_view->fieldMenu(Messages::title,
+                    Messages::OperationalSystemDirectoryPath::question,
+                    isoDirectoryPath,
+                    Messages::OperationalSystemDirectoryPath::help);
 
-            if (std::filesystem::exists(isoDirectoryPath.data()->second)) {
+                std::error_code ec;
+                if (std::filesystem::is_directory(
+                        isoDirectoryPath.data()->second, ec)
+                    && !ec) {
+                    break;
+                }
+
+                m_view->message(Messages::title,
+                    std::filesystem::exists(isoDirectoryPath.data()->second)
+                        ? Messages::OperationalSystemDirectoryPath::notReadable
+                        : Messages::OperationalSystemDirectoryPath::
+                              nonExistent);
+            }
+
+            LOG_DEBUG("ISO directory path set to {}",
+                isoDirectoryPath.data()->second);
+
+            while (true) {
+                auto selectedDistroName = m_view->listMenu(Messages::title,
+                    Messages::OperationalSystemDistro::question, distroNames,
+                    Messages::OperationalSystemDistro::help);
+
+                const auto selectedDistro = distros.find(selectedDistroName);
+                LOG_ASSERT(
+                    selectedDistro != distros.end(), "selected distro missing");
+
+                const auto isoRoot = fs::path(isoDirectoryPath.data()->second);
+                auto isos = findMatchingIsos(isoRoot, selectedDistro->second);
+                if (!isos.has_value()) {
+                    m_view->message(Messages::title,
+                        Messages::OperationalSystemDirectoryPath::notReadable);
+                    break;
+                }
+
+                if (isos->empty()) {
+                    const auto noneFoundMessage = formatNoMatchingIsoMessage(
+                        isoRoot, selectedDistro->second);
+                    m_view->message(Messages::title, noneFoundMessage.c_str());
+                    if (m_view->yesNoQuestion(Messages::title,
+                            Messages::OperationalSystem::downloadMissing,
+                            Messages::OperationalSystem::help)
+                        && downloadSelectedDistro(
+                            selectedDistro->first, selectedDistro->second)) {
+                        selectedDiskImage = true;
+                    }
+                    break;
+                }
+
+                auto selectedIso = m_view->listMenu(Messages::title,
+                    Messages::OperationalSystem::question, isos.value(),
+                    Messages::OperationalSystem::help);
+
+                const auto selectedIsoPath
+                    = fmt::format("{}/{}", isoRoot.string(), selectedIso);
+                m_model->setDiskImage(selectedIsoPath);
+                const auto versioncombo = promptVersion(selectedDistro->second,
+                    inferVersionComboFromIso(
+                        selectedDistro->second, selectedIso));
+                m_model->getHeadnode().setOS(
+                    makeOperatingSystem(selectedDistro->second, versioncombo));
+                LOG_DEBUG("Selected ISO: {}", selectedIsoPath);
+                selectedDiskImage = true;
                 break;
             }
-
-            m_view->message(Messages::title,
-                Messages::OperationalSystemDirectoryPath::nonExistent);
         }
-
-        LOG_DEBUG(
-            "ISO directory path set to {}", isoDirectoryPath.data()->second);
-
-        auto selectedDistroName = m_view->listMenu(Messages::title,
-            Messages::OperationalSystemDistro::question, distroNames,
-            Messages::OperationalSystemDistro::help);
-
-        const auto selectedDistro = distros.find(selectedDistroName);
-        LOG_ASSERT(selectedDistro != distros.end(), "selected distro missing");
-        auto isoRoot = isoDirectoryPath.data()->second;
-        std::vector<std::string> isos;
-
-        for (const auto& entry : fs::directory_iterator(isoRoot)) {
-            if (entry.path().string().ends_with("iso")) {
-                auto formattedIsoName = entry.path().filename().string();
-                switch (selectedDistro->second) {
-                    case OS::Distro::RHEL:
-                        if (formattedIsoName.contains("rhel")) {
-                            isos.emplace_back(formattedIsoName);
-                        }
-                        break;
-                    case OS::Distro::OL:
-                        if (formattedIsoName.contains("OracleLinux")) {
-                            isos.emplace_back(formattedIsoName);
-                        }
-                        break;
-                    case OS::Distro::Rocky:
-                        if (formattedIsoName.contains("Rocky")) {
-                            isos.emplace_back(formattedIsoName);
-                        }
-                        break;
-                    case OS::Distro::AlmaLinux:
-                        if (formattedIsoName.contains("AlmaLinux")) {
-                            isos.emplace_back(formattedIsoName);
-                        }
-                        break;
-                }
-            }
-        }
-
-        if (isos.empty()) {
-            m_view->fatalMessage(
-                Messages::title, Messages::OperationalSystem::noneFound);
-        }
-
-        auto selectedIso = m_view->listMenu(Messages::title,
-            Messages::OperationalSystem::question, isos,
-            Messages::OperationalSystem::help);
-
-        const auto selectedIsoPath = fmt::format(
-            "{}/{}", isoDirectoryPath.data()->second, selectedIso);
-        m_model->setDiskImage(selectedIsoPath);
-        const auto versioncombo = promptVersion(selectedDistro->second,
-            inferVersionComboFromIso(selectedDistro->second, selectedIso));
-        m_model->getHeadnode().setOS(
-            makeOperatingSystem(selectedDistro->second, versioncombo));
-        LOG_DEBUG("Selected ISO: {}", selectedIsoPath);
     }
 }
 

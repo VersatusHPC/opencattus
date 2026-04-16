@@ -11,11 +11,13 @@
 #include <opencattus/models/cluster.h>
 #include <opencattus/patterns/singleton.h>
 #include <opencattus/services/options.h>
+#include <opencattus/services/runner.h>
 #include <string>
 
 namespace {
 using opencattus::models::AnswerFile;
 using opencattus::models::Cluster;
+using opencattus::services::DryRunner;
 using opencattus::services::Options;
 
 void initializeOptionsSingleton()
@@ -24,6 +26,10 @@ void initializeOptionsSingleton()
     auto options = opencattus::services::options::factory(2, argv);
     opencattus::Singleton<const Options>::init(
         std::unique_ptr<const Options>(options.release()));
+    std::unique_ptr<opencattus::services::IRunner> runner
+        = std::make_unique<DryRunner>();
+    opencattus::Singleton<opencattus::services::IRunner>::init(
+        std::move(runner));
 }
 
 auto tempAnswerfilePath(std::string_view stem) -> std::filesystem::path
@@ -48,7 +54,9 @@ void writeAnswerfile(const std::filesystem::path& path,
     bool includeServiceNetwork = true,
     std::string_view provisioner = "confluent",
     std::optional<std::string_view> serviceNameservers = std::nullopt,
-    std::string_view distro = "rocky", std::string_view version = "9.7")
+    std::string_view distro = "rocky", std::string_view version = "9.7",
+    std::optional<std::string_view> enabledRepositories = std::nullopt,
+    bool includeNodeBMC = true)
 {
     std::ofstream out(path);
     REQUIRE(out.is_open());
@@ -95,6 +103,11 @@ void writeAnswerfile(const std::filesystem::path& path,
             << "domain_name=cluster.application.example.com\n";
     }
 
+    if (enabledRepositories.has_value()) {
+        out << "\n[repositories]\n"
+            << "enabled=" << enabledRepositories.value() << '\n';
+    }
+
     out << "\n[slurm]\n"
         << "mariadb_root_password=LabMariadbRoot!23\n"
         << "slurmdb_password=LabSlurmDb!23\n"
@@ -122,8 +135,11 @@ void writeAnswerfile(const std::filesystem::path& path,
         << "[node.1]\n"
         << "hostname=n01\n"
         << "mac_address=52:54:00:00:20:11\n"
-        << "node_ip=192.168.30.1\n"
-        << "bmc_address=192.168.31.101\n";
+        << "node_ip=192.168.30.1\n";
+
+    if (includeNodeBMC) {
+        out << "bmc_address=192.168.31.101\n";
+    }
 }
 
 void appendOFEDSection(const std::filesystem::path& path, std::string_view kind,
@@ -134,6 +150,17 @@ void appendOFEDSection(const std::filesystem::path& path, std::string_view kind,
     out << "\n[ofed]\n"
         << "kind=" << kind << '\n'
         << "version=" << version << '\n';
+}
+
+void appendSecondNodeSection(const std::filesystem::path& path)
+{
+    std::ofstream out(path, std::ios::app);
+    REQUIRE(out.is_open());
+    out << "\n[node.2]\n"
+        << "hostname=n02\n"
+        << "mac_address=52:54:00:00:20:12\n"
+        << "node_ip=192.168.30.2\n"
+        << "bmc_address=192.168.31.102\n";
 }
 }
 
@@ -285,6 +312,69 @@ TEST_SUITE("opencattus::models::answerfile")
 
         std::filesystem::remove(answerfilePath);
         std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("fillData keeps the selected repositories from the answerfile")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-cluster-repositories");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-repositories");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "confluent", std::nullopt,
+            "rocky", "9.7", "baseos, epel, cuda");
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            Cluster cluster;
+            cluster.fillData(answerfile);
+
+            REQUIRE(cluster.getEnabledRepositories().has_value());
+            CHECK(cluster.getEnabledRepositories().value()
+                == std::vector<std::string> { "baseos", "epel", "cuda" });
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while filling cluster repositories");
+        }
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("fillData accepts a planned disk image path during dry-run")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-cluster-planned-disk-image");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-planned-disk-image");
+        std::filesystem::remove(diskImagePath);
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front());
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            Cluster cluster;
+            CHECK_NOTHROW(cluster.fillData(answerfile));
+            CHECK(cluster.getDiskImage().getPath() == diskImagePath);
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while accepting a planned disk image path");
+        }
+
+        std::filesystem::remove(answerfilePath);
     }
 
     TEST_CASE("fillData still accepts xcat on Rocky Linux 8")
@@ -573,6 +663,69 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(diskImagePath);
     }
 
+    TEST_CASE("dumpData rewrites existing answerfiles with deterministic "
+              "section order")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto sourcePath
+            = tempAnswerfilePath("opencattus-cluster-dump-order-source");
+        const auto outputPath
+            = tempAnswerfilePath("opencattus-cluster-dump-order-output");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-dump-order");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(sourcePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "confluent");
+        appendSecondNodeSection(sourcePath);
+
+        {
+            std::ofstream staleOutput(outputPath);
+            REQUIRE(staleOutput.is_open());
+            staleOutput << "[postfix]\n"
+                        << "profile=Relay\n\n"
+                        << "[network_service]\n"
+                        << "interface=stale0\n\n"
+                        << "[node.2]\n"
+                        << "hostname=stale02\n\n";
+        }
+
+        try {
+            AnswerFile sourceAnswerfile(sourcePath);
+            Cluster cluster;
+            cluster.fillData(sourceAnswerfile);
+
+            cluster.dumpData(outputPath);
+
+            const auto dumped = opencattus::services::files::read(outputPath);
+            const auto networkService = dumped.find("[network_service]");
+            const auto nodeDefaults = dumped.find("[node]");
+            const auto node1 = dumped.find("[node.1]");
+            const auto node2 = dumped.find("[node.2]");
+
+            REQUIRE(networkService != std::string::npos);
+            REQUIRE(nodeDefaults != std::string::npos);
+            REQUIRE(node1 != std::string::npos);
+            REQUIRE(node2 != std::string::npos);
+            CHECK(networkService < nodeDefaults);
+            CHECK(nodeDefaults < node1);
+            CHECK(node1 < node2);
+            CHECK_FALSE(dumped.contains("[postfix]"));
+            CHECK_FALSE(dumped.contains("stale02"));
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while checking dumped answerfile order");
+        }
+
+        std::filesystem::remove(sourcePath);
+        std::filesystem::remove(outputPath);
+        std::filesystem::remove(diskImagePath);
+    }
+
     TEST_CASE("dumpData round-trips service and application network sections")
     {
         initializeOptionsSingleton();
@@ -745,6 +898,36 @@ TEST_SUITE("opencattus::models::answerfile")
 
         std::filesystem::remove(sourcePath);
         std::filesystem::remove(outputPath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("loadOptions accepts nodes without BMC addresses")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-node-without-bmc");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-node-without-bmc");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "confluent", std::nullopt,
+            "rocky", "9.7", std::nullopt, false);
+
+        AnswerFile answerfile(answerfilePath);
+
+        REQUIRE(answerfile.nodes.nodes.size() == 1);
+        CHECK_FALSE(answerfile.nodes.nodes[0].bmc_address.has_value());
+
+        Cluster cluster;
+        CHECK_NOTHROW(cluster.fillData(answerfile));
+        REQUIRE(cluster.getNodes().size() == 1);
+        CHECK_FALSE(cluster.getNodes().front().getBMC().has_value());
+
+        std::filesystem::remove(answerfilePath);
         std::filesystem::remove(diskImagePath);
     }
 }

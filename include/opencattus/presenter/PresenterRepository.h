@@ -10,12 +10,11 @@ namespace opencattus::presenter {
 class PresenterRepository : public Presenter {
 private:
     struct Messages {
-        static constexpr const auto title = "Repository Selection";
+        static constexpr const auto title = "Repositories";
 
         struct General {
             static constexpr const auto question
-                = "Enable/disable the repositories you want to install. Use "
-                  "SPACE for selecting/deselecting";
+                = "Select the repositories to enable. SPACE toggles an entry.";
             static constexpr const auto help
                 = Presenter::Messages::Placeholder::help;
         };

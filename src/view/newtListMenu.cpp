@@ -5,19 +5,72 @@
 
 // This file is empty since the method is now a template
 
+#include <algorithm>
+#include <cstdlib>
 #include <newt.h>
 #include <opencattus/view/newt.h>
-#include <ranges>
+#include <unordered_set>
 
-static std::vector<std::string> retrieveListSelectedItems(newtComponent list)
+static constexpr int scrollBarWidth = 3;
+
+static auto checkboxLabel(std::string_view label, bool selected) -> std::string
+{
+    return fmt::format(" [{}] {}", selected ? "*" : " ", label);
+}
+
+static std::vector<std::string> retrieveSelectedItems(newtComponent list)
 {
     int selectCount = 0;
-    char** selectItems
-        = reinterpret_cast<char**>(newtListboxGetSelection(list, &selectCount));
-    auto temp = std::vector(selectItems, selectItems + selectCount)
-        | std::views::transform([](char* c) { return std::string { c }; });
-    std::vector<std::string> ret(std::begin(temp), std::end(temp));
+    auto** selectedItems = newtListboxGetSelection(list, &selectCount);
+    std::vector<std::string> ret;
+    ret.reserve(static_cast<std::size_t>(selectCount));
+    for (int index = 0; index < selectCount; ++index) {
+        ret.emplace_back(static_cast<const char*>(selectedItems[index]));
+    }
+    std::free(selectedItems);
+
     return ret;
+}
+
+static auto longestCheckboxLabel(const View::MultipleSelectionEntries& items)
+    -> std::size_t
+{
+    std::size_t longest = 0;
+    for (const auto& entry : items) {
+        longest = std::max(
+            longest, checkboxLabel(std::get<1>(entry), false).size());
+    }
+
+    return longest;
+}
+
+struct CheckboxListState {
+    newtComponent list;
+    const View::MultipleSelectionEntries* items;
+    std::vector<std::string> labels;
+};
+
+static void updateCheckboxListLabels(newtComponent, void* data)
+{
+    auto* state = static_cast<CheckboxListState*>(data);
+    int selectedCount = 0;
+    auto** rawSelected = newtListboxGetSelection(state->list, &selectedCount);
+
+    std::unordered_set<const void*> selected;
+    selected.reserve(static_cast<std::size_t>(selectedCount));
+    for (int index = 0; index < selectedCount; ++index) {
+        selected.insert(rawSelected[index]);
+    }
+    std::free(rawSelected);
+
+    for (std::size_t index = 0; index < state->items->size(); ++index) {
+        const auto& [key, item, enabled] = state->items->at(index);
+        static_cast<void>(enabled);
+        state->labels[index]
+            = checkboxLabel(item, selected.contains(key.c_str()));
+        newtListboxSetEntry(
+            state->list, static_cast<int>(index), state->labels[index].c_str());
+    }
 }
 
 std::string Newt::listMenuImpl(const char* title, const char* message,
@@ -34,23 +87,54 @@ std::vector<std::string> Newt::collectListMenuImpl(const char* title,
         title, message, items, helpMessage, std::move(addCallback));
 }
 
-std::pair<int, std::vector<std::string>> Newt::multipleSelectionMenu(
+std::pair<int, std::vector<std::string>> Newt::checkboxSelectionMenu(
     const char* title, const char* message, const char* help,
     View::MultipleSelectionEntries items)
 {
-    auto* form = newtForm(nullptr, nullptr, 0);
-    newtFormSetWidth(form, m_suggestedWidth);
+    refreshScreenMetrics();
 
-    auto* label = newtLabel(1, 1, message);
+    auto* form = newtForm(nullptr, nullptr, NEWT_FLAG_NOF12);
+    const auto maxListWidth = std::max(28, m_suggestedWidth - 10);
+    const auto maxVisibleRows = std::min(m_maxListHeight, 8);
+    const auto visibleListHeight
+        = std::min(listHeight(items.size()), maxVisibleRows);
+    const auto listFlags
+        = items.size() > static_cast<std::size_t>(visibleListHeight)
+        ? NEWT_FLAG_SCROLL
+        : 0;
+    const auto scrollAdjust = listFlags == 0 ? 0 : scrollBarWidth;
+    const auto listWidth = std::clamp(
+        static_cast<int>(longestCheckboxLabel(items)) + scrollAdjust, 28,
+        maxListWidth);
+    const auto textWidth = std::max(32, listWidth);
 
-    auto* list = newtListbox(1, 3, m_maxListHeight, NEWT_FLAG_MULTIPLE);
+    newtSetColor(NEWT_COLORSET_SELLISTBOX, const_cast<char*>("black"),
+        const_cast<char*>("lightgray"));
+    newtSetColor(NEWT_COLORSET_ACTSELLISTBOX, const_cast<char*>("white"),
+        const_cast<char*>("red"));
 
+    auto* label = newtTextboxReflowed(
+        0, 0, const_cast<char*>(message), textWidth, 0, 0, 0);
+
+    auto* list
+        = newtListbox(0, 0, visibleListHeight, listFlags | NEWT_FLAG_MULTIPLE);
+    newtListboxSetWidth(list, listWidth);
+
+    CheckboxListState checkboxState {
+        .list = list,
+        .items = &items,
+        .labels = {},
+    };
+    checkboxState.labels.reserve(items.size());
     for (const auto& [key, item, enabled] : items) {
-        newtListboxAppendEntry(list, item.c_str(), key.c_str());
-
-        if (enabled)
+        checkboxState.labels.emplace_back(checkboxLabel(item, enabled));
+        newtListboxAppendEntry(
+            list, checkboxState.labels.back().c_str(), key.c_str());
+        if (enabled) {
             newtListboxSelectItem(list, key.c_str(), NEWT_FLAGS_SET);
+        }
     }
+    newtComponentAddCallback(list, updateCheckboxListLabels, &checkboxState);
 
     newtGrid grid = newtCreateGrid(1, 3);
     newtComponent buttonOk, buttonCancel, buttonHelp;
@@ -59,37 +143,47 @@ std::pair<int, std::vector<std::string>> Newt::multipleSelectionMenu(
         const_cast<char*>(TUIText::Buttons::help), &buttonHelp, NULL);
     newtGridSetField(grid, 0, 0, NEWT_GRID_COMPONENT, label, 1, 1, 0, 0, 0,
         NEWT_GRID_FLAG_GROWX);
-    newtGridSetField(grid, 0, 1, NEWT_GRID_COMPONENT, list, 1, 1, 0, 0, 0,
+    newtGridSetField(grid, 0, 1, NEWT_GRID_COMPONENT, list, 1, 1, 2, 0, 0,
         NEWT_GRID_FLAG_GROWX | NEWT_GRID_FLAG_GROWY);
     newtGridSetField(grid, 0, 2, NEWT_GRID_SUBGRID, buttonGrid, 0, 1, 0, 0, 0,
         NEWT_GRID_FLAG_GROWX);
-    newtGridWrappedWindow(grid, const_cast<char*>(title));
+    int windowWidth = 0;
+    int windowHeight = 0;
+    newtGridGetSize(grid, &windowWidth, &windowHeight);
+    newtGridWrappedWindowAt(grid, const_cast<char*>(title),
+        std::max(0, (m_cols - windowWidth) / 2),
+        std::max(1, (m_rows - windowHeight) / 2));
 
-    newtFormAddComponents(
-        form, list, label, buttonOk, buttonCancel, buttonHelp, nullptr);
+    newtGridAddComponentsToForm(grid, form, 1);
 
     newtRefresh();
-
-    newtExitStruct es = {};
-    newtFormRun(form, &es);
 
     int retval = 0;
 
     while (retval == 0) {
-        while (es.reason == 2) {
+        newtExitStruct es = {};
+        newtFormRun(form, &es);
+
+        while (es.reason == newtExitStruct::NEWT_EXIT_FDREADY) {
             newtFormRun(form, &es);
+        }
+
+        if (es.reason == newtExitStruct::NEWT_EXIT_HOTKEY
+            && es.u.key == NEWT_KEY_F12) {
+            continue;
         }
 
         if (es.u.co == buttonOk) {
             retval = 1;
         } else if (es.u.co == buttonHelp) {
             this->helpMessage(help);
+            continue;
         } else {
             retval = 2;
         }
     }
 
-    auto ret = retrieveListSelectedItems(list);
+    auto ret = retrieveSelectedItems(list);
     newtPopWindow();
     newtFormDestroy(form);
     newtRefresh();

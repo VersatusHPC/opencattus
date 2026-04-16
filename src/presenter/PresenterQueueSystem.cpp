@@ -5,6 +5,32 @@
 
 #include <opencattus/presenter/PresenterQueueSystem.h>
 
+#include <random>
+#include <string_view>
+
+namespace {
+
+auto randomPassword(std::size_t length) -> std::string
+{
+    static constexpr std::string_view alphabet = "abcdefghijkmnopqrstuvwxyz"
+                                                 "ABCDEFGHJKLMNPQRSTUVWXYZ"
+                                                 "23456789";
+
+    std::random_device seed;
+    std::mt19937 generator(seed());
+    std::uniform_int_distribution<std::size_t> pick(0, alphabet.size() - 1);
+
+    std::string password;
+    password.reserve(length);
+    for (std::size_t i = 0; i < length; ++i) {
+        password.push_back(alphabet[pick(generator)]);
+    }
+
+    return password;
+}
+
+} // namespace
+
 namespace opencattus::presenter {
 
 using opencattus::models::SLURM;
@@ -24,9 +50,8 @@ PresenterQueueSystem::PresenterQueueSystem(
     // TODO: Placeholder data
     auto fieldsSLURM = std::to_array<std::pair<std::string, std::string>>(
         { { Messages::SLURM::partition, "execution" },
-            { Messages::SLURM::mariadbRootPassword, "mariadb-root" },
-            { Messages::SLURM::slurmDBPassword, "slurmdbd" },
-            { Messages::SLURM::storagePassword, "slurm-storage" } });
+            { Messages::SLURM::mariadbRootPassword, randomPassword(16) },
+            { Messages::SLURM::slurmDBPassword, randomPassword(16) } });
 
     if (auto& queue = m_model->getQueueSystem()) {
         switch (queue.value()->getKind()) {
@@ -43,7 +68,7 @@ PresenterQueueSystem::PresenterQueueSystem(
                 slurm->setDefaultQueue(fieldsSLURM[0].second);
                 m_model->slurmMariaDBRootPassword = fieldsSLURM[1].second;
                 m_model->slurmDBPassword = fieldsSLURM[2].second;
-                m_model->slurmStoragePassword = fieldsSLURM[3].second;
+                m_model->slurmStoragePassword = fieldsSLURM[2].second;
                 LOG_DEBUG(
                     "Set SLURM default queue: {}", slurm->getDefaultQueue());
 
@@ -65,9 +90,6 @@ PresenterQueueSystem::PresenterQueueSystem(
                     opencattus::utils::enums::toString<PBS::ExecutionPlace>(
                         pbs->getExecutionPlace()));
                 queue.value()->setDefaultQueue("execution");
-                m_model->slurmMariaDBRootPassword = "unused";
-                m_model->slurmDBPassword = "unused";
-                m_model->slurmStoragePassword = "unused";
 
                 break;
             }
