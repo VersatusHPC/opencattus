@@ -718,8 +718,7 @@ rm -rf $scratchdir || :
 
 namespace {
 auto makeConfluentTestNode(std::optional<std::string_view> mac = std::nullopt,
-    bool includeBMC = true)
-    -> opencattus::models::Node
+    bool includeBMC = true) -> opencattus::models::Node
 {
     using opencattus::models::CPU;
     using opencattus::models::Node;

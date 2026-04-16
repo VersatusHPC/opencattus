@@ -1460,8 +1460,7 @@ void XCAT::setNodesBoot()
     }
 
     runIpmiCommandWithFallback(fmt::format("rsetboot {} net", nodes),
-        "chassis bootdev pxe",
-        "PXE boot configuration");
+        "chassis bootdev pxe", "PXE boot configuration");
 }
 
 void XCAT::resetNodes()
@@ -1752,19 +1751,19 @@ TEST_CASE("buildBmcNodeSelector includes only nodes with BMC")
 
         std::optional<BMC> bmc = std::nullopt;
         if (includeBMC) {
-            bmc.emplace("192.168.30.101", "admin", "pa'ss", 0, 9600,
-                BMC::kind::IPMI);
+            bmc.emplace(
+                "192.168.30.101", "admin", "pa'ss", 0, 9600, BMC::kind::IPMI);
         }
 
         return Node(hostname, os, cpu, std::move(connections), bmc);
     };
 
-    CHECK(buildBmcNodeSelector({ makeNode("n01", true),
-              makeNode("n02", false), makeNode("n03", true) })
+    CHECK(buildBmcNodeSelector({ makeNode("n01", true), makeNode("n02", false),
+              makeNode("n03", true) })
         == "n01,n03");
-    CHECK(buildBmcNodeSelector(
-              { makeNode("n01", false), makeNode("n02", false) })
-        .empty());
+    CHECK(
+        buildBmcNodeSelector({ makeNode("n01", false), makeNode("n02", false) })
+            .empty());
 }
 
 TEST_CASE("getLocalOtherPkgRepoPath matches xCAT local repo layout")
