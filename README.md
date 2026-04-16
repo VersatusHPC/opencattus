@@ -13,8 +13,9 @@ with a classic configuration file.
 
 # User documentation
 
-Documentation about usage is not yet available, but the software
-should be self-explanatory since help information is baked directly into it.
+OpenCATTUS does not ship a separate user manual. The TUI and built-in command
+line help are the primary interface and are expected to be sufficient for
+normal use.
 
 # Architecture
 
@@ -92,9 +93,9 @@ automatically.
 
 ## Status
 
-OpenCATTUS is alpha quality software. Some features are still missing, but
-they are on the roadmap. Production use should be done with caution and with
-preliminary testing.
+OpenCATTUS is under active development. The interactive cluster bring-up path
+is the main workflow, while some parts of the project are still evolving.
+Validate changes in a test environment before relying on them in production.
 
 ## Building
 
