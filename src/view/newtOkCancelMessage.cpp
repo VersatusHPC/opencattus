@@ -12,9 +12,9 @@ namespace {
 
 auto leadingSpaces(std::string_view line) -> std::size_t
 {
-    return static_cast<std::size_t>(
-        std::ranges::find_if(line, [](char c) { return c != ' '; })
-        - line.begin());
+    return static_cast<std::size_t>(std::ranges::find_if(line, [](char c) {
+        return c != ' ';
+    }) - line.begin());
 }
 
 auto wrapLine(std::string_view line, std::size_t width) -> std::string
@@ -110,15 +110,15 @@ void Newt::scrollableMessage(const char* title, const char* message,
     const auto* safeTitle = title == nullptr ? "" : title;
     const auto* safeMessage = message == nullptr ? "" : message;
     const auto bodyWidth = std::clamp(m_suggestedWidth - 10, 36, 62);
-    const auto wrappedText = wrapText(text == nullptr ? "" : text, bodyWidth);
+    const auto wrappedText = wrapText(
+        text == nullptr ? "" : text, static_cast<std::size_t>(bodyWidth));
 
     auto* form = newtForm(nullptr, nullptr, NEWT_FLAG_NOF12);
     auto* label = newtTextboxReflowed(
         0, 0, const_cast<char*>(safeMessage), bodyWidth, 0, 0, 0);
     auto* body = newtTextbox(
         0, 0, bodyWidth, std::min(m_maxListHeight, 12), NEWT_FLAG_SCROLL);
-    newtTextboxSetColors(
-        body, NEWT_COLORSET_TEXTBOX, NEWT_COLORSET_TEXTBOX);
+    newtTextboxSetColors(body, NEWT_COLORSET_TEXTBOX, NEWT_COLORSET_TEXTBOX);
     newtTextboxSetText(body, wrappedText.c_str());
 
     newtGrid grid = newtCreateGrid(1, 3);
