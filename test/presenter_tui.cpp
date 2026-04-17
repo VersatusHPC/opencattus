@@ -102,7 +102,7 @@ public:
         const std::string& cmd, opencattus::services::Stream /*out*/) override
     {
         m_commands.push_back(cmd);
-        return CommandProxy { };
+        return CommandProxy {};
     }
 
     void checkCommand(const std::string& cmd) override
@@ -467,10 +467,11 @@ auto hasUsableInfinibandInterface() -> bool
 
 constexpr std::string_view zone1970TabCommand
     = R"(bash -c "test -r /usr/share/zoneinfo/zone1970.tab && cat /usr/share/zoneinfo/zone1970.tab || true")";
+constexpr std::string_view localeMetadataCommand = "locale -av";
 constexpr std::string_view advancedLocaleChoice = "Advanced / legacy locales";
 
 void initializePresenterTestEnvironment(
-    ScriptedRunner::Outputs outputs = ScriptedRunner::Outputs { },
+    ScriptedRunner::Outputs outputs = ScriptedRunner::Outputs {},
     bool dryRun = false)
 {
     opencattus::Singleton<const Options>::init(
@@ -495,6 +496,15 @@ auto defaultRunnerOutputs() -> ScriptedRunner::Outputs
         { "timedatectl list-timezones --no-pager",
             { "America/Sao_Paulo", "Brazil/East", "Europe/Paris" } },
         { "locale -a", { "en_US.utf8", "pt_BR.utf8" } },
+        { std::string(localeMetadataCommand),
+            {
+                "locale: en_US.utf8      directory: /usr/lib/locale/en_US.utf8",
+                " language | American English",
+                "territory | United States",
+                "locale: pt_BR.utf8      directory: /usr/lib/locale/pt_BR.utf8",
+                " language | Brazilian Portuguese",
+                "territory | Brazil",
+            } },
     };
 }
 
@@ -584,7 +594,7 @@ void addHeadnodeNetwork(Cluster& cluster, Network::Profile profile,
     std::string_view interface, std::string_view networkAddress,
     std::string_view connectionAddress, std::string_view subnetMask,
     std::string_view domainName,
-    const std::vector<std::string>& nameservers = { },
+    const std::vector<std::string>& nameservers = {},
     std::optional<std::string_view> gateway = std::nullopt)
 {
     auto network = std::make_unique<Network>(profile, Network::Type::Ethernet);
@@ -772,6 +782,43 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(model->getTimezone().getTimezone() == "UTC");
     }
 
+    TEST_CASE(
+        "time questionnaire drills into nested timezone paths alphabetically")
+    {
+        initializePresenterTestEnvironment({
+            { std::string(zone1970TabCommand),
+                {
+                    "AR\t-3124-06411\tAmerica/Argentina/Cordoba",
+                    "BR\t-1259-03831\tAmerica/Bahia",
+                    "BR\t-2332-04637\tAmerica/Sao_Paulo",
+                    "AR\t-3436-05827\tAmerica/Argentina/Buenos_Aires",
+                } },
+            { "timedatectl list-timezones --no-pager",
+                { "America/Sao_Paulo" } },
+            { "locale -a", { "en_US.utf8" } },
+        });
+
+        auto model = std::make_unique<Cluster>();
+        auto state = std::make_shared<ScriptedViewState>();
+        state->responses = {
+            select("America"),
+            select("Argentina"),
+            select("Buenos_Aires"),
+            collect({ "0.pool.ntp.org" }),
+        };
+        std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
+
+        PresenterTime(model, view);
+
+        REQUIRE(state->listMenus.size() >= 3);
+        CHECK(state->listMenus[1].items
+            == std::vector<std::string> { "Argentina", "Bahia", "Sao_Paulo" });
+        CHECK(state->listMenus[2].items
+            == std::vector<std::string> { "Buenos_Aires", "Cordoba" });
+        CHECK(model->getTimezone().getTimezone()
+            == "America/Argentina/Buenos_Aires");
+    }
+
     TEST_CASE("locale questionnaire groups UTF-8 locales by language")
     {
         initializePresenterTestEnvironment({
@@ -782,6 +829,17 @@ TEST_SUITE("opencattus::presenter::tui")
             { "locale -a",
                 { "C", "C.utf8", "en_US", "en_US.iso885915", "en_US.utf8",
                     "pt_BR.utf8", "POSIX" } },
+            { std::string(localeMetadataCommand),
+                {
+                    "locale: en_US.utf8      directory: "
+                    "/usr/lib/locale/en_US.utf8",
+                    " language | American English",
+                    "territory | United States",
+                    "locale: pt_BR.utf8      directory: "
+                    "/usr/lib/locale/pt_BR.utf8",
+                    " language | Brazilian Portuguese",
+                    "territory | Brazil",
+                } },
         });
 
         auto model = std::make_unique<Cluster>();
@@ -799,6 +857,7 @@ TEST_SUITE("opencattus::presenter::tui")
             != menu.items.end());
         CHECK(std::ranges::find(menu.items, std::string(advancedLocaleChoice))
             != menu.items.end());
+        CHECK(std::ranges::find(menu.items, "C/POSIX") == menu.items.end());
         CHECK(std::ranges::find(menu.items, "en_US.iso885915")
             == menu.items.end());
         CHECK(model->getLocale() == "en_US.utf8");
@@ -812,6 +871,21 @@ TEST_SUITE("opencattus::presenter::tui")
             { "timedatectl list-timezones --no-pager",
                 { "America/Sao_Paulo" } },
             { "locale -a", { "en_GB.utf8", "en_US.utf8", "pt_BR.utf8" } },
+            { std::string(localeMetadataCommand),
+                {
+                    "locale: en_GB.utf8      directory: "
+                    "/usr/lib/locale/en_GB.utf8",
+                    " language | British English",
+                    "territory | United Kingdom",
+                    "locale: en_US.utf8      directory: "
+                    "/usr/lib/locale/en_US.utf8",
+                    " language | American English",
+                    "territory | United States",
+                    "locale: pt_BR.utf8      directory: "
+                    "/usr/lib/locale/pt_BR.utf8",
+                    " language | Brazilian Portuguese",
+                    "territory | Brazil",
+                } },
         });
 
         auto model = std::make_unique<Cluster>();
@@ -838,6 +912,13 @@ TEST_SUITE("opencattus::presenter::tui")
             { "timedatectl list-timezones --no-pager",
                 { "America/Sao_Paulo" } },
             { "locale -a", { "en_US", "en_US.iso885915", "en_US.utf8" } },
+            { std::string(localeMetadataCommand),
+                {
+                    "locale: en_US.utf8      directory: "
+                    "/usr/lib/locale/en_US.utf8",
+                    " language | American English",
+                    "territory | United States",
+                } },
         });
 
         auto model = std::make_unique<Cluster>();
@@ -851,11 +932,43 @@ TEST_SUITE("opencattus::presenter::tui")
         PresenterLocale(model, view);
 
         const auto& menu = firstMenuByMessage(
-            state->listMenus, "Pick a legacy or non-UTF-8 locale");
+            state->listMenus, "Pick an advanced or legacy locale");
         CHECK(std::ranges::find(menu.items, "en_US.iso885915")
             != menu.items.end());
         CHECK(std::ranges::find(menu.items, "en_US.utf8") == menu.items.end());
         CHECK(model->getLocale() == "en_US.iso885915");
+    }
+
+    TEST_CASE("locale questionnaire uses language metadata for unknown codes")
+    {
+        initializePresenterTestEnvironment({
+            { std::string(zone1970TabCommand),
+                { "BR\t-2332-04637\tAmerica/Sao_Paulo\tBrazil southeast" } },
+            { "timedatectl list-timezones --no-pager",
+                { "America/Sao_Paulo" } },
+            { "locale -a", { "uk_UA", "uk_UA.utf8" } },
+            { std::string(localeMetadataCommand),
+                {
+                    "locale: uk_UA.utf8      directory: "
+                    "/usr/lib/locale/uk_UA.utf8",
+                    " language | Ukrainian",
+                    "territory | Ukraine",
+                } },
+        });
+
+        auto model = std::make_unique<Cluster>();
+        auto state = std::make_shared<ScriptedViewState>();
+        state->responses = { select("Ukrainian (uk)") };
+        std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
+
+        PresenterLocale(model, view);
+
+        const auto& menu = firstMenuByMessage(
+            state->listMenus, "Pick the default locale language");
+        CHECK(std::ranges::find(menu.items, "Ukrainian (uk)")
+            != menu.items.end());
+        CHECK(std::ranges::find(menu.items, "uk locales") == menu.items.end());
+        CHECK(model->getLocale() == "uk_UA.utf8");
     }
 
     TEST_CASE("dry-run ISO download skips the progress UI and keeps the "
@@ -914,8 +1027,7 @@ TEST_SUITE("opencattus::presenter::tui")
 
         const auto invalidPath = tempPath("opencattus-tui-iso-file", "txt");
         std::ofstream(invalidPath).close();
-        const auto isoDir
-            = createTestIsoDirectory("opencattus-tui-iso-retry");
+        const auto isoDir = createTestIsoDirectory("opencattus-tui-iso-retry");
 
         auto model = std::make_unique<Cluster>();
         auto state = std::make_shared<ScriptedViewState>();
@@ -944,7 +1056,8 @@ TEST_SUITE("opencattus::presenter::tui")
         std::filesystem::remove_all(isoDir);
     }
 
-    TEST_CASE("existing ISO path explains unmatched distro and retries directory")
+    TEST_CASE(
+        "existing ISO path explains unmatched distro and retries directory")
     {
         initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
 
@@ -1015,7 +1128,8 @@ TEST_SUITE("opencattus::presenter::tui")
     {
         initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
 
-        const auto outputPath = tempPath("opencattus-tui-pbs-answerfile", "ini");
+        const auto outputPath
+            = tempPath("opencattus-tui-pbs-answerfile", "ini");
         const auto diskImagePath = tempPath("opencattus-tui-pbs-iso", "iso");
         std::ofstream(diskImagePath).close();
 
@@ -1365,15 +1479,17 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(management.getGateway().to_string() == "192.168.30.1");
     }
 
-    TEST_CASE("service network sharing management interface must use a separate "
-              "subnet")
+    TEST_CASE(
+        "service network sharing management interface must use a separate "
+        "subnet")
     {
         initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         const auto interfaces = usableHostInterfaces();
         if (interfaces.empty()) {
-            MESSAGE("Skipping PresenterNetwork shared service subnet test: need "
-                    "a usable interface");
+            MESSAGE(
+                "Skipping PresenterNetwork shared service subnet test: need "
+                "a usable interface");
             return;
         }
 
@@ -1381,8 +1497,8 @@ TEST_SUITE("opencattus::presenter::tui")
         auto state = std::make_shared<ScriptedViewState>();
         state->responses = {
             select(interfaces[0]),
-            fields({ "172.21.1.200", "255.255.255.0", "",
-                "cluster.example.com", "9.9.9.9" }),
+            fields({ "172.21.1.200", "255.255.255.0", "", "cluster.example.com",
+                "9.9.9.9" }),
             fields({ "192.168.200.103", "255.255.255.0", "",
                 "service.cluster.example.com", "9.9.9.9" }),
         };
@@ -1585,8 +1701,9 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK_FALSE(model->getNodes().front().getBMC().has_value());
     }
 
-    TEST_CASE("compute node questionnaire rejects BMC addresses matching compute "
-              "node addresses")
+    TEST_CASE(
+        "compute node questionnaire rejects BMC addresses matching compute "
+        "node addresses")
     {
         initializePresenterTestEnvironment(defaultRunnerOutputs());
 
@@ -1597,10 +1714,10 @@ TEST_SUITE("opencattus::presenter::tui")
 
         auto state = std::make_shared<ScriptedViewState>();
         state->responses = {
-            fields({ "n", "2", "192.168.30.101", "192.168.30.101",
-                "labroot", "labroot" }),
-            fields({ "n", "2", "192.168.30.101", "192.168.30.201",
-                "labroot", "labroot" }),
+            fields({ "n", "2", "192.168.30.101", "192.168.30.101", "labroot",
+                "labroot" }),
+            fields({ "n", "2", "192.168.30.101", "192.168.30.201", "labroot",
+                "labroot" }),
             fields(
                 { "1", "8", "2", "32768", "admin", "secret", "1", "115200" }),
             fields({ "1" }),
@@ -1614,7 +1731,8 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(state->responses.empty());
         CHECK(std::ranges::any_of(state->messages, [](const auto& message) {
             return message
-                == "Compute nodes settings|BMC first IP cannot match the compute "
+                == "Compute nodes settings|BMC first IP cannot match the "
+                   "compute "
                    "node first IP";
         }));
         CHECK(std::ranges::any_of(state->messages, [](const auto& message) {

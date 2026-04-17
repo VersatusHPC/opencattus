@@ -18,10 +18,16 @@ namespace opencattus::presenter {
 
 namespace {
     constexpr const auto advancedLocaleChoice = "Advanced / legacy locales";
+    constexpr const auto localeMetadataCommand = "locale -av";
 
     struct LocaleChoice {
         std::string label;
         std::string locale;
+    };
+
+    struct LocaleMetadata {
+        std::string language;
+        std::string territory;
     };
 
     std::string lower(std::string value)
@@ -29,6 +35,17 @@ namespace {
         std::ranges::transform(value, value.begin(),
             [](unsigned char chr) { return std::tolower(chr); });
         return value;
+    }
+
+    std::string trim(std::string value)
+    {
+        const auto first = value.find_first_not_of(" \t");
+        if (first == std::string::npos) {
+            return "";
+        }
+
+        const auto last = value.find_last_not_of(" \t");
+        return value.substr(first, last - first + 1);
     }
 
     bool isUtf8Locale(const std::string& locale)
@@ -86,32 +103,81 @@ namespace {
                                               : base.substr(0, separator);
     }
 
-    std::string languageLabel(const std::string& code)
+    bool isTechnicalLocale(const std::string& locale)
+    {
+        const auto code = languageCode(locale);
+        return code == "C" || code == "POSIX";
+    }
+
+    auto parseLocaleMetadata(const std::vector<std::string>& lines)
+        -> std::map<std::string, LocaleMetadata>
+    {
+        std::map<std::string, LocaleMetadata> metadata;
+        std::string currentLocale;
+
+        for (const auto& line : lines) {
+            if (line.starts_with("locale:")) {
+                const auto payload
+                    = trim(line.substr(std::string("locale:").size()));
+                const auto whitespace = payload.find_first_of(" \t");
+                currentLocale = whitespace == std::string::npos
+                    ? payload
+                    : payload.substr(0, whitespace);
+                metadata.try_emplace(currentLocale);
+                continue;
+            }
+
+            if (currentLocale.empty()) {
+                continue;
+            }
+
+            const auto separator = line.find('|');
+            if (separator == std::string::npos) {
+                continue;
+            }
+
+            const auto key = trim(line.substr(0, separator));
+            const auto value = trim(line.substr(separator + 1));
+            if (key == "language") {
+                metadata[currentLocale].language = value;
+            } else if (key == "territory") {
+                metadata[currentLocale].territory = value;
+            }
+        }
+
+        return metadata;
+    }
+
+    const std::map<std::string, std::string>& preferredLanguageNamesByCode()
+    {
+        static const std::map<std::string, std::string> names = {
+            { "en", "English" },
+            { "pt", "Portuguese" },
+            { "zh", "Chinese" },
+        };
+
+        return names;
+    }
+
+    std::string languageLabel(const std::string& code,
+        const std::map<std::string, std::string>& detectedLanguageNames)
     {
         if (code == "C" || code == "POSIX") {
             return "C/POSIX";
         }
 
         const auto lowered = lower(code);
-        static const std::map<std::string, std::string> names = {
-            { "de", "German" },
-            { "en", "English" },
-            { "es", "Spanish" },
-            { "fr", "French" },
-            { "it", "Italian" },
-            { "ja", "Japanese" },
-            { "ko", "Korean" },
-            { "pt", "Portuguese" },
-            { "ru", "Russian" },
-            { "zh", "Chinese" },
-        };
-
-        const auto iter = names.find(lowered);
-        if (iter != names.end()) {
+        if (const auto iter = preferredLanguageNamesByCode().find(lowered);
+            iter != preferredLanguageNamesByCode().end()) {
             return fmt::format("{} ({})", iter->second, lowered);
         }
 
-        return fmt::format("{} locales", code);
+        if (const auto iter = detectedLanguageNames.find(lowered);
+            iter != detectedLanguageNames.end() && !iter->second.empty()) {
+            return fmt::format("{} ({})", iter->second, lowered);
+        }
+
+        return fmt::format("{} ({})", code, lowered);
     }
 }
 
@@ -127,12 +193,30 @@ PresenterLocale::PresenterLocale(
             "'locale -a' works and try again.");
     }
 
+    const auto localeMetadata = parseLocaleMetadata(
+        opencattus::Singleton<IRunner>::get()->checkOutput(
+            localeMetadataCommand));
+    std::map<std::string, std::string> detectedLanguageNames;
+    for (const auto& locale : availableLocales) {
+        const auto code = lower(languageCode(locale));
+        if (code == "C" || code == "POSIX") {
+            continue;
+        }
+
+        const auto metadata = localeMetadata.find(locale);
+        if (metadata != localeMetadata.end()
+            && !metadata->second.language.empty()) {
+            detectedLanguageNames.try_emplace(code, metadata->second.language);
+        }
+    }
+
     std::map<std::string, std::vector<LocaleChoice>> localeGroups;
     std::vector<std::string> legacyLocales;
     for (const auto& locale : availableLocales) {
-        if (isUtf8Locale(locale)) {
-            localeGroups[languageLabel(languageCode(locale))].push_back(
-                { normalizeUtf8Display(locale), locale });
+        if (isUtf8Locale(locale) && !isTechnicalLocale(locale)) {
+            localeGroups[languageLabel(
+                             languageCode(locale), detectedLanguageNames)]
+                .push_back({ normalizeUtf8Display(locale), locale });
         } else {
             legacyLocales.push_back(locale);
         }

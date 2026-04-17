@@ -19,7 +19,7 @@ private:
         static constexpr const auto regionQuestion
             = "Pick the regional UTF-8 locale";
         static constexpr const auto legacyQuestion
-            = "Pick a legacy or non-UTF-8 locale";
+            = "Pick an advanced or legacy locale";
         static constexpr const auto help
             = Presenter::Messages::Placeholder::help;
     };

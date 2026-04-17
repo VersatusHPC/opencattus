@@ -3,10 +3,65 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <map>
 #include <opencattus/presenter/PresenterTime.h>
 #include <set>
+#include <string>
+#include <vector>
 
 namespace opencattus::presenter {
+
+namespace {
+    struct TimezoneNode {
+        bool terminal = false;
+        std::map<std::string, TimezoneNode> children;
+    };
+
+    auto splitTimezonePath(const std::string& path) -> std::vector<std::string>
+    {
+        std::vector<std::string> parts;
+        std::size_t start = 0;
+
+        while (start < path.size()) {
+            const auto slash = path.find('/', start);
+            parts.emplace_back(path.substr(start,
+                slash == std::string::npos ? std::string::npos
+                                           : slash - start));
+            if (slash == std::string::npos) {
+                break;
+            }
+            start = slash + 1;
+        }
+
+        return parts;
+    }
+
+    void insertTimezone(TimezoneNode& root, const std::string& path)
+    {
+        if (path.empty()) {
+            root.terminal = true;
+            return;
+        }
+
+        auto* current = &root;
+        for (const auto& part : splitTimezonePath(path)) {
+            current = &current->children[part];
+        }
+        current->terminal = true;
+    }
+
+    auto childNames(const TimezoneNode& node) -> std::vector<std::string>
+    {
+        std::vector<std::string> names;
+        names.reserve(node.children.size());
+        for (const auto& [name, child] : node.children) {
+            static_cast<void>(child);
+            names.push_back(name);
+        }
+
+        return names;
+    }
+}
 
 PresenterTime::PresenterTime(
     std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view)
@@ -37,31 +92,33 @@ PresenterTime::PresenterTime(
 
     // Timezone location selection
 
-    std::list<std::string> timezoneLocations;
+    TimezoneNode timezoneTree;
     const auto& [begin, end]
         = availableTimezones.equal_range(timezoneArea.data());
     for (auto it = begin; it != end; ++it) {
-        timezoneLocations.emplace_back(it->second);
+        insertTimezone(timezoneTree, it->second);
     }
-    if (timezoneLocations.empty()) {
+    if (!timezoneTree.terminal && timezoneTree.children.empty()) {
         m_view->fatalMessage(Messages::title,
             "No timezone locations were found for the selected area.");
     }
 
-    if (timezoneLocations.size() == 1 && timezoneLocations.front().empty()) {
-        m_model->setTimezone(std::string(timezoneArea));
-        LOG_DEBUG("Timezone set to: {}", m_model->getTimezone().getTimezone())
-    } else {
-        auto selectedTimezoneLocation
+    auto selectedTimezone = std::string(timezoneArea);
+    auto* current = &timezoneTree;
+    while (!current->children.empty()) {
+        const auto selectedTimezoneLocation
             = m_view->listMenu(Messages::title, Messages::Timezone::question,
-                timezoneLocations, Messages::Timezone::help);
+                childNames(*current), Messages::Timezone::help);
 
-        m_model->setTimezone(
-            fmt::format("{}/{}", timezoneArea, selectedTimezoneLocation));
-
-        // FIXME: Horrible call; getTimezone() two times? Srsly?
-        LOG_DEBUG("Timezone set to: {}", m_model->getTimezone().getTimezone())
+        selectedTimezone
+            = fmt::format("{}/{}", selectedTimezone, selectedTimezoneLocation);
+        current = &current->children.at(selectedTimezoneLocation);
     }
+
+    m_model->setTimezone(selectedTimezone);
+
+    // FIXME: Horrible call; getTimezone() two times? Srsly?
+    LOG_DEBUG("Timezone set to: {}", m_model->getTimezone().getTimezone())
 
     std::vector<std::string> defaultServers = { "0.br.pool.ntp.org" };
 
