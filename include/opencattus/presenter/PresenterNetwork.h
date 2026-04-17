@@ -71,14 +71,14 @@ private:
             }
 
             static constexpr const auto help
-                = "Pick the physical or VLAN interface for this network. "
+                = "Choose the physical or VLAN interface for this network. "
                   "External, management, service, and application networks "
                   "must not overlap unless the prompt explicitly allows it.";
         };
 
         struct Details {
             static constexpr const auto question
-                = "Fill the required network details";
+                = "Enter the required network details";
             static constexpr const auto help
                 = "Enter the head-node address, subnet mask, gateway when "
                   "required, DNS domain, and nameservers for the selected "
@@ -102,8 +102,8 @@ private:
         };
 
         struct IP {
-            static constexpr const auto address = "IP Address";
-            static constexpr const auto subnetMask = "Subnet Mask";
+            static constexpr const auto address = "IP address";
+            static constexpr const auto subnetMask = "Subnet mask";
             static constexpr const auto gateway = "Gateway";
         };
 

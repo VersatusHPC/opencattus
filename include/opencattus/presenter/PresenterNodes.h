@@ -15,7 +15,7 @@ private:
     struct Messages {
         static constexpr const auto title = "Compute nodes settings";
         static constexpr const auto message
-            = "We will now gather information to fill your compute nodes data";
+            = "Enter compute node naming, network, and hardware defaults";
 
         struct Nodes {
             static constexpr const auto question
@@ -81,8 +81,8 @@ private:
                 = "Enter the compute nodes quantity information";
             static constexpr const auto help
                 = "Enter how many racks and nodes per rack should be "
-                  "generated. "
-                  "The start number controls the first generated hostname.";
+                  "generated. The start number controls the first generated "
+                  "hostname.";
 
             static constexpr const auto racks = "Racks";
             static constexpr const auto nodes = "Nodes";

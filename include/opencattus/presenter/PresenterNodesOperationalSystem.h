@@ -23,7 +23,7 @@ private:
         struct OperationalSystemDownloadIso {
             struct FirstStage {
                 static constexpr const auto question
-                    = "Do you want to download an ISO for your nodes?";
+                    = "Download an ISO for the compute nodes?";
                 static constexpr const auto help
                     = "Choose Yes to download a supported installation DVD, "
                       "or No to select an ISO already available on this host.";
@@ -66,7 +66,7 @@ private:
 
         struct OperationalSystemVersion {
             static constexpr const auto question
-                = "Enter the distro version and architecture";
+                = "Enter the distribution version and architecture";
             static constexpr const auto rhelError
                 = "Unfortunately, we do not support downloading Red Hat "
                   "Enterprise Linux yet.\n"
@@ -95,8 +95,8 @@ private:
                 = "No ISO matching the selected distribution was found in the "
                   "provided directory";
             static constexpr const auto downloadMissing
-                = "Download an ISO for this distro instead? Choose No to enter "
-                  "another directory.";
+                = "Download an ISO for this distribution instead? Choose No "
+                  "to enter another directory.";
         };
     };
 

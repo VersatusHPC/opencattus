@@ -14,7 +14,7 @@ private:
     struct Messages {
         static constexpr const auto title = "Queue system settings";
         static constexpr const auto question
-            = "Pick a queue system to run compute jobs";
+            = "Choose a workload manager for compute jobs";
         static constexpr const auto help
             = "Choose the workload manager for the compute nodes. SLURM is "
               "the default HPC scheduler; PBS Professional is available for "

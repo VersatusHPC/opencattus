@@ -16,7 +16,7 @@ private:
         static constexpr const auto title = "Time and clock settings";
 
         struct Timezone {
-            static constexpr const auto question = "Choose your local timezone";
+            static constexpr const auto question = "Choose the local timezone";
             static constexpr const auto help
                 = "Choose the timezone used by the head node and generated "
                   "cluster configuration. Prefer the canonical Area/Location "

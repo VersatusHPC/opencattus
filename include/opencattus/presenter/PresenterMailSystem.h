@@ -13,8 +13,7 @@ class PresenterMailSystem : public Presenter {
 private:
     struct Messages {
         static constexpr const auto title = "Mail system settings";
-        static constexpr const auto question
-            = "Do you want to enable Postfix mail system?";
+        static constexpr const auto question = "Enable Postfix mail delivery?";
         static constexpr const auto help
             = "Enable Postfix when the head node should deliver local service "
               "mail or relay notifications through another mail server.";
@@ -31,12 +30,12 @@ private:
             static constexpr const auto question
                 = "Enter optional Postfix delivery settings";
             static constexpr const auto help
-                = "Additional domains may be left empty. TLS paths are only "
-                  "needed when overriding the generated default certificate "
-                  "configuration.";
+                = "Additional mail domains may be left empty. TLS paths are "
+                  "only needed when overriding the generated default "
+                  "certificate configuration.";
 
             static constexpr const auto destination
-                = "Additional domains (optional)";
+                = "Additional mail domains (optional)";
             static constexpr const auto tlsOverrideQuestion
                 = "Do you want to override the default TLS certificate paths?";
             static constexpr const auto tlsPathsQuestion

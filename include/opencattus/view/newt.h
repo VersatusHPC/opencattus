@@ -35,14 +35,14 @@ private:
         static constexpr const auto developmentBuild = "DEVELOPMENT BUILD";
 #endif
         static constexpr const auto helpLine
-            = "  <Tab>/<Alt-Tab> moves between elements   |  <Space> "
-              "selects   |  <Enter> accepts";
+            = "  <Tab>/<Alt-Tab> moves between fields   |  <Space> selects   "
+              "|  <Enter> accepts";
         static constexpr const auto abort
             = "Questionnaire stopped by operator request";
 
         struct Buttons {
             static constexpr const auto ok = "OK";
-            static constexpr const auto cancel = "Cancel";
+            static constexpr const auto cancel = "Stop";
             static constexpr const auto yes = "Yes";
             static constexpr const auto add = "Add";
             static constexpr const auto remove = "Remove";

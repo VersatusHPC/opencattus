@@ -318,6 +318,6 @@ TEST_CASE("newt geometry stays within small terminals")
 TEST_CASE("newt field labels can mark fields optional with extra detail")
 {
     CHECK(fieldLabelAllowsEmpty("Gateway (optional)"));
-    CHECK(fieldLabelAllowsEmpty("Additional domains (optional)"));
+    CHECK(fieldLabelAllowsEmpty("Additional mail domains (optional)"));
     CHECK_FALSE(fieldLabelAllowsEmpty("SMTP server"));
 }

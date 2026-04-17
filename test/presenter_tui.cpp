@@ -861,7 +861,7 @@ TEST_SUITE("opencattus::presenter::tui")
         PresenterLocale(model, view);
 
         const auto& menu = firstMenuByMessage(
-            state->listMenus, "Pick the default locale language");
+            state->listMenus, "Choose the default locale language");
         CHECK(
             std::ranges::find(menu.items, "English (en)") != menu.items.end());
         CHECK(std::ranges::find(menu.items, "Portuguese (pt)")
@@ -910,7 +910,7 @@ TEST_SUITE("opencattus::presenter::tui")
         PresenterLocale(model, view);
 
         const auto& menu = firstMenuByMessage(
-            state->listMenus, "Pick the regional UTF-8 locale");
+            state->listMenus, "Choose the regional UTF-8 locale");
         CHECK(std::ranges::find(menu.items, "en_GB.UTF-8") != menu.items.end());
         CHECK(model->getLocale() == "en_GB.utf8");
     }
@@ -943,7 +943,7 @@ TEST_SUITE("opencattus::presenter::tui")
         PresenterLocale(model, view);
 
         const auto& menu = firstMenuByMessage(
-            state->listMenus, "Pick an advanced or legacy locale");
+            state->listMenus, "Choose an advanced or legacy locale");
         CHECK(std::ranges::find(menu.items, "en_US.iso885915")
             != menu.items.end());
         CHECK(std::ranges::find(menu.items, "en_US.utf8") == menu.items.end());
@@ -975,7 +975,7 @@ TEST_SUITE("opencattus::presenter::tui")
         PresenterLocale(model, view);
 
         const auto& menu = firstMenuByMessage(
-            state->listMenus, "Pick the default locale language");
+            state->listMenus, "Choose the default locale language");
         CHECK(std::ranges::find(menu.items, "Ukrainian (uk)")
             != menu.items.end());
         CHECK(std::ranges::find(menu.items, "uk locales") == menu.items.end());
@@ -1577,7 +1577,7 @@ TEST_SUITE("opencattus::presenter::tui")
             Network::Type::Ethernet);
 
         const auto& managementMenu = firstFieldMenuByMessage(
-            state->fieldMenus, "Fill the required network details");
+            state->fieldMenus, "Enter the required network details");
         CHECK(managementMenu.items[3].second == "cluster.example.com");
 
         PresenterNetwork(model, view, nc, Network::Profile::Service,
@@ -1883,8 +1883,8 @@ TEST_SUITE("opencattus::presenter::tui")
             = firstMessageIndex(state->messages, "Locale settings|");
         const auto hostScreen
             = firstMessageIndex(state->messages, "Hostname settings|");
-        const auto networkScreens = messageIndices(state->messages,
-            "Network settings|We will now ask questions about your ");
+        const auto networkScreens = messageIndices(
+            state->messages, "Network settings|Configure the ");
         const auto servicePrompt = firstMessageIndex(state->messages,
             "Network settings|Do you want to configure a service network?");
         const auto osScreen
