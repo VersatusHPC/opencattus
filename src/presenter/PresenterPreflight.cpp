@@ -46,7 +46,7 @@ auto nodeOperatingSystemSummary(const Cluster& model) -> std::string
 {
     const auto& nodes = model.getNodes();
     if (nodes.empty()) {
-        return osSummary(model.getHeadnode().getOS());
+        return osSummary(model.getComputeNodeOS());
     }
 
     std::vector<std::string> summaries;
@@ -66,10 +66,23 @@ auto nodeOperatingSystemSummary(const Cluster& model) -> std::string
 
 auto compatibilityWarning(const Cluster& model) -> std::optional<std::string>
 {
-    const auto& os = model.getHeadnode().getOS();
-    if (os.getPlatform() == OS::Platform::el10
-        && model.getProvisioner() == Cluster::Provisioner::xCAT) {
-        return "xCAT does not support EL10 today";
+    if (model.getProvisioner() != Cluster::Provisioner::xCAT) {
+        return std::nullopt;
+    }
+
+    const auto headnodeIsEL10
+        = model.getHeadnode().getOS().getPlatform() == OS::Platform::el10;
+    const auto computeNodeIsEL10
+        = model.getComputeNodeOS().getPlatform() == OS::Platform::el10;
+
+    if (headnodeIsEL10 && computeNodeIsEL10) {
+        return "xCAT does not support EL10 headnodes or compute images today";
+    }
+    if (headnodeIsEL10) {
+        return "xCAT does not support EL10 headnodes today";
+    }
+    if (computeNodeIsEL10) {
+        return "xCAT does not support EL10 compute images today";
     }
 
     return std::nullopt;
@@ -153,7 +166,7 @@ auto repositorySummary(const Cluster& model) -> std::string
 
 auto isoSummary(const Cluster& model) -> std::string
 {
-    const auto& os = model.getHeadnode().getOS();
+    const auto& os = model.getComputeNodeOS();
     return fmt::format("{} {} from {}",
         opencattus::utils::enums::toString(os.getDistro()), os.getVersion(),
         model.getDiskImage().getPath().string());

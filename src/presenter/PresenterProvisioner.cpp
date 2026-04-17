@@ -36,6 +36,17 @@ auto supportedProvisionersFor(const OS& os) -> std::vector<Cluster::Provisioner>
     }
 }
 
+auto supportedProvisionersFor(const OS& headnodeOS, const OS& computeNodeOS)
+    -> std::vector<Cluster::Provisioner>
+{
+    if (headnodeOS.getPlatform() == OS::Platform::el10
+        || computeNodeOS.getPlatform() == OS::Platform::el10) {
+        return { Cluster::Provisioner::Confluent };
+    }
+
+    return supportedProvisionersFor(computeNodeOS);
+}
+
 auto toProvisionerName(Cluster::Provisioner provisioner) -> std::string
 {
     switch (provisioner) {
@@ -56,8 +67,8 @@ PresenterProvisioner::PresenterProvisioner(
     std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view)
     : Presenter(model, view)
 {
-    const auto supported
-        = supportedProvisionersFor(m_model->getHeadnode().getOS());
+    const auto supported = supportedProvisionersFor(
+        m_model->getHeadnode().getOS(), m_model->getComputeNodeOS());
     if (supported.size() == 1) {
         m_model->setProvisioner(supported.front());
         m_view->message(Messages::title, Messages::confluentOnly);
@@ -100,6 +111,18 @@ TEST_CASE("supportedProvisionersFor keeps EL9 xcat and confluent available")
     CHECK(supported
         == std::vector<Cluster::Provisioner> {
             Cluster::Provisioner::xCAT,
+            Cluster::Provisioner::Confluent,
+        });
+}
+
+TEST_CASE("supportedProvisionersFor checks headnode and compute node releases")
+{
+    const auto supported = supportedProvisionersFor(
+        OS(OS::Distro::RHEL, OS::Platform::el10, 1),
+        OS(OS::Distro::Rocky, OS::Platform::el9, 6));
+
+    CHECK(supported
+        == std::vector<Cluster::Provisioner> {
             Cluster::Provisioner::Confluent,
         });
 }

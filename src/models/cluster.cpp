@@ -80,6 +80,17 @@ Headnode& Cluster::getHeadnode() { return m_headnode; }
 
 const Headnode& Cluster::getHeadnode() const { return m_headnode; }
 
+const OS& Cluster::getComputeNodeOS() const
+{
+    if (m_computeNodeOS.has_value()) {
+        return m_computeNodeOS.value();
+    }
+
+    return m_headnode.getOS();
+}
+
+void Cluster::setComputeNodeOS(const OS& os) { m_computeNodeOS = os; }
+
 std::string_view Cluster::getName() const { return m_name; }
 
 void Cluster::setName(std::string_view name) { m_name = name; }
@@ -561,9 +572,10 @@ void Cluster::dumpData(const std::filesystem::path& answerfilePath)
     }
 
     answerfil.system.disk_image = getDiskImage().getPath();
-    answerfil.system.distro = getHeadnode().getOS().getDistro();
-    answerfil.system.version = getHeadnode().getOS().getVersion();
-    if (const auto kernel = getHeadnode().getOS().getKernel(); kernel) {
+    const auto& computeNodeOS = getComputeNodeOS();
+    answerfil.system.distro = computeNodeOS.getDistro();
+    answerfil.system.version = computeNodeOS.getVersion();
+    if (const auto kernel = computeNodeOS.getKernel(); kernel) {
         answerfil.system.kernel = std::string(kernel.value());
     }
     answerfil.system.provisioner
@@ -997,9 +1009,7 @@ void Cluster::fillData(const AnswerFile& answerfil)
 
     validateProvisionerSupport(nodeOS, selectedProvisioner);
     setProvisioner(selectedProvisioner);
-
-    // FIXME: This should come from /etc/os-release
-    m_headnode.setOS(nodeOS);
+    setComputeNodeOS(nodeOS);
 
     LOG_INFO("Configure Nodes")
     for (const auto& node : answerfil.nodes.nodes) {

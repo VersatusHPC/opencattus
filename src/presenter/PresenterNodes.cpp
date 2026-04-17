@@ -283,7 +283,7 @@ retry:
         m_view->message(Messages::title, Messages::Error::quantityInvalid);
     }
 
-    auto nodeOS = m_model->getHeadnode().getOS();
+    auto nodeOS = m_model->getComputeNodeOS();
     CPU nodeCPU(m_model->nodeSockets, m_model->nodeCoresPerSocket,
         m_model->nodeThreadsPerCore);
     Network* managementNetwork = nullptr;

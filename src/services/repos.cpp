@@ -2615,7 +2615,7 @@ struct RPMRepositoryGenerator {
             wrappers::SourcePath(sourcePath), wrappers::Extension(".repo"));
         LOG_DEBUG("Generating the repository files");
         const auto cluster = opencattus::Singleton<models::Cluster>::get();
-        const auto osinfo = cluster->getHeadnode().getOS();
+        const auto& osinfo = cluster->getComputeNodeOS();
         RepoGenerator<>::generate(osinfo, vars);
     }
 };
@@ -2629,7 +2629,7 @@ void RepoManager::initializeDefaultRepositories()
     }
     LOG_INFO("RepoManager initialization");
     auto cluster = opencattus::Singleton<models::Cluster>::get();
-    auto osinfo = cluster->getHeadnode().getOS();
+    const auto& osinfo = cluster->getComputeNodeOS();
     const auto ofedVersion = cluster->getOFED().has_value()
         ? cluster->getOFED()->getVersion()
         : std::string("latest");

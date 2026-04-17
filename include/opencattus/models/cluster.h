@@ -61,6 +61,7 @@ private:
     std::string m_companyName;
     std::string m_adminMail;
     Headnode m_headnode;
+    std::optional<OS> m_computeNodeOS;
     Provisioner m_provisioner { Provisioner::xCAT };
     std::optional<OFED> m_ofed;
     std::optional<std::vector<std::string>> m_enabledRepositories;
@@ -84,6 +85,8 @@ public:
 
     [[nodiscard]] Headnode& getHeadnode();
     [[nodiscard]] const Headnode& getHeadnode() const;
+    [[nodiscard]] const OS& getComputeNodeOS() const;
+    void setComputeNodeOS(const OS& os);
 
     [[nodiscard]] std::string_view getName() const;
     void setName(std::string_view name);

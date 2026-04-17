@@ -384,7 +384,7 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
         }
 
         m_model->setDiskImage(fmt::format("/root/{}", isoName));
-        m_model->getHeadnode().setOS(makeOperatingSystem(distro, versioncombo));
+        m_model->setComputeNodeOS(makeOperatingSystem(distro, versioncombo));
         LOG_DEBUG("Selected ISO: {}", fmt::format("/root/{}", isoName))
         return true;
     };
@@ -481,7 +481,7 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
                 const auto versioncombo = promptVersion(selectedDistro->second,
                     inferVersionComboFromIso(
                         selectedDistro->second, selectedIso));
-                m_model->getHeadnode().setOS(
+                m_model->setComputeNodeOS(
                     makeOperatingSystem(selectedDistro->second, versioncombo));
                 LOG_DEBUG("Selected ISO: {}", selectedIsoPath);
                 selectedDiskImage = true;

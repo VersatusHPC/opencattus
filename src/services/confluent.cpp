@@ -539,7 +539,8 @@ void Confluent::install()
             nodeImageKernel.value());
     }
 
-    const auto image = buildConfluentImageName(os());
+    const auto& computeNodeOS = cluster()->getComputeNodeOS();
+    const auto image = buildConfluentImageName(computeNodeOS);
 
     runner::shell::fmt(R"d(
 {confluentBootstrapCommands}
@@ -673,17 +674,19 @@ rm -rf $scratchdir || :
         fmt::arg("domain", cluster()->getDomainName()),
         fmt::arg("confluentBootstrapCommands",
             buildConfluentBootstrapCommands(os())),
-        fmt::arg("spackModulePathExport", buildUserSpackModulePathExport(os())),
-        fmt::arg("nodeImageInstallCommand", buildNodeImageInstallCommand(os())),
-        fmt::arg("nodeImageRepoFiles", buildNodeImageRepoFiles(os())),
+        fmt::arg("spackModulePathExport",
+            buildUserSpackModulePathExport(computeNodeOS)),
+        fmt::arg("nodeImageInstallCommand",
+            buildNodeImageInstallCommand(computeNodeOS)),
+        fmt::arg("nodeImageRepoFiles", buildNodeImageRepoFiles(computeNodeOS)),
         fmt::arg("hnIp",
             cluster()
                 ->getHeadnode()
                 .getConnection(Network::Profile::Management)
                 .getAddress()
                 .to_string()),
-        fmt::arg("distro", os().getDistroString()),
-        fmt::arg("osversion", os().getVersion()),
+        fmt::arg("distro", computeNodeOS.getDistroString()),
+        fmt::arg("osversion", computeNodeOS.getVersion()),
         fmt::arg("isoPath", answerfile()->system.disk_image.string()),
         fmt::arg("internalNic",
             utils::optional::unwrap(answerfile()->management.con_interface,
@@ -694,7 +697,7 @@ rm -rf $scratchdir || :
                     "Internal interface not found in [network_management]"))),
         fmt::arg("image", image),
         fmt::arg("nodeImageOFEDCommands",
-            buildNodeImageOFEDCommands(os(),
+            buildNodeImageOFEDCommands(computeNodeOS,
                 answerfile()->application.con_interface.has_value(),
                 cluster()->getOFED(),
                 nodeImageKernel

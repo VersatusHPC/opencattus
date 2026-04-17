@@ -1034,7 +1034,7 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(state->responses.empty());
         CHECK(model->getDiskImage().getPath()
             == std::filesystem::path("/root/Rocky-9.6-x86_64-dvd.iso"));
-        CHECK(model->getHeadnode().getOS().getVersion() == "9.6");
+        CHECK(model->getComputeNodeOS().getVersion() == "9.6");
     }
 
     TEST_CASE("RHEL download choice retries instead of aborting the TUI")
@@ -1054,7 +1054,7 @@ TEST_SUITE("opencattus::presenter::tui")
         PresenterNodesOperationalSystem(model, view);
 
         CHECK(state->responses.empty());
-        CHECK(model->getHeadnode().getOS().getDistro() == OS::Distro::Rocky);
+        CHECK(model->getComputeNodeOS().getDistro() == OS::Distro::Rocky);
         CHECK(std::ranges::any_of(state->messages, [](const auto& message) {
             return message
                 == "Compute node OS settings|Unfortunately, we do "
@@ -1162,7 +1162,7 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(state->responses.empty());
         CHECK(model->getDiskImage().getPath()
             == std::filesystem::path("/root/Rocky-9.6-x86_64-dvd.iso"));
-        CHECK(model->getHeadnode().getOS().getDistro() == OS::Distro::Rocky);
+        CHECK(model->getComputeNodeOS().getDistro() == OS::Distro::Rocky);
 
         std::filesystem::remove_all(emptyDir);
     }
@@ -1186,7 +1186,7 @@ TEST_SUITE("opencattus::presenter::tui")
             "192.168.30.0", "192.168.30.254", "255.255.255.0",
             "cluster.example.com");
         model->setDiskImage(diskImagePath);
-        model->getHeadnode().setOS(
+        model->setComputeNodeOS(
             OS(OS::Distro::Rocky, OS::Platform::el9, 6, OS::Arch::x86_64));
 
         auto state = std::make_shared<ScriptedViewState>();
@@ -1221,6 +1221,8 @@ TEST_SUITE("opencattus::presenter::tui")
         initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         auto model = std::make_unique<Cluster>();
+        model->getHeadnode().setOS(
+            OS(OS::Distro::RHEL, OS::Platform::el9, 6, OS::Arch::x86_64));
         seedClusterMetadata(*model);
         addHeadnodeNetwork(*model, Network::Profile::External, "eno1",
             "192.168.124.0", "192.168.124.10", "255.255.255.0",
@@ -1271,7 +1273,9 @@ TEST_SUITE("opencattus::presenter::tui")
 
         CHECK(state->responses.empty());
         CHECK(model->getProvisioner() == Cluster::Provisioner::Confluent);
-        CHECK(model->getHeadnode().getOS().getVersion() == "9.6");
+        CHECK(model->getHeadnode().getOS().getDistro() == OS::Distro::RHEL);
+        CHECK(model->getComputeNodeOS().getDistro() == OS::Distro::Rocky);
+        CHECK(model->getComputeNodeOS().getVersion() == "9.6");
         REQUIRE(model->getEnabledRepositories().has_value());
         CHECK(model->getEnabledRepositories().value()
             == std::vector<std::string> { "cuda" });
@@ -1331,7 +1335,7 @@ TEST_SUITE("opencattus::presenter::tui")
         auto model = std::make_unique<Cluster>();
         const auto os
             = OS(OS::Distro::Rocky, OS::Platform::el9, 6, OS::Arch::x86_64);
-        model->getHeadnode().setOS(os);
+        model->setComputeNodeOS(os);
 
         auto state = std::make_shared<ScriptedViewState>();
         state->responses = {
@@ -1358,7 +1362,7 @@ TEST_SUITE("opencattus::presenter::tui")
         auto model = std::make_unique<Cluster>();
         const auto os
             = OS(OS::Distro::Rocky, OS::Platform::el9, 6, OS::Arch::x86_64);
-        model->getHeadnode().setOS(os);
+        model->setComputeNodeOS(os);
 
         auto state = std::make_shared<ScriptedViewState>();
         state->responses = {
@@ -1855,6 +1859,8 @@ TEST_SUITE("opencattus::presenter::tui")
         }
 
         auto model = std::make_unique<Cluster>();
+        model->getHeadnode().setOS(
+            OS(OS::Distro::RHEL, OS::Platform::el9, 6, OS::Arch::x86_64));
         const auto outputPath
             = tempPath("opencattus-tui-install-answerfile", "ini");
 
@@ -1964,7 +1970,7 @@ TEST_SUITE("opencattus::presenter::tui")
             state->scrollableMessages, "Review the installation plan");
         const auto& preflightText = preflightMessage.text;
         CHECK(preflightText.contains("Headnode"));
-        CHECK(preflightText.contains("Rocky 9.6 x86_64 with Confluent"));
+        CHECK(preflightText.contains("RHEL 9.6 x86_64 with Confluent"));
         CHECK(preflightText.contains("Nodes"));
         CHECK(preflightText.contains("Rocky 9.6 x86_64"));
         CHECK_FALSE(preflightText.contains("Compatibility"));
@@ -2019,6 +2025,8 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(model->getTimezone().getTimezone() == "America/Sao_Paulo");
         CHECK(model->getLocale() == "en_US.utf8");
         CHECK(model->getProvisioner() == Cluster::Provisioner::Confluent);
+        CHECK(model->getHeadnode().getOS().getDistro() == OS::Distro::RHEL);
+        CHECK(model->getComputeNodeOS().getDistro() == OS::Distro::Rocky);
         REQUIRE(model->getEnabledRepositories().has_value());
         CHECK(model->getEnabledRepositories().value()
             == std::vector<std::string> { "cuda" });

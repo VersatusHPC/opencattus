@@ -265,7 +265,7 @@ namespace {
                     nodeOS.setKernel(*kernel);
                 }
                 nodeOS.setVersion(*version);
-                model.getHeadnode().setOS(nodeOS);
+                model.setComputeNodeOS(nodeOS);
             }
         }
 
@@ -413,7 +413,7 @@ namespace {
         }
 
         CPU cpu(*sockets, *coresPerSocket, *threadsPerCore);
-        auto os = model.getHeadnode().getOS();
+        auto os = model.getComputeNodeOS();
 
         std::list<Connection> connections;
         auto& connection = connections.emplace_back(managementNetwork);
