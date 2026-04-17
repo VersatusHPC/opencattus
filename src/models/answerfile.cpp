@@ -15,6 +15,7 @@
 
 #include <opencattus/functions.h>
 #include <opencattus/models/answerfile.h>
+#include <opencattus/network.h>
 #include <opencattus/services/log.h>
 #include <opencattus/services/options.h>
 #include <opencattus/services/osservice.h>
@@ -24,6 +25,53 @@
 using opencattus::services::Postfix;
 
 namespace opencattus::models {
+
+namespace {
+
+    auto ipv4NetworkAddress(const address& ip, const address& subnetMask)
+        -> boost::asio::ip::address_v4
+    {
+        if (!ip.is_v4() || !subnetMask.is_v4()) {
+            throw std::invalid_argument(
+                "only IPv4 network sections are supported");
+        }
+
+        return boost::asio::ip::address_v4(
+            ip.to_v4().to_uint() & subnetMask.to_v4().to_uint());
+    }
+
+    void validateSubnetMask(
+        const std::string& networkSection, const address& subnetMask)
+    {
+        if (!subnetMask.is_v4()
+            || !Network::cidr.contains(subnetMask.to_string())) {
+            throw std::invalid_argument(fmt::format(
+                "Network section '{}' field 'subnet_mask' validation failed - "
+                "invalid subnet mask '{}'",
+                networkSection, subnetMask.to_string()));
+        }
+    }
+
+    void validateGatewayInSubnet(const std::string& networkSection,
+        const address& hostAddress, const address& subnetMask,
+        const address& gateway)
+    {
+        if (gateway.is_unspecified()) {
+            return;
+        }
+
+        const auto networkAddress = ipv4NetworkAddress(hostAddress, subnetMask);
+        if (networkAddress != ipv4NetworkAddress(gateway, subnetMask)) {
+            throw std::invalid_argument(fmt::format(
+                "Network section '{}' field 'gateway' validation failed - "
+                "gateway "
+                "{} is outside {}/{}",
+                networkSection, gateway.to_string(), networkAddress.to_string(),
+                static_cast<int>(Network::cidr.at(subnetMask.to_string()))));
+        }
+    }
+
+} // namespace
 
 AnswerFile::AnswerFile(const std::filesystem::path& path, bool loadFromDisk)
     : m_path(path)
@@ -470,9 +518,17 @@ void AnswerFile::loadNetwork(
         = m_keyfile.getString(networkSection, "mac_address", "");
     convertNetworkAddressAndValidate(
         networkSection, "subnet_mask", network.subnet_mask);
+    if (network.subnet_mask.has_value()) {
+        validateSubnetMask(networkSection, network.subnet_mask.value());
+    }
     network.domain_name = m_keyfile.getStringOpt(networkSection, "domain_name");
     convertNetworkAddressAndValidate(
         networkSection, "gateway", network.gateway);
+    if (network.con_ip_addr.has_value() && network.subnet_mask.has_value()
+        && network.gateway.has_value()) {
+        validateGatewayInSubnet(networkSection, network.con_ip_addr.value(),
+            network.subnet_mask.value(), network.gateway.value());
+    }
 
     if (auto opt = m_keyfile.getStringOpt(networkSection, "nameservers")) {
         std::vector<std::string> nameservers;

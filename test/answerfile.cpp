@@ -10,6 +10,7 @@
 #include <opencattus/models/answerfile.h>
 #include <opencattus/models/cluster.h>
 #include <opencattus/patterns/singleton.h>
+#include <opencattus/services/files.h>
 #include <opencattus/services/options.h>
 #include <opencattus/services/runner.h>
 #include <string>
@@ -45,6 +46,16 @@ auto tempIsoPath(std::string_view stem) -> std::filesystem::path
 auto firstHostInterfaces() -> std::vector<std::string>
 {
     return Connection::fetchInterfaces();
+}
+
+void replaceInFile(const std::filesystem::path& path, std::string_view from,
+    std::string_view to)
+{
+    auto contents = opencattus::services::files::read(path);
+    const auto pos = contents.find(from);
+    REQUIRE(pos != std::string::npos);
+    contents.replace(pos, from.size(), to);
+    opencattus::services::files::write(path, contents);
 }
 
 void writeAnswerfile(const std::filesystem::path& path,
@@ -265,6 +276,62 @@ TEST_SUITE("opencattus::models::answerfile")
         } catch (...) {
             FAIL("non-std exception while parsing service nameservers");
         }
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("loadOptions rejects non-contiguous subnet masks")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-invalid-mask");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-invalid-mask");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front());
+        replaceInFile(answerfilePath, "subnet_mask=255.255.255.0",
+            "subnet_mask=255.0.255.0");
+
+        CHECK_THROWS_WITH_AS(AnswerFile { answerfilePath },
+            doctest::Contains(
+                "Network section 'network_external' field 'subnet_mask' "
+                "validation failed"),
+            std::invalid_argument);
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("loadOptions rejects gateways outside the selected subnet")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-gateway-outside");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-gateway-outside");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front());
+        replaceInFile(answerfilePath,
+            "domain_name=cluster.management.example.com\n",
+            "domain_name=cluster.management.example.com\n"
+            "gateway=10.20.30.1\n");
+
+        CHECK_THROWS_WITH_AS(AnswerFile { answerfilePath },
+            doctest::Contains(
+                "Network section 'network_management' field 'gateway' "
+                "validation failed"),
+            std::invalid_argument);
 
         std::filesystem::remove(answerfilePath);
         std::filesystem::remove(diskImagePath);
@@ -529,9 +596,9 @@ TEST_SUITE("opencattus::models::answerfile")
         try {
             AnswerFile answerfile(answerfilePath);
             Cluster cluster;
-            cluster.getHeadnode().setOS(opencattus::models::OS(
-                opencattus::models::OS::Distro::RHEL,
-                opencattus::models::OS::Platform::el9, 6));
+            cluster.getHeadnode().setOS(
+                opencattus::models::OS(opencattus::models::OS::Distro::RHEL,
+                    opencattus::models::OS::Platform::el9, 6));
             cluster.fillData(answerfile);
 
             CHECK(cluster.getProvisioner() == Cluster::Provisioner::Confluent);
@@ -682,8 +749,7 @@ TEST_SUITE("opencattus::models::answerfile")
             = tempAnswerfilePath("opencattus-cluster-dump-order-source");
         const auto outputPath
             = tempAnswerfilePath("opencattus-cluster-dump-order-output");
-        const auto diskImagePath
-            = tempIsoPath("opencattus-cluster-dump-order");
+        const auto diskImagePath = tempIsoPath("opencattus-cluster-dump-order");
         std::ofstream(diskImagePath).close();
         writeAnswerfile(sourcePath, diskImagePath, interfaces.front(),
             interfaces.front(), std::nullopt, true, "confluent");
