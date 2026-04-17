@@ -15,8 +15,7 @@ private:
     struct Messages {
         static constexpr const auto title = "Preflight validation";
         static constexpr const auto question
-            = "Review the installation plan before the system is modified. "
-              "Choose OK to continue or Stop to save a draft and exit.";
+            = "Review the installation plan before the system is modified.";
         static constexpr const auto help
             = "This final check summarizes the selected operating system, "
               "provisioner, networks, BMC coverage, repositories, and queue "

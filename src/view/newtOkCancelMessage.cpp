@@ -71,7 +71,7 @@ auto wrapText(std::string_view text, std::size_t width) -> std::string
 
 auto scrollableBodyHeight(int maxListHeight) -> int
 {
-    return std::max(4, std::min(maxListHeight, 12));
+    return std::max(4, std::min(maxListHeight + 2, 12));
 }
 
 } // namespace
@@ -131,7 +131,7 @@ void Newt::scrollableMessage(const char* title, const char* message,
     newtGrid buttonGrid = newtButtonBar(const_cast<char*>(TUIText::Buttons::ok),
         &buttonOk, const_cast<char*>(TUIText::Buttons::cancel), &buttonCancel,
         const_cast<char*>(TUIText::Buttons::help), &buttonHelp, NULL);
-    newtGridSetField(grid, 0, 0, NEWT_GRID_COMPONENT, label, 1, 1, 0, 0, 0,
+    newtGridSetField(grid, 0, 0, NEWT_GRID_COMPONENT, label, 1, 0, 0, 0, 0,
         NEWT_GRID_FLAG_GROWX);
     newtGridSetField(grid, 0, 1, NEWT_GRID_COMPONENT, body, 1, 1, 2, 0, 0,
         NEWT_GRID_FLAG_GROWX | NEWT_GRID_FLAG_GROWY);

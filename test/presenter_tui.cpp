@@ -1978,6 +1978,9 @@ TEST_SUITE("opencattus::presenter::tui")
 
         const auto& preflightMessage = firstScrollableMessageByMessage(
             state->scrollableMessages, "Review the installation plan");
+        CHECK(preflightMessage.message
+            == "Review the installation plan before the system is modified.");
+        CHECK_FALSE(preflightMessage.message.contains("Choose OK"));
         const auto& preflightText = preflightMessage.text;
         CHECK(preflightText.starts_with("Cluster"));
         CHECK(preflightText.contains("Cluster        demo"));
