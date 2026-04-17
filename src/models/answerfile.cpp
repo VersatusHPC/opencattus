@@ -6,7 +6,9 @@
 #include <cstddef>
 #include <fmt/core.h>
 #include <iterator>
+#include <map>
 #include <ranges>
+#include <string_view>
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/join.hpp>
@@ -68,6 +70,60 @@ namespace {
                 "{} is outside {}/{}",
                 networkSection, gateway.to_string(), networkAddress.to_string(),
                 static_cast<int>(Network::cidr.at(subnetMask.to_string()))));
+        }
+    }
+
+    void rememberUniqueNodeValue(std::map<std::string, std::string>& seen,
+        std::string_view fieldName, const std::string& value,
+        const std::string& owner)
+    {
+        if (value.empty()) {
+            return;
+        }
+
+        const auto [it, inserted] = seen.emplace(value, owner);
+        if (!inserted) {
+            throw std::invalid_argument(
+                fmt::format("Duplicate {} '{}' used by {} and {}", fieldName,
+                    value, it->second, owner));
+        }
+    }
+
+    void validateNodeInventoryTopology(const std::vector<AFNode>& nodes)
+    {
+        std::map<std::string, std::string> hostnames;
+        std::map<std::string, std::string> macAddresses;
+        std::map<std::string, std::string> nodeAddresses;
+        std::map<std::string, std::string> bmcAddresses;
+        std::map<std::string, std::string> allAddresses;
+
+        std::size_t nodeNumber = 0;
+        for (const auto& node : nodes) {
+            ++nodeNumber;
+            const auto owner = fmt::format("node '{}'",
+                node.hostname.value_or(fmt::format("#{}", nodeNumber)));
+
+            if (node.hostname.has_value()) {
+                rememberUniqueNodeValue(
+                    hostnames, "hostname", *node.hostname, owner);
+            }
+            if (node.mac_address.has_value()) {
+                rememberUniqueNodeValue(macAddresses, "mac_address",
+                    opencattus::utils::string::lower(*node.mac_address), owner);
+            }
+            if (node.start_ip.has_value() && !node.start_ip->is_unspecified()) {
+                const auto nodeAddress = node.start_ip->to_string();
+                rememberUniqueNodeValue(
+                    nodeAddresses, "node_ip", nodeAddress, owner);
+                rememberUniqueNodeValue(allAddresses, "node/BMC address",
+                    nodeAddress, fmt::format("{} node_ip", owner));
+            }
+            if (node.bmc_address.has_value() && !node.bmc_address->empty()) {
+                rememberUniqueNodeValue(
+                    bmcAddresses, "bmc_address", *node.bmc_address, owner);
+                rememberUniqueNodeValue(allAddresses, "node/BMC address",
+                    *node.bmc_address, fmt::format("{} bmc_address", owner));
+            }
         }
     }
 
@@ -749,6 +805,8 @@ void AnswerFile::loadNodes()
 
         nodes.nodes.emplace_back(newNode);
     }
+
+    validateNodeInventoryTopology(nodes.nodes);
 }
 
 AFNode AnswerFile::validateNode(AFNode node)

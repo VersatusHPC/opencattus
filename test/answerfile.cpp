@@ -337,6 +337,57 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(diskImagePath);
     }
 
+    TEST_CASE("loadOptions rejects node and BMC address collisions")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-node-bmc-collision");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-node-bmc-collision");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front());
+        replaceInFile(answerfilePath, "bmc_address=192.168.31.101",
+            "bmc_address=192.168.30.1");
+
+        CHECK_THROWS_WITH_AS(AnswerFile { answerfilePath },
+            doctest::Contains("Duplicate node/BMC address '192.168.30.1'"),
+            std::invalid_argument);
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("loadOptions rejects duplicate node MAC addresses")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-duplicate-mac");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-duplicate-mac");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front());
+        appendSecondNodeSection(answerfilePath);
+        replaceInFile(answerfilePath, "mac_address=52:54:00:00:20:12",
+            "mac_address=52:54:00:00:20:11");
+
+        CHECK_THROWS_WITH_AS(AnswerFile { answerfilePath },
+            doctest::Contains("Duplicate mac_address '52:54:00:00:20:11'"),
+            std::invalid_argument);
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
     TEST_CASE(
         "fillData keeps the service connection bound to the service interface")
     {
