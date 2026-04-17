@@ -71,6 +71,8 @@ PresenterInstall::PresenterInstall(std::unique_ptr<Cluster>& model,
 
         try {
             Call<PresenterNetwork>(nc, Network::Profile::External);
+        } catch (const ViewAbortRequested&) {
+            throw;
         } catch (const std::exception& ex) {
             LOG_ERROR("Failed to add {} network: {}",
                 opencattus::utils::enums::toString(Network::Profile::External),
@@ -79,6 +81,8 @@ PresenterInstall::PresenterInstall(std::unique_ptr<Cluster>& model,
 
         try {
             Call<PresenterNetwork>(nc, Network::Profile::Management);
+        } catch (const ViewAbortRequested&) {
+            throw;
         } catch (const std::exception& ex) {
             LOG_ERROR("Failed to add {} network: {}",
                 opencattus::utils::enums::toString(
@@ -91,6 +95,8 @@ PresenterInstall::PresenterInstall(std::unique_ptr<Cluster>& model,
                 NetworkMessages::serviceHelp)) {
             try {
                 Call<PresenterNetwork>(nc, Network::Profile::Service);
+            } catch (const ViewAbortRequested&) {
+                throw;
             } catch (const std::exception& ex) {
                 LOG_ERROR("Failed to add {} network: {}",
                     opencattus::utils::enums::toString(
