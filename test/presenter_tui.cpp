@@ -1021,20 +1021,26 @@ TEST_SUITE("opencattus::presenter::tui")
         initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
 
         auto model = std::make_unique<Cluster>();
+        model->getHeadnode().setOS(
+            OS(OS::Distro::RHEL, OS::Platform::el9, 7, OS::Arch::x86_64));
         auto state = std::make_shared<ScriptedViewState>();
         state->responses = {
             yesNo(true),
             select("Rocky Linux"),
-            fields({ "9.6", "x86_64" }),
+            fields({ "9.7", "x86_64" }),
         };
 
         std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
         PresenterNodesOperationalSystem(model, view);
 
         CHECK(state->responses.empty());
+        const auto& versionFields = firstFieldMenuByMessage(state->fieldMenus,
+            "Enter the distribution version and architecture");
+        CHECK(versionFields.items[0].second == "9.7");
+        CHECK(versionFields.items[1].second == "x86_64");
         CHECK(model->getDiskImage().getPath()
-            == std::filesystem::path("/root/Rocky-9.6-x86_64-dvd.iso"));
-        CHECK(model->getComputeNodeOS().getVersion() == "9.6");
+            == std::filesystem::path("/root/Rocky-9.7-x86_64-dvd.iso"));
+        CHECK(model->getComputeNodeOS().getVersion() == "9.7");
     }
 
     TEST_CASE("RHEL download choice retries instead of aborting the TUI")

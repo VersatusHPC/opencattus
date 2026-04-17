@@ -35,9 +35,10 @@ using OS = opencattus::models::OS;
 using PresenterNodesVersionCombo
     = opencattus::presenter::PresenterNodesVersionCombo;
 
-auto defaultVersionComboFor(OS::Distro /*distro*/) -> PresenterNodesVersionCombo
+auto defaultVersionComboFor(const OS& os) -> PresenterNodesVersionCombo
 {
-    return { 9, 6, OS::Arch::x86_64 };
+    return { static_cast<int>(os.getMajorVersion()),
+        static_cast<int>(os.getMinorVersion()), os.getArch() };
 }
 
 auto parseVersionString(std::string_view raw)
@@ -155,9 +156,10 @@ auto isoSearchToken(const OS::Distro distro) -> std::string_view
     return {};
 }
 
-auto exampleIsoName(const OS::Distro distro) -> std::string
+auto exampleIsoName(const OS::Distro distro,
+    const PresenterNodesVersionCombo& version) -> std::string
 {
-    const auto [major, minor, arch] = defaultVersionComboFor(distro);
+    const auto [major, minor, arch] = version;
     const auto architecture = opencattus::utils::enums::toString(arch);
 
     switch (distro) {
@@ -178,14 +180,16 @@ auto exampleIsoName(const OS::Distro distro) -> std::string
     return {};
 }
 
-auto formatNoMatchingIsoMessage(
-    const fs::path& directory, const OS::Distro distro) -> std::string
+auto formatNoMatchingIsoMessage(const fs::path& directory,
+    const OS::Distro distro, const PresenterNodesVersionCombo& defaultVersion)
+    -> std::string
 {
     return fmt::format(
         "No ISO matching the selected distribution was found in the "
         "provided directory.\n\nDirectory: {}\nLooked for: *.iso "
         "filenames containing \"{}\"\nExample: {}",
-        directory.string(), isoSearchToken(distro), exampleIsoName(distro));
+        directory.string(), isoSearchToken(distro),
+        exampleIsoName(distro, defaultVersion));
 }
 
 auto findMatchingIsos(const fs::path& isoRoot, OS::Distro distro)
@@ -263,8 +267,8 @@ std::string PresenterNodesOperationalSystem::getDownloadURL(
 PresenterNodesVersionCombo PresenterNodesOperationalSystem::promptVersion(
     OS::Distro distro, std::optional<PresenterNodesVersionCombo> initial)
 {
-    auto [defaultMajor, defaultMinor, defaultArch]
-        = initial.value_or(defaultVersionComboFor(distro));
+    auto [defaultMajor, defaultMinor, defaultArch] = initial.value_or(
+        defaultVersionComboFor(m_model->getHeadnode().getOS()));
 
     auto metadata = std::to_array<std::pair<std::string, std::string>>(
         { { Messages::OperationalSystemVersion::version,
@@ -459,7 +463,8 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
 
                 if (isos->empty()) {
                     const auto noneFoundMessage = formatNoMatchingIsoMessage(
-                        isoRoot, selectedDistro->second);
+                        isoRoot, selectedDistro->second,
+                        defaultVersionComboFor(m_model->getHeadnode().getOS()));
                     m_view->message(Messages::title, noneFoundMessage.c_str());
                     if (m_view->yesNoQuestion(Messages::title,
                             Messages::OperationalSystem::downloadMissing,
