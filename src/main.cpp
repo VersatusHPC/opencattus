@@ -213,31 +213,14 @@ auto askYesNo(std::string_view question, bool defaultYes) -> bool
     }
 }
 
-auto executableName(const char** argv) -> std::string_view
-{
-    if (argv == nullptr || argv[0] == nullptr
-        || std::string_view(argv[0]).empty()) {
-        return "opencattus";
-    }
-
-    return argv[0];
-}
-
-auto checkRootOrExplain(std::string_view executable) -> bool
+auto checkRootOrExplain() -> bool
 {
     try {
         opencattus::checkEffectiveUserId();
         return true;
     } catch (const std::exception& ex) {
         LOG_DEBUG("Root privilege check failed: {}", ex.what());
-        fmt::print(stderr,
-            "OpenCATTUS needs administrator privileges before it can install "
-            "or modify this system.\n\n"
-            "Run it again with sudo and keep the same options, for example:\n"
-            "  sudo {} --tui\n\n"
-            "To fill the questionnaire without installing, use --dry or "
-            "--dump-answerfile.\n",
-            executable);
+        fmt::print(stderr, "{}: must be run as root\n", productName);
         return false;
     }
 }
@@ -298,7 +281,7 @@ int main(int argc, const char** argv)
     if (optsMut->testCommand.empty() && optsMut->dumpAnswerfile.empty()
         && !outputOnlyTui) {
         // skip during tests, we do not want to run tests as root
-        if (!checkRootOrExplain(executableName(argv))) {
+        if (!checkRootOrExplain()) {
             Log::shutdown();
             return EXIT_FAILURE;
         }

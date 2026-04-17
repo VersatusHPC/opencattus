@@ -42,8 +42,8 @@ assert_contains "${output}" "Use --tui"
 
 if [[ $(id -u) -ne 0 ]]; then
     assert_fails output "${binary}" --answerfile test/sample/answerfile/correct.answerfile.ini
-    assert_contains "${output}" "OpenCATTUS needs administrator privileges"
-    assert_contains "${output}" "sudo"
+    assert_contains "${output}" "OpenCATTUS: must be run as root"
     assert_not_contains "${output}" "terminate called"
     assert_not_contains "${output}" "std::runtime_error"
+    [[ $(wc -l <<< "${output}") -eq 1 ]]
 fi
