@@ -25,6 +25,8 @@ struct DraftState {
 
 [[nodiscard]] auto defaultDraftPath(const Options& options)
     -> std::filesystem::path;
+[[nodiscard]] auto defaultAnswerfilePath(const Options& options)
+    -> std::filesystem::path;
 [[nodiscard]] auto loadDraftState(const std::filesystem::path& path)
     -> DraftState;
 [[nodiscard]] auto isDraftAnswerfile(const std::filesystem::path& path) -> bool;

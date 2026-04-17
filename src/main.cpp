@@ -228,6 +228,7 @@ int main(int argc, const char** argv)
     const bool requestedTui = optsMut->enableTUI || !optsMut->tuiDraft.empty();
     const bool shouldRunInteractiveQuestionnaire
         = optsMut->answerfile.empty() && optsMut->testCommand.empty();
+    const bool explicitDumpAnswerfile = !optsMut->dumpAnswerfile.empty();
 
     if (optsMut->parsingError) {
         fmt::print("Parsing error: {}", optsMut->error);
@@ -430,24 +431,33 @@ int main(int argc, const char** argv)
         }
     }
 
-    if (!opts->dumpAnswerfile.empty()) {
+    if (opts->enableTUI || !opts->dumpAnswerfile.empty()) {
+        const auto outputAnswerfilePath = opts->enableTUI
+            ? services::tui::defaultAnswerfilePath(*opts)
+            : std::filesystem::path(opts->dumpAnswerfile);
+
         try {
             if (opts->enableTUI) {
-                services::tui::writeDraft(*model, opts->dumpAnswerfile,
+                services::tui::writeDraft(*model, outputAnswerfilePath,
                     tuiDraftState.completedSteps, true);
             } else {
-                model->dumpData(opts->dumpAnswerfile);
+                model->dumpData(outputAnswerfilePath);
             }
         } catch (const std::exception& ex) {
-            LOG_ERROR("Failed to write answerfile {}: {}", opts->dumpAnswerfile,
-                ex.what());
+            LOG_ERROR("Failed to write answerfile {}: {}",
+                outputAnswerfilePath.string(), ex.what());
             fmt::print(stderr, "Failed to write answerfile {}: {}\n",
-                opts->dumpAnswerfile, ex.what());
+                outputAnswerfilePath.string(), ex.what());
             Log::shutdown();
             return EXIT_FAILURE;
         }
-        Log::shutdown();
-        return EXIT_SUCCESS;
+
+        LOG_INFO("Wrote answerfile {}", outputAnswerfilePath.string())
+
+        if (!opts->enableTUI || explicitDumpAnswerfile) {
+            Log::shutdown();
+            return EXIT_SUCCESS;
+        }
     }
 
     if (opts->dryRun && opts->enableTUI) {

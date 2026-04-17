@@ -573,19 +573,24 @@ namespace {
     }
 }
 
+auto defaultAnswerfilePath(const Options& options) -> std::filesystem::path
+{
+    if (!options.dumpAnswerfile.empty()) {
+        return options.dumpAnswerfile;
+    }
+
+    return std::filesystem::current_path() / "opencattus-tui.ini";
+}
+
 auto defaultDraftPath(const Options& options) -> std::filesystem::path
 {
     if (!options.tuiDraft.empty()) {
         return options.tuiDraft;
     }
 
-    if (!options.dumpAnswerfile.empty()) {
-        auto path = std::filesystem::path(options.dumpAnswerfile);
-        path.concat(".draft");
-        return path;
-    }
-
-    return std::filesystem::current_path() / "opencattus-tui.ini.draft";
+    auto path = defaultAnswerfilePath(options);
+    path.concat(".draft");
+    return path;
 }
 
 auto loadDraftState(const std::filesystem::path& path) -> DraftState
@@ -707,6 +712,14 @@ TEST_CASE("TUI draft path defaults to the current directory")
         == std::filesystem::current_path() / "opencattus-tui.ini.draft");
 }
 
+TEST_CASE("TUI answerfile path defaults to the current directory")
+{
+    Options options {};
+
+    CHECK(defaultAnswerfilePath(options)
+        == std::filesystem::current_path() / "opencattus-tui.ini");
+}
+
 TEST_CASE("TUI draft path follows the dump answerfile path")
 {
     Options options {};
@@ -714,6 +727,15 @@ TEST_CASE("TUI draft path follows the dump answerfile path")
 
     CHECK(defaultDraftPath(options)
         == std::filesystem::path("opencattus-tui.ini.draft"));
+}
+
+TEST_CASE("TUI answerfile path follows the dump answerfile path")
+{
+    Options options {};
+    options.dumpAnswerfile = "custom.ini";
+
+    CHECK(
+        defaultAnswerfilePath(options) == std::filesystem::path("custom.ini"));
 }
 
 } // namespace opencattus::services::tui
