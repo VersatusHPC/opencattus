@@ -186,33 +186,6 @@ auto generateAnswerfileFromTuiModel(opencattus::models::Cluster& model)
     return std::make_unique<opencattus::models::AnswerFile>(path);
 }
 
-auto askYesNo(std::string_view question, bool defaultYes) -> bool
-{
-    while (true) {
-        fmt::print("{} [{}]\n", question, defaultYes ? "Y/n" : "y/N");
-
-        std::string response;
-        if (!std::getline(std::cin, response)) {
-            return defaultYes;
-        }
-
-        if (response.empty()) {
-            return defaultYes;
-        }
-
-        const auto choice = static_cast<char>(
-            std::toupper(static_cast<unsigned char>(response.front())));
-        if (choice == 'Y') {
-            return true;
-        }
-        if (choice == 'N') {
-            return false;
-        }
-
-        fmt::print("Please answer yes or no.\n");
-    }
-}
-
 auto checkRootOrExplain() -> bool
 {
     try {
@@ -336,6 +309,10 @@ int main(int argc, const char** argv)
     std::unique_ptr<models::AnswerFile> answerfile;
     auto tuiDraftState = services::tui::DraftState {};
     auto tuiDraftPath = std::filesystem::path {};
+    auto tuiView = std::unique_ptr<View> {};
+    if (opts->enableTUI) {
+        tuiView = std::make_unique<Newt>();
+    }
 
     if (!opts->answerfile.empty()) {
         if (services::tui::isDraftAnswerfile(opts->answerfile)) {
@@ -366,12 +343,13 @@ int main(int argc, const char** argv)
         }
 
         if (services::tui::isDraftAnswerfile(tuiDraftPath)) {
-            const auto resumeDraft
-                = askYesNo(fmt::format("A TUI draft was found at {}. "
-                                       "Do you want to continue "
-                                       "from there?",
-                               tuiDraftPath.string()),
-                    true);
+            const auto question = fmt::format(
+                "A TUI draft was found:\n{}\n\nContinue from this draft?",
+                tuiDraftPath.string());
+            const auto resumeDraft = tuiView->yesNoQuestion("TUI draft",
+                question.c_str(),
+                "Choose Yes to continue the saved questionnaire. Choose No to "
+                "start a new questionnaire.");
             if (resumeDraft) {
                 LOG_INFO(
                     "Resuming TUI draft answerfile: {}", tuiDraftPath.string())
@@ -413,10 +391,9 @@ int main(int argc, const char** argv)
 
         // Entrypoint; if the view is constructed it will start the TUI.
         try {
-            std::unique_ptr<View> view = std::make_unique<Newt>();
             auto presenter
                 = std::make_unique<opencattus::presenter::PresenterInstall>(
-                    model, view, saveTuiDraft,
+                    model, tuiView, saveTuiDraft,
                     services::tui::completedStepSet(tuiDraftState));
         } catch (const ViewAbortRequested& ex) {
             try {
