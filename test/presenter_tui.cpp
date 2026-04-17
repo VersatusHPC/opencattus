@@ -1964,7 +1964,8 @@ TEST_SUITE("opencattus::presenter::tui")
             state->scrollableMessages, "Review the installation plan");
         const auto& preflightText = preflightMessage.text;
         CHECK(preflightText.contains(
-            "Compatibility  OK: Rocky 9.6 x86_64 with Confluent"));
+            "Headnode      Rocky 9.6 x86_64 with Confluent"));
+        CHECK(preflightText.contains("Nodes         Rocky 9.6 x86_64"));
         CHECK(preflightText.contains(
             "ISO and OS     Rocky 9.6 from "
             "/root/Rocky-9.6-x86_64-dvd.iso"));
@@ -1974,7 +1975,7 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(preflightText.contains("  Host IP"));
         CHECK(preflightText.contains("  Network"));
         CHECK(preflightText.contains("  Gateway"));
-        CHECK(preflightText.contains("BMC            2 of 2 nodes have BMC"));
+        CHECK_FALSE(preflightText.contains("first BMC"));
         CHECK(preflightText.contains("Repositories   Optional: cuda"));
         CHECK(preflightText.contains("Queue system   SLURM partition batch"));
         CHECK(preflightText.contains("\n\n[Nodes]"));

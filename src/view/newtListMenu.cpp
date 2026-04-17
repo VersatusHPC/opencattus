@@ -19,17 +19,6 @@ static auto checkboxLabel(std::string_view label, bool selected) -> std::string
     return fmt::format(" [{}] {}", selected ? "*" : " ", label);
 }
 
-static auto centeredListLabel(std::string_view label, int width) -> std::string
-{
-    if (width <= 0 || label.size() >= static_cast<std::size_t>(width)) {
-        return std::string(label);
-    }
-
-    const auto padding = static_cast<std::size_t>(width) - label.size();
-    const auto leftPadding = padding / 2;
-    return fmt::format("{}{}", std::string(leftPadding, ' '), label);
-}
-
 static std::vector<std::string> retrieveSelectedItems(newtComponent list)
 {
     int selectCount = 0;
@@ -110,20 +99,17 @@ std::string Newt::listMenuImpl(const char* title, const char* message,
         : 0;
     const auto scrollAdjust = listFlags == 0 ? 0 : scrollBarWidth;
     const auto listWidth = std::clamp(
-        static_cast<int>(longestItemWidth) + scrollAdjust, 28, maxListWidth);
+        static_cast<int>(longestItemWidth) + scrollAdjust, 1, maxListWidth);
     const auto textWidth = std::max(32, listWidth);
+    const auto listLeftPadding = std::max(0, (textWidth - listWidth) / 2);
 
     auto* label = newtTextboxReflowed(
         0, 0, const_cast<char*>(safeMessage), textWidth, 0, 0, 0);
     auto* list = newtListbox(
         0, 0, visibleListHeight, listFlags | NEWT_FLAG_RETURNEXIT);
     newtListboxSetWidth(list, listWidth);
-    const auto listTextWidth = listWidth - scrollAdjust;
-    std::vector<std::string> labels;
-    labels.reserve(items.size());
     for (const auto& item : items) {
-        labels.emplace_back(centeredListLabel(item, listTextWidth));
-        newtListboxAppendEntry(list, labels.back().c_str(), item.c_str());
+        newtListboxAppendEntry(list, item.c_str(), item.c_str());
     }
 
     newtGrid grid = newtCreateGrid(1, 3);
@@ -133,8 +119,8 @@ std::string Newt::listMenuImpl(const char* title, const char* message,
         const_cast<char*>(TUIText::Buttons::help), &buttonHelp, NULL);
     newtGridSetField(grid, 0, 0, NEWT_GRID_COMPONENT, label, 1, 1, 0, 0, 0,
         NEWT_GRID_FLAG_GROWX);
-    newtGridSetField(grid, 0, 1, NEWT_GRID_COMPONENT, list, 1, 1, 2, 0, 0,
-        NEWT_GRID_FLAG_GROWX | NEWT_GRID_FLAG_GROWY);
+    newtGridSetField(grid, 0, 1, NEWT_GRID_COMPONENT, list, listLeftPadding + 1,
+        1, 0, 0, 0, NEWT_GRID_FLAG_GROWY);
     newtGridSetField(grid, 0, 2, NEWT_GRID_SUBGRID, buttonGrid, 0, 1, 0, 0, 0,
         NEWT_GRID_FLAG_GROWX);
 

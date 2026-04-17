@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <fmt/ranges.h>
+#include <optional>
 #include <ranges>
 #include <string>
 #include <utility>
@@ -34,21 +35,44 @@ auto provisionerName(Cluster::Provisioner provisioner) -> std::string
     }
 }
 
-auto compatibilitySummary(const Cluster& model) -> std::string
+auto osSummary(const OS& os) -> std::string
 {
-    const auto& os = model.getHeadnode().getOS();
-    const auto provisioner = model.getProvisioner();
-    const auto target = fmt::format("{} {} {}",
+    return fmt::format("{} {} {}",
         opencattus::utils::enums::toString(os.getDistro()), os.getVersion(),
         opencattus::utils::enums::toString(os.getArch()));
+}
 
-    if (os.getPlatform() == OS::Platform::el10
-        && provisioner == Cluster::Provisioner::xCAT) {
-        return fmt::format(
-            "Invalid: {} with xCAT is not supported today", target);
+auto nodeOperatingSystemSummary(const Cluster& model) -> std::string
+{
+    const auto& nodes = model.getNodes();
+    if (nodes.empty()) {
+        return osSummary(model.getHeadnode().getOS());
     }
 
-    return fmt::format("OK: {} with {}", target, provisionerName(provisioner));
+    std::vector<std::string> summaries;
+    for (const auto& node : nodes) {
+        const auto summary = osSummary(node.getOS());
+        if (std::ranges::find(summaries, summary) == summaries.end()) {
+            summaries.emplace_back(summary);
+        }
+    }
+
+    if (summaries.size() == 1) {
+        return summaries.front();
+    }
+
+    return fmt::format("Mixed: {}", fmt::join(summaries, ", "));
+}
+
+auto compatibilityWarning(const Cluster& model) -> std::optional<std::string>
+{
+    const auto& os = model.getHeadnode().getOS();
+    if (os.getPlatform() == OS::Platform::el10
+        && model.getProvisioner() == Cluster::Provisioner::xCAT) {
+        return "xCAT does not support EL10 today";
+    }
+
+    return std::nullopt;
 }
 
 auto cidrSuffixFor(const Network& network) -> std::string
@@ -108,32 +132,6 @@ void appendNetworkDetails(std::vector<std::string>& rows, Cluster& model)
         rows.emplace_back(fmt::format("  {:<9} {}", "Network", networkAddress));
         rows.emplace_back(fmt::format("  {:<9} {}", "Gateway", gateway));
     }
-}
-
-auto bmcSummary(const Cluster& model) -> std::string
-{
-    const auto& nodes = model.getNodes();
-    if (nodes.empty()) {
-        return "No compute nodes configured";
-    }
-
-    const auto bmcCount = static_cast<std::size_t>(std::ranges::count_if(
-        nodes, [](const auto& node) { return node.getBMC().has_value(); }));
-
-    if (bmcCount == 0) {
-        return fmt::format(
-            "No BMC configured for {} nodes; power control will be skipped",
-            nodes.size());
-    }
-
-    const auto firstBmcNode = std::ranges::find_if(
-        nodes, [](const auto& node) { return node.getBMC().has_value(); });
-    const auto firstBmcAddress = firstBmcNode == nodes.end()
-        ? std::string("none")
-        : firstBmcNode->getBMC()->getAddress();
-
-    return fmt::format("{} of {} nodes have BMC; first BMC {}", bmcCount,
-        nodes.size(), firstBmcAddress);
 }
 
 auto repositorySummary(const Cluster& model) -> std::string
@@ -251,11 +249,16 @@ void appendNodeTable(std::vector<std::string>& rows, const Cluster& model)
 auto buildPreflightText(Cluster& model) -> std::string
 {
     std::vector<std::string> rows;
+    rows.emplace_back(fmt::format("{:<14} {} with {}", "Headnode",
+        osSummary(model.getHeadnode().getOS()),
+        provisionerName(model.getProvisioner())));
     rows.emplace_back(
-        fmt::format("{:<14} {}", "Compatibility", compatibilitySummary(model)));
+        fmt::format("{:<14} {}", "Nodes", nodeOperatingSystemSummary(model)));
+    if (const auto warning = compatibilityWarning(model); warning.has_value()) {
+        rows.emplace_back(fmt::format("{:<14} {}", "Warning", *warning));
+    }
     rows.emplace_back(
         fmt::format("{:<14} {}", "ISO and OS", isoSummary(model)));
-    rows.emplace_back(fmt::format("{:<14} {}", "BMC", bmcSummary(model)));
     rows.emplace_back(
         fmt::format("{:<14} {}", "Repositories", repositorySummary(model)));
     rows.emplace_back(
