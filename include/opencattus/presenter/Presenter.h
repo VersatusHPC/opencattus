@@ -36,7 +36,7 @@ protected:
     struct Messages {
         struct Placeholder {
             static constexpr const auto help
-                = "We're sorry, but there's no help available for this session";
+                = "No screen-specific help is available for this step.";
         };
     };
 

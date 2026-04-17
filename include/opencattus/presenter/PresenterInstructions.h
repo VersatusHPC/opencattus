@@ -15,13 +15,10 @@ private:
     struct Messages {
         struct Instructions {
             static constexpr const auto message
-                = "We will start the installation phase now.\n\nYou will be "
-                  "guided through "
-                  "a series of questions about your HPC cluster so we can "
-                  "configure "
-                  "everything accordingly to your needs. You're free to cancel "
-                  "the process "
-                  "at any given time.\n";
+                = "The installer will collect the settings needed for this HPC "
+                  "cluster.\n\nYou can stop the questionnaire at any time. "
+                  "Progress is saved to a draft answerfile in the current "
+                  "directory and can be resumed later.\n";
         };
     };
 

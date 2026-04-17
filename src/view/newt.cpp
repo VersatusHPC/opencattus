@@ -28,6 +28,11 @@ constexpr int maxDataWidth = 28;
 constexpr int minListHeight = 4;
 constexpr int minFieldDialogWidth = 34;
 constexpr int minListDialogWidth = 34;
+constexpr int wrappedWindowRows = 2;
+constexpr int windowShadowRows = 1;
+constexpr int reservedHeaderRows = 1;
+constexpr int reservedFooterRows = 1;
+constexpr int minWindowTop = reservedHeaderRows + 1;
 
 auto calculateDialogWidth(int cols) -> int
 {
@@ -42,7 +47,24 @@ auto calculateDataWidth(int dialogWidth) -> int
 
 auto calculateMaxListHeight(int rows) -> int
 {
-    return std::max(rows - 14, minListHeight);
+    return std::max(rows - 16, minListHeight);
+}
+
+auto calculateMaxDialogHeight(int rows) -> int
+{
+    return std::max(8,
+        rows - reservedHeaderRows - reservedFooterRows - wrappedWindowRows
+            - windowShadowRows - minWindowTop);
+}
+
+auto calculateDialogTop(int rows, int windowHeight) -> int
+{
+    const auto wrappedHeight = windowHeight + wrappedWindowRows;
+    const auto centeredTop = std::max(minWindowTop, (rows - wrappedHeight) / 2);
+    const auto lastSafeTop = std::max(minWindowTop,
+        rows - windowHeight - wrappedWindowRows - windowShadowRows
+            - reservedFooterRows);
+    return std::min(centeredTop, lastSafeTop);
 }
 
 auto calculateFieldDialogWidth(
@@ -164,6 +186,18 @@ int Newt::listHeight(const std::size_t itemCount) const
     return calculateListHeight(m_maxListHeight, itemCount);
 }
 
+int Newt::dialogLeftFor(const int windowWidth) const
+{
+    return std::max(0, (m_cols - windowWidth) / 2);
+}
+
+int Newt::dialogTopFor(const int windowHeight) const
+{
+    return calculateDialogTop(m_rows, windowHeight);
+}
+
+int Newt::maxDialogHeight() const { return calculateMaxDialogHeight(m_rows); }
+
 void Newt::abort()
 {
     if (!m_finished) {
@@ -261,7 +295,11 @@ bool Newt::progressMenu(const char* title, const char* message,
         NEWT_GRID_FLAG_GROWX | NEWT_GRID_FLAG_GROWY);
     newtGridSetField(grid, 0, 2, NEWT_GRID_SUBGRID, buttonGrid, 0, 1, 0, 0, 0,
         NEWT_GRID_FLAG_GROWX);
-    newtGridWrappedWindow(grid, dtitle);
+    int windowWidth = 0;
+    int windowHeight = 0;
+    newtGridGetSize(grid, &windowWidth, &windowHeight);
+    newtGridWrappedWindowAt(
+        grid, dtitle, dialogLeftFor(windowWidth), dialogTopFor(windowHeight));
 
     newtFormAddComponents(form, progress, label, b1, nullptr);
     newtFormWatchFd(form, cmd.pipe_stream.pipe().native_source(), NEWT_FD_READ);
@@ -299,7 +337,11 @@ TEST_CASE("newt geometry keeps dialogs readable on an 80x24 terminal")
 {
     CHECK(calculateDialogWidth(80) == 72);
     CHECK(calculateDataWidth(calculateDialogWidth(80)) == 24);
-    CHECK(calculateMaxListHeight(24) == 10);
+    CHECK(calculateMaxListHeight(24) == 8);
+    CHECK(calculateMaxDialogHeight(24) == 17);
+    CHECK(calculateDialogTop(24, 16) == 3);
+    CHECK(calculateDialogTop(24, 17) == 2);
+    CHECK(calculateDialogTop(24, 19) == 2);
     CHECK(calculateFieldDialogWidth(80, 72, 24, 11) == 43);
     CHECK(calculateFieldDialogWidth(80, 72, 24, 20) == 52);
     CHECK(calculateFieldDialogWidth(80, 72, 24, 34) == 66);
@@ -318,6 +360,6 @@ TEST_CASE("newt geometry stays within small terminals")
 TEST_CASE("newt field labels can mark fields optional with extra detail")
 {
     CHECK(fieldLabelAllowsEmpty("Gateway (optional)"));
-    CHECK(fieldLabelAllowsEmpty("Additional domains (optional)"));
+    CHECK(fieldLabelAllowsEmpty("Additional mail domains (optional)"));
     CHECK_FALSE(fieldLabelAllowsEmpty("SMTP server"));
 }

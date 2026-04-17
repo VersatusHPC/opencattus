@@ -5,6 +5,8 @@
 
 #include <opencattus/models/node.h>
 
+#include <boost/algorithm/string/case_conv.hpp>
+
 namespace opencattus::models {
 
 Node::Node(std::string_view hostname, OS& os, CPU& cpu,
@@ -37,7 +39,7 @@ void Node::setNodeStartIp(
 const std::string& Node::getMACAddress() const { return m_mac_address; }
 void Node::setMACAddress(const std::string& macAddress)
 {
-    m_mac_address = macAddress;
+    m_mac_address = boost::algorithm::to_lower_copy(macAddress);
 }
 const std::optional<std::string>& Node::getNodeRootPassword() const
 {
@@ -49,4 +51,23 @@ void Node::setNodeRootPassword(
     m_node_root_password = nodeRootPassword;
 }
 
+}
+
+#ifdef BUILD_TESTING
+#include <doctest/doctest.h>
+#else
+#define DOCTEST_CONFIG_DISABLE
+#include <doctest/doctest.h>
+#endif
+
+TEST_SUITE("opencattus::models::node")
+{
+    TEST_CASE("setMACAddress normalizes mixed-case addresses")
+    {
+        opencattus::models::Node node;
+
+        node.setMACAddress("aa:bb:cc:dd:ee:FF");
+
+        CHECK(node.getMACAddress() == "aa:bb:cc:dd:ee:ff");
+    }
 }

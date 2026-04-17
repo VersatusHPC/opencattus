@@ -15,14 +15,10 @@ private:
     struct Messages {
         struct Welcome {
             static constexpr const auto message
-                = "Welcome to the guided installer of " PRODUCT_NAME
-                  ".\n\n" PRODUCT_NAME " is a software program to "
-                  "guide the user to set up an HPC clustered environment. It "
-                  "asks for specific questions to get a basic "
-                  "HPC cluster up and running as quick as possible.\n\nFor "
-                  "more information about the software, feature "
-                  "requests or bug reports please check its repository "
-                  "at " PRODUCT_URL;
+                = "Welcome to the " PRODUCT_NAME " guided installer.\n\n"
+                  "This questionnaire collects the settings needed to build a "
+                  "basic HPC cluster.\n\nFor source code, feature requests, "
+                  "and bug reports, visit " PRODUCT_URL;
         };
     };
 

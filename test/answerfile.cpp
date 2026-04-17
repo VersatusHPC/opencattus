@@ -399,7 +399,7 @@ TEST_SUITE("opencattus::models::answerfile")
             cluster.fillData(answerfile);
 
             CHECK(cluster.getProvisioner() == Cluster::Provisioner::xCAT);
-            CHECK(cluster.getHeadnode().getOS().getPlatform()
+            CHECK(cluster.getComputeNodeOS().getPlatform()
                 == opencattus::models::OS::Platform::el8);
         } catch (const std::exception& e) {
             FAIL(std::string(e.what()));
@@ -437,7 +437,7 @@ TEST_SUITE("opencattus::models::answerfile")
                 cluster.fillData(answerfile);
 
                 CHECK(cluster.getProvisioner() == Cluster::Provisioner::xCAT);
-                CHECK(cluster.getHeadnode().getOS().getPlatform()
+                CHECK(cluster.getComputeNodeOS().getPlatform()
                     == opencattus::models::OS::Platform::el9);
             } catch (const std::exception& e) {
                 FAIL(std::string(e.what()));
@@ -463,7 +463,7 @@ TEST_SUITE("opencattus::models::answerfile")
 
                 CHECK(cluster.getProvisioner()
                     == Cluster::Provisioner::Confluent);
-                CHECK(cluster.getHeadnode().getOS().getPlatform()
+                CHECK(cluster.getComputeNodeOS().getPlatform()
                     == opencattus::models::OS::Platform::el9);
             } catch (const std::exception& e) {
                 FAIL(std::string(e.what()));
@@ -529,12 +529,19 @@ TEST_SUITE("opencattus::models::answerfile")
         try {
             AnswerFile answerfile(answerfilePath);
             Cluster cluster;
+            cluster.getHeadnode().setOS(opencattus::models::OS(
+                opencattus::models::OS::Distro::RHEL,
+                opencattus::models::OS::Platform::el9, 6));
             cluster.fillData(answerfile);
 
             CHECK(cluster.getProvisioner() == Cluster::Provisioner::Confluent);
             CHECK(cluster.getHeadnode().getOS().getDistro()
-                == opencattus::models::OS::Distro::Rocky);
+                == opencattus::models::OS::Distro::RHEL);
             CHECK(cluster.getHeadnode().getOS().getPlatform()
+                == opencattus::models::OS::Platform::el9);
+            CHECK(cluster.getComputeNodeOS().getDistro()
+                == opencattus::models::OS::Distro::Rocky);
+            CHECK(cluster.getComputeNodeOS().getPlatform()
                 == opencattus::models::OS::Platform::el10);
         } catch (const std::exception& e) {
             FAIL(std::string(e.what()));

@@ -15,13 +15,15 @@ private:
     struct Messages {
         static constexpr const auto title = "Locale settings";
         static constexpr const auto question
-            = "Pick the default locale language";
+            = "Choose the default locale language";
         static constexpr const auto regionQuestion
-            = "Pick the regional UTF-8 locale";
+            = "Choose the regional UTF-8 locale";
         static constexpr const auto legacyQuestion
-            = "Pick an advanced or legacy locale";
+            = "Choose an advanced or legacy locale";
         static constexpr const auto help
-            = Presenter::Messages::Placeholder::help;
+            = "Choose the default locale for command output, sorting, date "
+              "formats, and other regional behavior. UTF-8 locales are "
+              "preferred for new systems.";
     };
 
 public:

@@ -17,7 +17,9 @@ private:
         static constexpr const auto question
             = "Enter the desired hostname and domain name for this machine";
         static constexpr const auto help
-            = Presenter::Messages::Placeholder::help;
+            = "Set the short hostname for the head node and the DNS domain "
+              "used by the cluster. The domain is reused as a default in "
+              "network and mail settings.";
 
         static constexpr const auto hostname = "Hostname";
         static constexpr const auto domainName = "Domain name";

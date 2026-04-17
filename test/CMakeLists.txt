@@ -118,6 +118,14 @@ set_tests_properties(
         PROPERTIES
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+add_test(
+        NAME ${PROJECT_NAME}.cli_controlled_errors
+        COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/files/check-controlled-errors.sh" $<TARGET_FILE:opencattus>)
+set_tests_properties(
+        ${PROJECT_NAME}.cli_controlled_errors
+        PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # ---- code coverage ----
 
 if (ENABLE_TEST_COVERAGE)

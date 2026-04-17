@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <newt.h>
 #include <opencattus/view/newt.h>
+#include <optional>
 #include <unordered_set>
 
 static constexpr int scrollBarWidth = 3;
@@ -76,7 +77,97 @@ static void updateCheckboxListLabels(newtComponent, void* data)
 std::string Newt::listMenuImpl(const char* title, const char* message,
     const std::vector<std::string>& items, const char* helpMessage)
 {
-    return Newt::listMenu(title, message, items, helpMessage);
+    refreshScreenMetrics();
+
+    if (items.empty()) {
+        fatalMessage(title, "This menu has no available options to display.");
+    }
+
+    const auto* safeTitle = title == nullptr ? "" : title;
+    const auto* safeMessage = message == nullptr ? "" : message;
+    auto* form = newtForm(nullptr, nullptr, NEWT_FLAG_NOF12);
+    std::size_t longestItemWidth = 0;
+    for (const auto& item : items) {
+        longestItemWidth = std::max(longestItemWidth, item.size());
+    }
+
+    const auto maxListWidth = std::max(28, m_suggestedWidth - 10);
+    const auto visibleListHeight = listHeight(items.size());
+    const auto listFlags
+        = items.size() > static_cast<std::size_t>(visibleListHeight)
+        ? NEWT_FLAG_SCROLL
+        : 0;
+    const auto scrollAdjust = listFlags == 0 ? 0 : scrollBarWidth;
+    const auto listWidth = std::clamp(
+        static_cast<int>(longestItemWidth) + scrollAdjust, 1, maxListWidth);
+    const auto textWidth = std::max(32, listWidth);
+    const auto listLeftPadding = std::max(0, (textWidth - listWidth) / 2);
+
+    auto* label = newtTextboxReflowed(
+        0, 0, const_cast<char*>(safeMessage), textWidth, 0, 0, 0);
+    auto* list = newtListbox(
+        0, 0, visibleListHeight, listFlags | NEWT_FLAG_RETURNEXIT);
+    newtListboxSetWidth(list, listWidth);
+    for (const auto& item : items) {
+        newtListboxAppendEntry(list, item.c_str(), item.c_str());
+    }
+
+    newtGrid grid = newtCreateGrid(1, 3);
+    newtComponent buttonOk, buttonCancel, buttonHelp;
+    newtGrid buttonGrid = newtButtonBar(const_cast<char*>(TUIText::Buttons::ok),
+        &buttonOk, const_cast<char*>(TUIText::Buttons::cancel), &buttonCancel,
+        const_cast<char*>(TUIText::Buttons::help), &buttonHelp, NULL);
+    newtGridSetField(grid, 0, 0, NEWT_GRID_COMPONENT, label, 1, 1, 0, 0, 0,
+        NEWT_GRID_FLAG_GROWX);
+    newtGridSetField(grid, 0, 1, NEWT_GRID_COMPONENT, list, listLeftPadding + 1,
+        1, 0, 0, NEWT_ANCHOR_LEFT, NEWT_GRID_FLAG_GROWY);
+    newtGridSetField(grid, 0, 2, NEWT_GRID_SUBGRID, buttonGrid, 0, 1, 0, 0, 0,
+        NEWT_GRID_FLAG_GROWX);
+
+    int windowWidth = 0;
+    int windowHeight = 0;
+    newtGridGetSize(grid, &windowWidth, &windowHeight);
+    newtGridWrappedWindowAt(grid, const_cast<char*>(safeTitle),
+        dialogLeftFor(windowWidth), dialogTopFor(windowHeight));
+    newtGridAddComponentsToForm(grid, form, 1);
+    newtRefresh();
+
+    auto selected = std::optional<std::string> {};
+    auto stopRequested = false;
+    while (!selected && !stopRequested) {
+        newtExitStruct es = {};
+        newtFormRun(form, &es);
+
+        while (es.reason == newtExitStruct::NEWT_EXIT_FDREADY) {
+            newtFormRun(form, &es);
+        }
+
+        if (es.reason == newtExitStruct::NEWT_EXIT_HOTKEY
+            && es.u.key == NEWT_KEY_F12) {
+            continue;
+        }
+
+        if (es.u.co == list || es.u.co == buttonOk) {
+            if (auto* current = newtListboxGetCurrent(list);
+                current != nullptr) {
+                selected = static_cast<const char*>(current);
+            }
+        } else if (es.u.co == buttonHelp) {
+            this->helpMessage(helpMessage);
+        } else {
+            stopRequested = true;
+        }
+    }
+
+    newtPopWindow();
+    newtFormDestroy(form);
+    newtRefresh();
+
+    if (stopRequested) {
+        abort();
+    }
+
+    return *selected;
 }
 
 std::vector<std::string> Newt::collectListMenuImpl(const char* title,
@@ -151,8 +242,7 @@ std::pair<int, std::vector<std::string>> Newt::checkboxSelectionMenu(
     int windowHeight = 0;
     newtGridGetSize(grid, &windowWidth, &windowHeight);
     newtGridWrappedWindowAt(grid, const_cast<char*>(title),
-        std::max(0, (m_cols - windowWidth) / 2),
-        std::max(1, (m_rows - windowHeight) / 2));
+        dialogLeftFor(windowWidth), dialogTopFor(windowHeight));
 
     newtGridAddComponentsToForm(grid, form, 1);
 

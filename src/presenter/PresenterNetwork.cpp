@@ -373,8 +373,7 @@ PresenterNetwork::PresenterNetwork(std::unique_ptr<Cluster>& model,
 
     // TODO: This should be on the header and be constexpr (if possible)
     m_view->message(Messages::title,
-        fmt::format(
-            "We will now ask questions about your {} ({}) network interface",
+        fmt::format("Configure the {} ({}) network interface",
             opencattus::utils::enums::toString(profile),
             opencattus::utils::enums::toString(type))
             .c_str());

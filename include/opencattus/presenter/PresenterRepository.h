@@ -16,7 +16,9 @@ private:
             static constexpr const auto question
                 = "Select the repositories to enable. SPACE toggles an entry.";
             static constexpr const auto help
-                = Presenter::Messages::Placeholder::help;
+                = "Only optional repositories are listed here. Distribution, "
+                  "EPEL, OpenHPC, and provisioner repositories are enabled by "
+                  "the installer when required.";
         };
     };
 

@@ -16,23 +16,27 @@ private:
         static constexpr const auto title = "Time and clock settings";
 
         struct Timezone {
-            static constexpr const auto question = "Choose your local timezone";
+            static constexpr const auto question = "Choose the local timezone";
             static constexpr const auto help
-                = Presenter::Messages::Placeholder::help;
+                = "Choose the timezone used by the head node and generated "
+                  "cluster configuration. Prefer the canonical Area/Location "
+                  "entry when aliases are available.";
         };
 
         struct Timeservers {
             static constexpr const auto question
                 = "Add or change the list of available time servers";
             static constexpr const auto help
-                = Presenter::Messages::Placeholder::help;
+                = "Use NTP servers reachable from the head node. Public pool "
+                  "servers are fine for internet-connected clusters; isolated "
+                  "clusters should use local time sources.";
         };
 
         struct AddTimeserver {
             static constexpr const auto question = "Add time server";
             static constexpr const auto field = "Address:";
             static constexpr const auto help
-                = Presenter::Messages::Placeholder::help;
+                = "Enter one hostname or IP address for an NTP server.";
         };
     };
 

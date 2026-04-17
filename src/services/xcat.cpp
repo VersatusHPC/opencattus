@@ -1604,7 +1604,7 @@ void XCAT::generateOSImagePath(ImageType imageType, NodeType nodeType)
 
 std::vector<std::string> XCAT::getxCATOSImageRepos()
 {
-    const auto osinfo = cluster()->getHeadnode().getOS();
+    const auto& osinfo = cluster()->getComputeNodeOS();
     const auto repoManager = opencattus::utils::singleton::repos();
     std::vector<std::string> repos;
     const auto addReposFromFile = [&](const std::string& filename) {

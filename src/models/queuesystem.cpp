@@ -21,6 +21,9 @@ void QueueSystem::setDefaultQueue(std::string_view defaultQueue)
     m_defaultQueue = defaultQueue;
 }
 
-std::string_view QueueSystem::getDefaultQueue(void) { return m_defaultQueue; }
+std::string_view QueueSystem::getDefaultQueue(void) const
+{
+    return m_defaultQueue;
+}
 
 };

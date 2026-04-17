@@ -174,6 +174,12 @@ struct FieldSnapshot {
     View::FieldEntries items;
 };
 
+struct TextSnapshot {
+    std::string title;
+    std::string message;
+    std::string text;
+};
+
 using Response = std::variant<YesNoReply, ListReply, FieldReply,
     CollectListReply, MultiSelectionReply, AbortReply>;
 
@@ -207,6 +213,7 @@ struct ScriptedViewState {
     std::vector<MenuSnapshot> listMenus;
     std::vector<MenuSnapshot> multiSelectionMenus;
     std::vector<FieldSnapshot> fieldMenus;
+    std::vector<TextSnapshot> scrollableMessages;
     bool allowProgressMenu = false;
 };
 
@@ -295,6 +302,17 @@ public:
         for (const auto& [key, value] : pairs) {
             recordMessage(key.c_str(), value.c_str());
         }
+    }
+
+    void scrollableMessage(const char* title, const char* message,
+        const char* text, const char* /*helpMessage*/) override
+    {
+        recordMessage(title, message);
+        m_state->scrollableMessages.emplace_back(TextSnapshot {
+            .title = title == nullptr ? "" : title,
+            .message = message == nullptr ? "" : message,
+            .text = text == nullptr ? "" : text,
+        });
     }
 
     std::pair<int, std::vector<std::string>> checkboxSelectionMenu(
@@ -590,6 +608,21 @@ auto firstFieldMenuByMessage(const std::vector<FieldSnapshot>& menus,
     return *it;
 }
 
+auto firstScrollableMessageByMessage(const std::vector<TextSnapshot>& messages,
+    std::string_view prefix) -> const TextSnapshot&
+{
+    const auto it
+        = std::ranges::find_if(messages, [prefix](const auto& message) {
+              return message.message.starts_with(prefix);
+          });
+    if (it == messages.end()) {
+        throw std::runtime_error(fmt::format(
+            "Did not find scrollable message starting with '{}'", prefix));
+    }
+
+    return *it;
+}
+
 void seedClusterMetadata(Cluster& cluster)
 {
     cluster.setName("demo");
@@ -861,7 +894,7 @@ TEST_SUITE("opencattus::presenter::tui")
         PresenterLocale(model, view);
 
         const auto& menu = firstMenuByMessage(
-            state->listMenus, "Pick the default locale language");
+            state->listMenus, "Choose the default locale language");
         CHECK(
             std::ranges::find(menu.items, "English (en)") != menu.items.end());
         CHECK(std::ranges::find(menu.items, "Portuguese (pt)")
@@ -910,7 +943,7 @@ TEST_SUITE("opencattus::presenter::tui")
         PresenterLocale(model, view);
 
         const auto& menu = firstMenuByMessage(
-            state->listMenus, "Pick the regional UTF-8 locale");
+            state->listMenus, "Choose the regional UTF-8 locale");
         CHECK(std::ranges::find(menu.items, "en_GB.UTF-8") != menu.items.end());
         CHECK(model->getLocale() == "en_GB.utf8");
     }
@@ -943,7 +976,7 @@ TEST_SUITE("opencattus::presenter::tui")
         PresenterLocale(model, view);
 
         const auto& menu = firstMenuByMessage(
-            state->listMenus, "Pick an advanced or legacy locale");
+            state->listMenus, "Choose an advanced or legacy locale");
         CHECK(std::ranges::find(menu.items, "en_US.iso885915")
             != menu.items.end());
         CHECK(std::ranges::find(menu.items, "en_US.utf8") == menu.items.end());
@@ -975,7 +1008,7 @@ TEST_SUITE("opencattus::presenter::tui")
         PresenterLocale(model, view);
 
         const auto& menu = firstMenuByMessage(
-            state->listMenus, "Pick the default locale language");
+            state->listMenus, "Choose the default locale language");
         CHECK(std::ranges::find(menu.items, "Ukrainian (uk)")
             != menu.items.end());
         CHECK(std::ranges::find(menu.items, "uk locales") == menu.items.end());
@@ -988,20 +1021,26 @@ TEST_SUITE("opencattus::presenter::tui")
         initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
 
         auto model = std::make_unique<Cluster>();
+        model->getHeadnode().setOS(
+            OS(OS::Distro::RHEL, OS::Platform::el9, 7, OS::Arch::x86_64));
         auto state = std::make_shared<ScriptedViewState>();
         state->responses = {
             yesNo(true),
             select("Rocky Linux"),
-            fields({ "9.6", "x86_64" }),
+            fields({ "9.7", "x86_64" }),
         };
 
         std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
         PresenterNodesOperationalSystem(model, view);
 
         CHECK(state->responses.empty());
+        const auto& versionFields = firstFieldMenuByMessage(state->fieldMenus,
+            "Enter the distribution version and architecture");
+        CHECK(versionFields.items[0].second == "9.7");
+        CHECK(versionFields.items[1].second == "x86_64");
         CHECK(model->getDiskImage().getPath()
-            == std::filesystem::path("/root/Rocky-9.6-x86_64-dvd.iso"));
-        CHECK(model->getHeadnode().getOS().getVersion() == "9.6");
+            == std::filesystem::path("/root/Rocky-9.7-x86_64-dvd.iso"));
+        CHECK(model->getComputeNodeOS().getVersion() == "9.7");
     }
 
     TEST_CASE("RHEL download choice retries instead of aborting the TUI")
@@ -1021,10 +1060,10 @@ TEST_SUITE("opencattus::presenter::tui")
         PresenterNodesOperationalSystem(model, view);
 
         CHECK(state->responses.empty());
-        CHECK(model->getHeadnode().getOS().getDistro() == OS::Distro::Rocky);
+        CHECK(model->getComputeNodeOS().getDistro() == OS::Distro::Rocky);
         CHECK(std::ranges::any_of(state->messages, [](const auto& message) {
             return message
-                == "Nodes operational system settings|Unfortunately, we do "
+                == "Compute node OS settings|Unfortunately, we do "
                    "not support downloading Red Hat Enterprise Linux yet.\n"
                    "Please download the ISO yourself and put in an "
                    "appropriate location.";
@@ -1059,7 +1098,7 @@ TEST_SUITE("opencattus::presenter::tui")
             == isoDir / "Rocky-9.6-x86_64-dvd.iso");
         CHECK(std::ranges::any_of(state->messages, [](const auto& message) {
             return message
-                == "Nodes operational system settings|The specified path is "
+                == "Compute node OS settings|The specified path is "
                    "not a readable directory";
         }));
 
@@ -1078,6 +1117,8 @@ TEST_SUITE("opencattus::presenter::tui")
             = createTestIsoDirectory("opencattus-tui-iso-after-empty-retry");
 
         auto model = std::make_unique<Cluster>();
+        model->getHeadnode().setOS(
+            OS(OS::Distro::RHEL, OS::Platform::el9, 6, OS::Arch::x86_64));
         auto state = std::make_shared<ScriptedViewState>();
         state->responses = {
             yesNo(false),
@@ -1129,7 +1170,7 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(state->responses.empty());
         CHECK(model->getDiskImage().getPath()
             == std::filesystem::path("/root/Rocky-9.6-x86_64-dvd.iso"));
-        CHECK(model->getHeadnode().getOS().getDistro() == OS::Distro::Rocky);
+        CHECK(model->getComputeNodeOS().getDistro() == OS::Distro::Rocky);
 
         std::filesystem::remove_all(emptyDir);
     }
@@ -1153,7 +1194,7 @@ TEST_SUITE("opencattus::presenter::tui")
             "192.168.30.0", "192.168.30.254", "255.255.255.0",
             "cluster.example.com");
         model->setDiskImage(diskImagePath);
-        model->getHeadnode().setOS(
+        model->setComputeNodeOS(
             OS(OS::Distro::Rocky, OS::Platform::el9, 6, OS::Arch::x86_64));
 
         auto state = std::make_shared<ScriptedViewState>();
@@ -1171,6 +1212,8 @@ TEST_SUITE("opencattus::presenter::tui")
         const auto& pbs
             = dynamic_cast<PBS*>(model->getQueueSystem().value().get());
         CHECK(pbs->getExecutionPlace() == PBS::ExecutionPlace::Scatter);
+        CHECK(model->getQueueSystem().value()->getDefaultQueue()
+            == "execution");
 
         model->dumpData(outputPath);
         const auto dumped = opencattus::services::files::read(outputPath);
@@ -1188,6 +1231,8 @@ TEST_SUITE("opencattus::presenter::tui")
         initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         auto model = std::make_unique<Cluster>();
+        model->getHeadnode().setOS(
+            OS(OS::Distro::RHEL, OS::Platform::el9, 6, OS::Arch::x86_64));
         seedClusterMetadata(*model);
         addHeadnodeNetwork(*model, Network::Profile::External, "eno1",
             "192.168.124.0", "192.168.124.10", "255.255.255.0",
@@ -1238,7 +1283,9 @@ TEST_SUITE("opencattus::presenter::tui")
 
         CHECK(state->responses.empty());
         CHECK(model->getProvisioner() == Cluster::Provisioner::Confluent);
-        CHECK(model->getHeadnode().getOS().getVersion() == "9.6");
+        CHECK(model->getHeadnode().getOS().getDistro() == OS::Distro::RHEL);
+        CHECK(model->getComputeNodeOS().getDistro() == OS::Distro::Rocky);
+        CHECK(model->getComputeNodeOS().getVersion() == "9.6");
         REQUIRE(model->getEnabledRepositories().has_value());
         CHECK(model->getEnabledRepositories().value()
             == std::vector<std::string> { "cuda" });
@@ -1298,7 +1345,7 @@ TEST_SUITE("opencattus::presenter::tui")
         auto model = std::make_unique<Cluster>();
         const auto os
             = OS(OS::Distro::Rocky, OS::Platform::el9, 6, OS::Arch::x86_64);
-        model->getHeadnode().setOS(os);
+        model->setComputeNodeOS(os);
 
         auto state = std::make_shared<ScriptedViewState>();
         state->responses = {
@@ -1325,7 +1372,7 @@ TEST_SUITE("opencattus::presenter::tui")
         auto model = std::make_unique<Cluster>();
         const auto os
             = OS(OS::Distro::Rocky, OS::Platform::el9, 6, OS::Arch::x86_64);
-        model->getHeadnode().setOS(os);
+        model->setComputeNodeOS(os);
 
         auto state = std::make_shared<ScriptedViewState>();
         state->responses = {
@@ -1481,7 +1528,7 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(state->responses.empty());
         CHECK(std::ranges::any_of(state->messages, [](const auto& message) {
             return message
-                == "Network Settings|Gateway must be inside the selected "
+                == "Network settings|Gateway must be inside the selected "
                    "subnet";
         }));
 
@@ -1534,7 +1581,7 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(state->responses.empty());
         CHECK(std::ranges::any_of(state->messages, [](const auto& message) {
             return message
-                == "Network Settings|The service network must use a separate "
+                == "Network settings|The service network must use a separate "
                    "subnet from the management network";
         }));
 
@@ -1577,7 +1624,7 @@ TEST_SUITE("opencattus::presenter::tui")
             Network::Type::Ethernet);
 
         const auto& managementMenu = firstFieldMenuByMessage(
-            state->fieldMenus, "Fill the required network details");
+            state->fieldMenus, "Enter the required network details");
         CHECK(managementMenu.items[3].second == "cluster.example.com");
 
         PresenterNetwork(model, view, nc, Network::Profile::Service,
@@ -1822,6 +1869,8 @@ TEST_SUITE("opencattus::presenter::tui")
         }
 
         auto model = std::make_unique<Cluster>();
+        model->getHeadnode().setOS(
+            OS(OS::Distro::RHEL, OS::Platform::el9, 6, OS::Arch::x86_64));
         const auto outputPath
             = tempPath("opencattus-tui-install-answerfile", "ini");
 
@@ -1873,7 +1922,7 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(completedSteps
             == std::vector<std::string> { "welcome", "instructions", "general",
                 "time", "locale", "hostname", "networking", "os", "provisioner",
-                "repositories", "nodes", "queue", "mail" });
+                "repositories", "nodes", "queue", "mail", "preflight" });
 
         const auto generalScreen
             = firstMessageIndex(state->messages, "General cluster settings|");
@@ -1883,12 +1932,12 @@ TEST_SUITE("opencattus::presenter::tui")
             = firstMessageIndex(state->messages, "Locale settings|");
         const auto hostScreen
             = firstMessageIndex(state->messages, "Hostname settings|");
-        const auto networkScreens = messageIndices(state->messages,
-            "Network Settings|We will now ask questions about your ");
+        const auto networkScreens = messageIndices(
+            state->messages, "Network settings|Configure the ");
         const auto servicePrompt = firstMessageIndex(state->messages,
             "Network settings|Do you want to configure a service network?");
-        const auto osScreen = firstMessageIndex(
-            state->messages, "Nodes operational system settings|");
+        const auto osScreen
+            = firstMessageIndex(state->messages, "Compute node OS settings|");
         const auto provisionerScreen
             = firstMessageIndex(state->messages, "Provisioner settings|");
         const auto repositoryScreen
@@ -1896,9 +1945,11 @@ TEST_SUITE("opencattus::presenter::tui")
         const auto nodesScreen
             = firstMessageIndex(state->messages, "Compute nodes settings|");
         const auto queueScreen
-            = firstMessageIndex(state->messages, "Queue System settings|");
+            = firstMessageIndex(state->messages, "Queue system settings|");
         const auto mailScreen
             = firstMessageIndex(state->messages, "Mail system settings|");
+        const auto preflightScreen
+            = firstMessageIndex(state->messages, "Preflight validation|");
 
         CHECK(generalScreen < timeScreen);
         CHECK(timeScreen < localeScreen);
@@ -1909,12 +1960,12 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(networkScreens[1] < servicePrompt);
         if (hasUsableInfinibandInterface()) {
             const auto infinibandScreen = firstMessageIndex(state->messages,
-                "Infiniband settings|Do you have an Infiniband Fabric "
+                "InfiniBand settings|Do you have an InfiniBand fabric "
                 "available?");
             CHECK(servicePrompt < infinibandScreen);
             CHECK(infinibandScreen < osScreen);
         } else {
-            CHECK(messageIndices(state->messages, "Infiniband settings|")
+            CHECK(messageIndices(state->messages, "InfiniBand settings|")
                     .empty());
             CHECK(servicePrompt < osScreen);
         }
@@ -1923,6 +1974,64 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(repositoryScreen < nodesScreen);
         CHECK(nodesScreen < queueScreen);
         CHECK(queueScreen < mailScreen);
+        CHECK(mailScreen < preflightScreen);
+
+        const auto& preflightMessage = firstScrollableMessageByMessage(
+            state->scrollableMessages, "Review the installation plan");
+        CHECK(preflightMessage.message
+            == "Review the installation plan before the system is modified.");
+        CHECK_FALSE(preflightMessage.message.contains("Choose OK"));
+        const auto& preflightText = preflightMessage.text;
+        CHECK(preflightText.starts_with("Cluster"));
+        CHECK(preflightText.contains("Cluster        demo"));
+        CHECK(preflightText.contains("Headnode"));
+        CHECK(preflightText.contains("RHEL 9.6 x86_64 with Confluent"));
+        CHECK(preflightText.contains("Nodes"));
+        CHECK(preflightText.contains("Rocky 9.6 x86_64"));
+        CHECK_FALSE(preflightText.contains("Compatibility"));
+        CHECK(preflightText.contains(
+            "ISO and OS     Rocky 9.6 from "
+            "/root/Rocky-9.6-x86_64-dvd.iso"));
+        CHECK(preflightText.contains(
+            "/root/Rocky-9.6-x86_64-dvd.iso\n\nRepositories"));
+        CHECK(preflightText.contains("\n\n[Networks]"));
+        CHECK(preflightText.contains("External Ethernet"));
+        CHECK(preflightText.contains("  Interface"));
+        CHECK(preflightText.contains("  Host IP"));
+        CHECK(preflightText.contains("  Network"));
+        CHECK(preflightText.contains("  Gateway"));
+        CHECK_FALSE(preflightText.contains("first BMC"));
+        CHECK(preflightText.contains("Repositories   Optional: cuda"));
+        CHECK(preflightText.contains("Optional: cuda\n\nQueue system"));
+        CHECK(preflightText.contains("Queue system   SLURM"));
+        CHECK(preflightText.contains("Queue name     batch"));
+        CHECK(preflightText.contains("\n\n[Nodes]"));
+        CHECK(preflightText.contains("Hostname"));
+        CHECK(preflightText.contains("Node IP"));
+        CHECK(preflightText.contains("BMC IP"));
+        for (std::size_t start = 0; start < preflightText.size();) {
+            const auto end = preflightText.find('\n', start);
+            const auto line = end == std::string::npos
+                ? std::string_view(preflightText).substr(start)
+                : std::string_view(preflightText).substr(start, end - start);
+            if (line.starts_with("Hostname") || line.starts_with("n01")
+                || line.starts_with("n02")) {
+                CHECK(line.size() <= 61);
+            }
+
+            if (end == std::string::npos) {
+                break;
+            }
+            start = end + 1;
+        }
+        CHECK(preflightText.contains("n01"));
+        CHECK(preflightText.contains("192.168.30.101"));
+        CHECK(preflightText.contains("172.16.0.11"));
+        CHECK(preflightText.contains("52:54:00:00:20:11"));
+        CHECK(preflightText.contains("n02"));
+        CHECK(preflightText.contains("192.168.30.102"));
+        CHECK(preflightText.contains("172.16.0.12"));
+        CHECK(preflightText.contains("52:54:00:00:20:12"));
 
         CHECK(model->getName() == "demo");
         CHECK(model->getCompanyName() == "acme");
@@ -1932,6 +2041,8 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(model->getTimezone().getTimezone() == "America/Sao_Paulo");
         CHECK(model->getLocale() == "en_US.utf8");
         CHECK(model->getProvisioner() == Cluster::Provisioner::Confluent);
+        CHECK(model->getHeadnode().getOS().getDistro() == OS::Distro::RHEL);
+        CHECK(model->getComputeNodeOS().getDistro() == OS::Distro::Rocky);
         REQUIRE(model->getEnabledRepositories().has_value());
         CHECK(model->getEnabledRepositories().value()
             == std::vector<std::string> { "cuda" });
@@ -2016,6 +2127,8 @@ TEST_SUITE("opencattus::presenter::tui")
         }
 
         auto model = std::make_unique<Cluster>();
+        model->getHeadnode().setOS(
+            OS(OS::Distro::RHEL, OS::Platform::el9, 6, OS::Arch::x86_64));
         const auto outputPath
             = tempPath("opencattus-tui-install-dry-run-answerfile", "ini");
 

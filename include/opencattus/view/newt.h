@@ -35,14 +35,14 @@ private:
         static constexpr const auto developmentBuild = "DEVELOPMENT BUILD";
 #endif
         static constexpr const auto helpLine
-            = "  <Tab>/<Alt-Tab> between elements   |  <Space> selects   |  "
-              "<F12> disabled";
+            = "  <Tab>/<Alt-Tab> moves between fields   |  <Space> selects   "
+              "|  <Enter> accepts";
         static constexpr const auto abort
-            = "Installation aborted due to operator request";
+            = "Questionnaire stopped by operator request";
 
         struct Buttons {
             static constexpr const auto ok = "OK";
-            static constexpr const auto cancel = "Cancel";
+            static constexpr const auto cancel = "Stop";
             static constexpr const auto yes = "Yes";
             static constexpr const auto add = "Add";
             static constexpr const auto remove = "Remove";
@@ -69,6 +69,9 @@ protected:
     [[nodiscard]] int listDialogWidth(std::size_t longestItemWidth,
         std::string_view message, std::string_view title) const;
     [[nodiscard]] int listHeight(std::size_t itemCount) const;
+    [[nodiscard]] int dialogLeftFor(int windowWidth) const;
+    [[nodiscard]] int dialogTopFor(int windowHeight) const;
+    [[nodiscard]] int maxDialogHeight() const;
     void refreshScreenMetrics();
 
     void abort() override;
@@ -96,6 +99,8 @@ public:
     void okCancelMessage(const char* title, const char* message) override;
     void okCancelMessagePairs(const char* title, const char* message,
         const View::FieldEntries& pairs) override;
+    void scrollableMessage(const char* title, const char* message,
+        const char* text, const char* helpMessage) override;
 
     std::pair<int, std::vector<std::string>> checkboxSelectionMenu(
         const char* title, const char* message, const char* help,

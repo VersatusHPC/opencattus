@@ -912,26 +912,141 @@ public:
     }
 };
 
+auto currentExecutablePath() -> std::optional<std::filesystem::path>
+{
+#ifdef __linux__
+    try {
+        auto executable = std::filesystem::read_symlink("/proc/self/exe");
+        if (!executable.empty()) {
+            return executable;
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        LOG_DEBUG("Could not resolve /proc/self/exe: {}", e.what());
+    }
+#endif
+
+    return std::nullopt;
+}
+
+auto repoConfigCandidatePaths(const std::filesystem::path& currentPath,
+    const std::optional<std::filesystem::path>& executablePath)
+    -> std::vector<std::filesystem::path>
+{
+    std::vector<std::filesystem::path> candidates;
+    const auto appendCandidate = [&candidates](std::filesystem::path path) {
+        path = path.lexically_normal();
+        if (std::ranges::find(candidates, path) == candidates.end()) {
+            candidates.emplace_back(std::move(path));
+        }
+    };
+
+    if (executablePath.has_value()) {
+        const auto executableDirectory = executablePath->parent_path();
+        appendCandidate(executableDirectory / "repos");
+        appendCandidate(executableDirectory / "../repos");
+        appendCandidate(executableDirectory / "../../repos");
+    }
+
+    appendCandidate(RepoConfigParser::defaultPath);
+
+    appendCandidate(currentPath / "repos");
+    appendCandidate(currentPath / "../repos");
+    appendCandidate(currentPath / "../../repos");
+
+    return candidates;
+}
+
+auto hasRepoConfig(const std::filesystem::path& path) -> bool
+{
+    return opencattus::functions::exists(path / "repos.conf");
+}
+
+auto findRepoConfigBasePath(
+    const std::vector<std::filesystem::path>& candidates)
+    -> std::optional<std::filesystem::path>
+{
+    for (const auto& candidate : candidates) {
+        if (hasRepoConfig(candidate)) {
+            return candidate;
+        }
+    }
+
+    return std::nullopt;
+}
+
+auto formatRepoConfigCandidates(
+    const std::vector<std::filesystem::path>& candidates) -> std::string
+{
+    std::ostringstream output;
+    for (std::size_t index = 0; index < candidates.size(); ++index) {
+        if (index > 0) {
+            output << ", ";
+        }
+        output << candidates[index].string();
+    }
+    return output.str();
+}
+
 auto repoConfigBasePath() -> std::filesystem::path
 {
-    constexpr auto localSourceTreePath = std::string_view("repos");
-    constexpr auto localBuildTreePath = std::string_view("../repos");
+    const auto candidates = repoConfigCandidatePaths(
+        std::filesystem::current_path(), currentExecutablePath());
 
-    if (opencattus::functions::exists(RepoConfigParser::defaultPath)) {
-        return std::filesystem::path(RepoConfigParser::defaultPath);
-    }
-    if (opencattus::functions::exists(localSourceTreePath)) {
-        LOG_DEBUG(
-            "Using source-tree repository config path {}", localSourceTreePath);
-        return std::filesystem::path(localSourceTreePath);
-    }
-    if (opencattus::functions::exists(localBuildTreePath)) {
-        LOG_DEBUG(
-            "Using build-tree repository config path {}", localBuildTreePath);
-        return std::filesystem::path(localBuildTreePath);
+    if (const auto basePath = findRepoConfigBasePath(candidates)) {
+        LOG_DEBUG("Using repository config path {}", *basePath);
+        return *basePath;
     }
 
-    return std::filesystem::path(RepoConfigParser::defaultPath);
+    opencattus::functions::abort(
+        "Could not find repository configuration. Checked: {}",
+        formatRepoConfigCandidates(candidates));
+}
+
+TEST_CASE("repo config discovery finds source repos from build-tree binary")
+{
+    const auto basePath
+        = std::filesystem::path("test/output/repo-config-discovery");
+    const auto sourceRoot = basePath / "checkout";
+    const auto repoPath = sourceRoot / "repos";
+    const auto executablePath
+        = sourceRoot / "build-host" / "src" / "opencattus";
+
+    std::filesystem::remove_all(basePath);
+    std::filesystem::create_directories(repoPath);
+    std::filesystem::create_directories(executablePath.parent_path());
+    std::ofstream(repoPath / "repos.conf") << '\n';
+
+    const auto candidates
+        = repoConfigCandidatePaths(basePath / "home", executablePath);
+    const auto selected = findRepoConfigBasePath(candidates);
+
+    REQUIRE(selected.has_value());
+    CHECK(selected->lexically_normal() == repoPath.lexically_normal());
+
+    std::filesystem::remove_all(basePath);
+}
+
+TEST_CASE("repo config discovery ignores directories without repos.conf")
+{
+    const auto basePath
+        = std::filesystem::path("test/output/repo-config-missing-common");
+    const auto repoPath = basePath / "repos";
+
+    std::filesystem::remove_all(basePath);
+    std::filesystem::create_directories(repoPath);
+
+    const auto selected = findRepoConfigBasePath({ repoPath });
+
+    CHECK_FALSE(selected.has_value());
+
+    std::filesystem::remove_all(basePath);
+}
+
+TEST_CASE("repo config discovery resolves the runtime repository config path")
+{
+    const auto selected = repoConfigBasePath();
+
+    CHECK(hasRepoConfig(selected));
 }
 
 std::string defaultOpenHPCVersionFor(const OS& osinfo)
@@ -2500,7 +2615,7 @@ struct RPMRepositoryGenerator {
             wrappers::SourcePath(sourcePath), wrappers::Extension(".repo"));
         LOG_DEBUG("Generating the repository files");
         const auto cluster = opencattus::Singleton<models::Cluster>::get();
-        const auto osinfo = cluster->getHeadnode().getOS();
+        const auto& osinfo = cluster->getComputeNodeOS();
         RepoGenerator<>::generate(osinfo, vars);
     }
 };
@@ -2514,7 +2629,7 @@ void RepoManager::initializeDefaultRepositories()
     }
     LOG_INFO("RepoManager initialization");
     auto cluster = opencattus::Singleton<models::Cluster>::get();
-    auto osinfo = cluster->getHeadnode().getOS();
+    const auto& osinfo = cluster->getComputeNodeOS();
     const auto ofedVersion = cluster->getOFED().has_value()
         ? cluster->getOFED()->getVersion()
         : std::string("latest");

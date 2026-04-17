@@ -65,7 +65,7 @@ PresenterRepository::PresenterRepository(
         : std::string("latest");
     const auto optionalRepos = selectableRepositoriesFrom(
         services::repos::RepoManager::defaultRepositoriesFor(
-            m_model->getHeadnode().getOS(), ofedVersion,
+            m_model->getComputeNodeOS(), ofedVersion,
             m_model->getEnabledRepositories()));
     if (optionalRepos.empty()) {
         m_model->clearEnabledRepositories();
