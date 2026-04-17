@@ -18,7 +18,8 @@ PresenterTime::PresenterTime(
     if (availableTimezones.empty()) {
         m_view->fatalMessage(Messages::title,
             "No timezones were discovered on this system. Verify that "
-            "'timedatectl list-timezones --no-pager' works and try again.");
+            "tzdata's zone1970.tab or 'timedatectl list-timezones --no-pager' "
+            "works and try again.");
     }
 
     std::set<std::string> timezoneAreas;
@@ -47,15 +48,20 @@ PresenterTime::PresenterTime(
             "No timezone locations were found for the selected area.");
     }
 
-    auto selectedTimezoneLocation
-        = m_view->listMenu(Messages::title, Messages::Timezone::question,
-            timezoneLocations, Messages::Timezone::help);
+    if (timezoneLocations.size() == 1 && timezoneLocations.front().empty()) {
+        m_model->setTimezone(std::string(timezoneArea));
+        LOG_DEBUG("Timezone set to: {}", m_model->getTimezone().getTimezone())
+    } else {
+        auto selectedTimezoneLocation
+            = m_view->listMenu(Messages::title, Messages::Timezone::question,
+                timezoneLocations, Messages::Timezone::help);
 
-    m_model->setTimezone(
-        fmt::format("{}/{}", timezoneArea, selectedTimezoneLocation));
+        m_model->setTimezone(
+            fmt::format("{}/{}", timezoneArea, selectedTimezoneLocation));
 
-    // FIXME: Horrible call; getTimezone() two times? Srsly?
-    LOG_DEBUG("Timezone set to: {}", m_model->getTimezone().getTimezone())
+        // FIXME: Horrible call; getTimezone() two times? Srsly?
+        LOG_DEBUG("Timezone set to: {}", m_model->getTimezone().getTimezone())
+    }
 
     std::vector<std::string> defaultServers = { "0.br.pool.ntp.org" };
 

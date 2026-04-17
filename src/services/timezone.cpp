@@ -11,8 +11,60 @@
 #include <opencattus/services/timezone.h>
 #include <opencattus/utils/singleton.h>
 #include <string>
+#include <string_view>
+#include <vector>
 
 using namespace opencattus;
+
+namespace {
+constexpr std::string_view zone1970TabCommand
+    = R"(bash -c "test -r /usr/share/zoneinfo/zone1970.tab && cat /usr/share/zoneinfo/zone1970.tab || true")";
+constexpr std::string_view timedatectlTimezoneCommand
+    = "timedatectl list-timezones --no-pager";
+
+std::vector<std::string> parseZone1970Tab(const std::vector<std::string>& lines)
+{
+    std::vector<std::string> zones;
+    for (const auto& line : lines) {
+        if (line.empty() || line.starts_with('#')) {
+            continue;
+        }
+
+        const auto firstTab = line.find('\t');
+        if (firstTab == std::string::npos) {
+            continue;
+        }
+
+        const auto secondTab = line.find('\t', firstTab + 1);
+        if (secondTab == std::string::npos) {
+            continue;
+        }
+
+        const auto thirdTab = line.find('\t', secondTab + 1);
+        zones.emplace_back(line.substr(secondTab + 1,
+            thirdTab == std::string::npos ? std::string::npos
+                                          : thirdTab - secondTab - 1));
+    }
+
+    return zones;
+}
+
+void insertTimezone(
+    std::multimap<std::string, std::string>& timezones, const std::string& tz)
+{
+    if (tz.empty()) {
+        return;
+    }
+
+    const auto slash = tz.find('/');
+    if (slash == std::string::npos) {
+        timezones.insert({ tz, "" });
+        return;
+    }
+
+    timezones.insert({ tz.substr(0, slash), tz.substr(slash + 1) });
+}
+}
 
 Timezone::Timezone()
     : m_availableTimezones { fetchAvailableTimezones() }
@@ -47,12 +99,14 @@ std::multimap<std::string, std::string> Timezone::fetchAvailableTimezones()
 
     LOG_DEBUG("Fetching available system timezones")
     auto runner = opencattus::Singleton<functions::IRunner>::get();
-    auto output = runner->checkOutput(
-        fmt::format("timedatectl list-timezones --no-pager"));
+    auto output = parseZone1970Tab(
+        runner->checkOutput(std::string(zone1970TabCommand)));
+    if (output.empty()) {
+        output = runner->checkOutput(std::string(timedatectlTimezoneCommand));
+    }
 
     for (const std::string& tz : output) {
-        timezones.insert(std::make_pair(
-            tz.substr(0, tz.find('/')), tz.substr(tz.find('/') + 1)));
+        insertTimezone(timezones, tz);
     }
 
     return timezones;

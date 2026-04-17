@@ -15,6 +15,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <variant>
 #include <vector>
@@ -464,6 +465,10 @@ auto hasUsableInfinibandInterface() -> bool
     return !usableInfinibandInterfaces().empty();
 }
 
+constexpr std::string_view zone1970TabCommand
+    = R"(bash -c "test -r /usr/share/zoneinfo/zone1970.tab && cat /usr/share/zoneinfo/zone1970.tab || true")";
+constexpr std::string_view advancedLocaleChoice = "Advanced / legacy locales";
+
 void initializePresenterTestEnvironment(
     ScriptedRunner::Outputs outputs = ScriptedRunner::Outputs { },
     bool dryRun = false)
@@ -481,8 +486,14 @@ void initializePresenterTestEnvironment(
 auto defaultRunnerOutputs() -> ScriptedRunner::Outputs
 {
     return {
+        { std::string(zone1970TabCommand),
+            {
+                "# country\tcoordinates\tTZ\tcomments",
+                "BR\t-2332-04637\tAmerica/Sao_Paulo\tBrazil southeast",
+                "FR\t+4852+00220\tEurope/Paris",
+            } },
         { "timedatectl list-timezones --no-pager",
-            { "America/Sao_Paulo", "Europe/Paris" } },
+            { "America/Sao_Paulo", "Brazil/East", "Europe/Paris" } },
         { "locale -a", { "en_US.utf8", "pt_BR.utf8" } },
     };
 }
@@ -671,7 +682,8 @@ TEST_SUITE("opencattus::presenter::tui")
         "time questionnaire fails cleanly when no timezones are available")
     {
         initializePresenterTestEnvironment({
-            { "timedatectl list-timezones --no-pager", { } },
+            { std::string(zone1970TabCommand), {} },
+            { "timedatectl list-timezones --no-pager", {} },
             { "locale -a", { "en_US.utf8" } },
         });
 
@@ -688,9 +700,12 @@ TEST_SUITE("opencattus::presenter::tui")
         "locale questionnaire fails cleanly when no locales are available")
     {
         initializePresenterTestEnvironment({
+            { std::string(zone1970TabCommand),
+                { "BR\t-2332-04637\tAmerica/Sao_Paulo\tBrazil southeast",
+                    "FR\t+4852+00220\tEurope/Paris" } },
             { "timedatectl list-timezones --no-pager",
                 { "America/Sao_Paulo", "Europe/Paris" } },
-            { "locale -a", { } },
+            { "locale -a", {} },
         });
 
         auto model = std::make_unique<Cluster>();
@@ -700,6 +715,147 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK_THROWS_WITH_AS(PresenterLocale(model, view),
             doctest::Contains("No locales were discovered on this system"),
             std::runtime_error);
+    }
+
+    TEST_CASE("time questionnaire prefers canonical zone1970 timezones")
+    {
+        initializePresenterTestEnvironment({
+            { std::string(zone1970TabCommand),
+                {
+                    "# country\tcoordinates\tTZ\tcomments",
+                    "BR\t-2332-04637\tAmerica/Sao_Paulo\tBrazil southeast",
+                    "FR\t+4852+00220\tEurope/Paris",
+                } },
+            { "timedatectl list-timezones --no-pager",
+                { "America/Sao_Paulo", "Brazil/East", "Europe/Paris" } },
+            { "locale -a", { "en_US.utf8" } },
+        });
+
+        auto model = std::make_unique<Cluster>();
+        auto state = std::make_shared<ScriptedViewState>();
+        state->responses = {
+            select("America"),
+            select("Sao_Paulo"),
+            collect({ "0.pool.ntp.org" }),
+        };
+        std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
+
+        PresenterTime(model, view);
+
+        REQUIRE(state->listMenus.size() >= 2);
+        CHECK(std::ranges::find(state->listMenus[0].items, "America")
+            != state->listMenus[0].items.end());
+        CHECK(std::ranges::find(state->listMenus[0].items, "Brazil")
+            == state->listMenus[0].items.end());
+        CHECK(model->getTimezone().getTimezone() == "America/Sao_Paulo");
+    }
+
+    TEST_CASE("time questionnaire falls back to timedatectl timezones")
+    {
+        initializePresenterTestEnvironment({
+            { std::string(zone1970TabCommand), {} },
+            { "timedatectl list-timezones --no-pager",
+                { "UTC", "America/Sao_Paulo" } },
+            { "locale -a", { "en_US.utf8" } },
+        });
+
+        auto model = std::make_unique<Cluster>();
+        auto state = std::make_shared<ScriptedViewState>();
+        state->responses = {
+            select("UTC"),
+            collect({ "0.pool.ntp.org" }),
+        };
+        std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
+
+        PresenterTime(model, view);
+
+        CHECK(model->getTimezone().getTimezone() == "UTC");
+    }
+
+    TEST_CASE("locale questionnaire groups UTF-8 locales by language")
+    {
+        initializePresenterTestEnvironment({
+            { std::string(zone1970TabCommand),
+                { "BR\t-2332-04637\tAmerica/Sao_Paulo\tBrazil southeast" } },
+            { "timedatectl list-timezones --no-pager",
+                { "America/Sao_Paulo" } },
+            { "locale -a",
+                { "C", "C.utf8", "en_US", "en_US.iso885915", "en_US.utf8",
+                    "pt_BR.utf8", "POSIX" } },
+        });
+
+        auto model = std::make_unique<Cluster>();
+        auto state = std::make_shared<ScriptedViewState>();
+        state->responses = { select("English (en)") };
+        std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
+
+        PresenterLocale(model, view);
+
+        const auto& menu = firstMenuByMessage(
+            state->listMenus, "Pick the default locale language");
+        CHECK(
+            std::ranges::find(menu.items, "English (en)") != menu.items.end());
+        CHECK(std::ranges::find(menu.items, "Portuguese (pt)")
+            != menu.items.end());
+        CHECK(std::ranges::find(menu.items, std::string(advancedLocaleChoice))
+            != menu.items.end());
+        CHECK(std::ranges::find(menu.items, "en_US.iso885915")
+            == menu.items.end());
+        CHECK(model->getLocale() == "en_US.utf8");
+    }
+
+    TEST_CASE("locale questionnaire asks region when a language has choices")
+    {
+        initializePresenterTestEnvironment({
+            { std::string(zone1970TabCommand),
+                { "BR\t-2332-04637\tAmerica/Sao_Paulo\tBrazil southeast" } },
+            { "timedatectl list-timezones --no-pager",
+                { "America/Sao_Paulo" } },
+            { "locale -a", { "en_GB.utf8", "en_US.utf8", "pt_BR.utf8" } },
+        });
+
+        auto model = std::make_unique<Cluster>();
+        auto state = std::make_shared<ScriptedViewState>();
+        state->responses = {
+            select("English (en)"),
+            select("en_GB.UTF-8"),
+        };
+        std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
+
+        PresenterLocale(model, view);
+
+        const auto& menu = firstMenuByMessage(
+            state->listMenus, "Pick the regional UTF-8 locale");
+        CHECK(std::ranges::find(menu.items, "en_GB.UTF-8") != menu.items.end());
+        CHECK(model->getLocale() == "en_GB.utf8");
+    }
+
+    TEST_CASE("locale questionnaire keeps legacy locales behind advanced")
+    {
+        initializePresenterTestEnvironment({
+            { std::string(zone1970TabCommand),
+                { "BR\t-2332-04637\tAmerica/Sao_Paulo\tBrazil southeast" } },
+            { "timedatectl list-timezones --no-pager",
+                { "America/Sao_Paulo" } },
+            { "locale -a", { "en_US", "en_US.iso885915", "en_US.utf8" } },
+        });
+
+        auto model = std::make_unique<Cluster>();
+        auto state = std::make_shared<ScriptedViewState>();
+        state->responses = {
+            select(std::string(advancedLocaleChoice)),
+            select("en_US.iso885915"),
+        };
+        std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
+
+        PresenterLocale(model, view);
+
+        const auto& menu = firstMenuByMessage(
+            state->listMenus, "Pick a legacy or non-UTF-8 locale");
+        CHECK(std::ranges::find(menu.items, "en_US.iso885915")
+            != menu.items.end());
+        CHECK(std::ranges::find(menu.items, "en_US.utf8") == menu.items.end());
+        CHECK(model->getLocale() == "en_US.iso885915");
     }
 
     TEST_CASE("dry-run ISO download skips the progress UI and keeps the "
@@ -1548,7 +1704,7 @@ TEST_SUITE("opencattus::presenter::tui")
             select("America"),
             select("Sao_Paulo"),
             collect({ "0.pool.ntp.org", "1.pool.ntp.org" }),
-            select("en_US.utf8"),
+            select("English (en)"),
             fields({ "headnode", "cluster.example.com" }),
             select(interfaces[0]),
             fields({ "192.168.124.10", "255.255.255.0", "192.168.124.1",
@@ -1697,7 +1853,7 @@ TEST_SUITE("opencattus::presenter::tui")
             select("America"),
             select("Sao_Paulo"),
             collect({ "0.pool.ntp.org", "1.pool.ntp.org" }),
-            select("en_US.utf8"),
+            select("English (en)"),
             fields({ "headnode", "cluster.example.com" }),
             select(interfaces[0]),
             fields({ "192.168.124.10", "255.255.255.0", "192.168.124.1",
