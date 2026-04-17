@@ -9,12 +9,19 @@
 #include <opencattus/presenter/Presenter.h>
 
 #include <boost/lexical_cast.hpp>
+#include <functional>
+#include <set>
+#include <string>
+#include <string_view>
 
 namespace opencattus::presenter {
 class PresenterInstall : public Presenter {
 public:
-    PresenterInstall(
-        std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view);
+    using StepCompletionCallback = std::function<void(std::string_view)>;
+
+    PresenterInstall(std::unique_ptr<Cluster>& model,
+        std::unique_ptr<View>& view, StepCompletionCallback onStepComplete = {},
+        std::set<std::string> completedSteps = {});
 };
 }
 

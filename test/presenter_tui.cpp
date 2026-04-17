@@ -160,6 +160,8 @@ struct MultiSelectionReply {
     std::vector<std::string> values;
 };
 
+struct AbortReply { };
+
 struct MenuSnapshot {
     std::string title;
     std::string message;
@@ -173,7 +175,7 @@ struct FieldSnapshot {
 };
 
 using Response = std::variant<YesNoReply, ListReply, FieldReply,
-    CollectListReply, MultiSelectionReply>;
+    CollectListReply, MultiSelectionReply, AbortReply>;
 
 auto responseKind(const Response& response) -> std::string_view
 {
@@ -190,6 +192,8 @@ auto responseKind(const Response& response) -> std::string_view
                 return "collectListMenu";
             } else if constexpr (std::is_same_v<T, MultiSelectionReply>) {
                 return "checkboxSelectionMenu";
+            } else if constexpr (std::is_same_v<T, AbortReply>) {
+                return "abort";
             } else {
                 return "unknown";
             }
@@ -215,6 +219,11 @@ private:
         if (m_state->responses.empty()) {
             throw std::runtime_error(
                 fmt::format("No scripted response available for {}", where));
+        }
+
+        if (std::holds_alternative<AbortReply>(m_state->responses.front())) {
+            m_state->responses.pop_front();
+            throw ViewAbortRequested("scripted abort");
         }
 
         if (const auto value = std::get_if<T>(&m_state->responses.front())) {
@@ -244,7 +253,7 @@ public:
 
     void abort() override
     {
-        throw std::runtime_error("abort called on scripted view");
+        throw ViewAbortRequested("abort called on scripted view");
     }
 
     void helpMessage(const char* message) override
@@ -413,6 +422,8 @@ auto multi(int status, std::initializer_list<std::string> values) -> Response
 {
     return MultiSelectionReply { status, std::vector<std::string>(values) };
 }
+
+auto abortSelection() -> Response { return AbortReply {}; }
 
 auto isUsableQuestionnaireInterface(const std::string& interface) -> bool
 {
@@ -1852,11 +1863,17 @@ TEST_SUITE("opencattus::presenter::tui")
                 state->responses.begin() + 12, yesNo(false));
         }
 
+        std::vector<std::string> completedSteps;
         std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
-        PresenterInstall(model, view);
+        PresenterInstall(model, view,
+            [&](std::string_view step) { completedSteps.emplace_back(step); });
 
         CHECK_FALSE(view);
         CHECK(state->responses.empty());
+        CHECK(completedSteps
+            == std::vector<std::string> { "welcome", "instructions", "general",
+                "time", "locale", "hostname", "networking", "os", "provisioner",
+                "repositories", "nodes", "queue", "mail" });
 
         const auto generalScreen
             = firstMessageIndex(state->messages, "General cluster settings|");
@@ -1946,6 +1963,44 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(answerfile.slurm.slurmdb_password == "slurmdb");
 
         std::filesystem::remove(outputPath);
+    }
+
+    TEST_CASE("presenter install propagates aborts from network prompts")
+    {
+        initializePresenterTestEnvironment(defaultRunnerOutputs());
+
+        const auto interfaces = usableHostInterfaces();
+        if (interfaces.empty()) {
+            MESSAGE("Skipping PresenterInstall abort test: need at least one "
+                    "interface");
+            return;
+        }
+
+        auto model = std::make_unique<Cluster>();
+        auto state = std::make_shared<ScriptedViewState>();
+        state->responses = {
+            fields({ "demo", "acme", "admin@example.com" }),
+            select("Text"),
+            select("America"),
+            select("Sao_Paulo"),
+            collect({ "0.pool.ntp.org", "1.pool.ntp.org" }),
+            select("English (en)"),
+            fields({ "headnode", "cluster.example.com" }),
+            select(interfaces[0]),
+            abortSelection(),
+        };
+
+        std::vector<std::string> completedSteps;
+        std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
+
+        CHECK_THROWS_AS(PresenterInstall(model, view,
+                            [&](std::string_view step) {
+                                completedSteps.emplace_back(step);
+                            }),
+            ViewAbortRequested);
+        CHECK(completedSteps
+            == std::vector<std::string> { "welcome", "instructions", "general",
+                "time", "locale", "hostname" });
     }
 
     TEST_CASE("presenter install can drive the questionnaire end to end on "

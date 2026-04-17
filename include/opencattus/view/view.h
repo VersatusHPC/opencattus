@@ -18,6 +18,14 @@
 
 #include <opencattus/services/runner.h>
 
+class ViewAbortRequested : public std::runtime_error {
+public:
+    explicit ViewAbortRequested(const std::string& message)
+        : std::runtime_error(message)
+    {
+    }
+};
+
 /* This is just a prototype about making the View as an Interface to be easily
  * swapped in the future if needed. There's much more organization to do before
  * we start using abstract classes.
