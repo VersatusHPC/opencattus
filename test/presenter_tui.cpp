@@ -1212,6 +1212,8 @@ TEST_SUITE("opencattus::presenter::tui")
         const auto& pbs
             = dynamic_cast<PBS*>(model->getQueueSystem().value().get());
         CHECK(pbs->getExecutionPlace() == PBS::ExecutionPlace::Scatter);
+        CHECK(model->getQueueSystem().value()->getDefaultQueue()
+            == "execution");
 
         model->dumpData(outputPath);
         const auto dumped = opencattus::services::files::read(outputPath);

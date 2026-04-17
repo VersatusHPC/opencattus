@@ -172,6 +172,12 @@ auto isoSummary(const Cluster& model) -> std::string
         model.getDiskImage().getPath().string());
 }
 
+auto defaultQueueName(const QueueSystem& queue) -> std::string
+{
+    const auto name = queue.getDefaultQueue();
+    return name.empty() ? "execution" : std::string(name);
+}
+
 void appendQueueDetails(std::vector<std::string>& rows, const Cluster& model)
 {
     const auto& queue = model.getQueueSystem();
@@ -185,7 +191,7 @@ void appendQueueDetails(std::vector<std::string>& rows, const Cluster& model)
             rows.emplace_back(
                 fmt::format("{:<14} {}", "Queue system", "SLURM"));
             rows.emplace_back(fmt::format(
-                "{:<14} {}", "Queue name", queue.value()->getDefaultQueue()));
+                "{:<14} {}", "Queue name", defaultQueueName(*queue.value())));
             break;
         case QueueSystem::Kind::PBS: {
             auto* pbs = dynamic_cast<PBS*>(queue.value().get());
@@ -195,7 +201,7 @@ void appendQueueDetails(std::vector<std::string>& rows, const Cluster& model)
             rows.emplace_back(
                 fmt::format("{:<14} {}", "Queue system", "PBS Professional"));
             rows.emplace_back(fmt::format(
-                "{:<14} {}", "Queue name", queue.value()->getDefaultQueue()));
+                "{:<14} {}", "Queue name", defaultQueueName(*queue.value())));
             rows.emplace_back(fmt::format("{:<14} {}", "Execution", place));
             break;
         }

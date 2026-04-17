@@ -30,7 +30,7 @@ public:
     Kind getKind();
 
     void setDefaultQueue(std::string_view);
-    std::string_view getDefaultQueue();
+    std::string_view getDefaultQueue() const;
 
     explicit QueueSystem(const Cluster& cluster);
     virtual ~QueueSystem() = default;
