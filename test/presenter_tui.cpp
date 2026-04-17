@@ -1117,6 +1117,8 @@ TEST_SUITE("opencattus::presenter::tui")
             = createTestIsoDirectory("opencattus-tui-iso-after-empty-retry");
 
         auto model = std::make_unique<Cluster>();
+        model->getHeadnode().setOS(
+            OS(OS::Distro::RHEL, OS::Platform::el9, 6, OS::Arch::x86_64));
         auto state = std::make_shared<ScriptedViewState>();
         state->responses = {
             yesNo(false),
