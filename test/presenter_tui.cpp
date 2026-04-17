@@ -1827,6 +1827,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
         auto state = std::make_shared<ScriptedViewState>();
         state->allowProgressMenu = true;
+        const auto preflightChoice = fmt::format("{:<14} {}",
+            "Compatibility", "OK: Rocky 9.6 x86_64 with Confluent");
         state->responses = {
             fields({ "demo", "acme", "admin@example.com" }),
             select("Text"),
@@ -1856,6 +1858,7 @@ TEST_SUITE("opencattus::presenter::tui")
             select("SLURM"),
             fields({ "batch", "dbroot", "slurmdb" }),
             yesNo(false),
+            select(preflightChoice),
         };
 
         if (hasUsableInfinibandInterface()) {
@@ -1927,23 +1930,65 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(queueScreen < mailScreen);
         CHECK(mailScreen < preflightScreen);
 
-        CHECK(firstMessageIndex(state->messages,
-                  "Compatibility|OK: Rocky 9.6 x86_64 with Confluent")
-            > preflightScreen);
-        CHECK(firstMessageIndex(state->messages,
-                  "ISO and OS|Rocky 9.6 from "
-                  "/root/Rocky-9.6-x86_64-dvd.iso")
-            > preflightScreen);
-        CHECK(firstMessageIndex(state->messages, "Networks|External Ethernet ")
-            > preflightScreen);
-        CHECK(firstMessageIndex(
-                  state->messages, "BMC|2 of 2 nodes have BMC; first BMC ")
-            > preflightScreen);
-        CHECK(firstMessageIndex(state->messages, "Repositories|Optional: cuda")
-            > preflightScreen);
-        CHECK(firstMessageIndex(
-                  state->messages, "Queue system|SLURM partition batch")
-            > preflightScreen);
+        const auto& preflightMenu = firstMenuByMessage(
+            state->listMenus, "Review the installation plan");
+        CHECK(std::ranges::find(preflightMenu.items, preflightChoice)
+            != preflightMenu.items.end());
+        CHECK(std::ranges::find_if(preflightMenu.items,
+                  [](const auto& item) {
+                      return item.starts_with("ISO and OS")
+                          && item.contains(
+                              "/root/Rocky-9.6-x86_64-dvd.iso");
+                  })
+            != preflightMenu.items.end());
+        CHECK(std::ranges::find_if(preflightMenu.items,
+                  [](const auto& item) {
+                      return item.starts_with("  External Ethernet ");
+                  })
+            != preflightMenu.items.end());
+        CHECK(std::ranges::find_if(preflightMenu.items,
+                  [](const auto& item) {
+                      return item.starts_with("BMC")
+                          && item.contains("2 of 2 nodes have BMC");
+                  })
+            != preflightMenu.items.end());
+        CHECK(std::ranges::find_if(preflightMenu.items,
+                  [](const auto& item) {
+                      return item.starts_with("Repositories")
+                          && item.contains("Optional: cuda");
+                  })
+            != preflightMenu.items.end());
+        CHECK(std::ranges::find_if(preflightMenu.items,
+                  [](const auto& item) {
+                      return item.starts_with("Queue system")
+                          && item.contains("SLURM partition batch");
+                  })
+            != preflightMenu.items.end());
+        CHECK(std::ranges::find(preflightMenu.items, "[Nodes]")
+            != preflightMenu.items.end());
+        CHECK(std::ranges::find_if(preflightMenu.items,
+                  [](const auto& item) {
+                      return item.contains("Hostname")
+                          && item.contains("Node IP")
+                          && item.contains("BMC IP");
+                  })
+            != preflightMenu.items.end());
+        CHECK(std::ranges::find_if(preflightMenu.items,
+                  [](const auto& item) {
+                      return item.contains("n01")
+                          && item.contains("192.168.30.101")
+                          && item.contains("172.16.0.11")
+                          && item.contains("52:54:00:00:20:11");
+                  })
+            != preflightMenu.items.end());
+        CHECK(std::ranges::find_if(preflightMenu.items,
+                  [](const auto& item) {
+                      return item.contains("n02")
+                          && item.contains("192.168.30.102")
+                          && item.contains("172.16.0.12")
+                          && item.contains("52:54:00:00:20:12");
+                  })
+            != preflightMenu.items.end());
 
         CHECK(model->getName() == "demo");
         CHECK(model->getCompanyName() == "acme");

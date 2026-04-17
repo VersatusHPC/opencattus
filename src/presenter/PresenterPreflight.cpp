@@ -62,7 +62,7 @@ auto cidrSuffixFor(const Network& network) -> std::string
     return fmt::format(" mask {}", subnetMask);
 }
 
-auto networkSummary(Cluster& model) -> std::string
+auto networkSummaryRows(Cluster& model) -> std::vector<std::string>
 {
     std::vector<std::string> entries;
     for (const auto& network : model.getNetworks()) {
@@ -92,10 +92,10 @@ auto networkSummary(Cluster& model) -> std::string
     }
 
     if (entries.empty()) {
-        return "No networks configured";
+        return { "No networks configured" };
     }
 
-    return fmt::format("{}", fmt::join(entries, "\n"));
+    return entries;
 }
 
 auto bmcSummary(const Cluster& model) -> std::string
@@ -174,16 +174,71 @@ auto queueSummary(const Cluster& model) -> std::string
     }
 }
 
-auto buildPreflightSummary(Cluster& model) -> View::FieldEntries
+auto nodeAddressSummary(const opencattus::models::Node& node) -> std::string
 {
-    return {
-        { "Compatibility", compatibilitySummary(model) },
-        { "ISO and OS", isoSummary(model) },
-        { "Networks", networkSummary(model) },
-        { "BMC", bmcSummary(model) },
-        { "Repositories", repositorySummary(model) },
-        { "Queue system", queueSummary(model) },
-    };
+    if (node.getNodeStartIp().has_value()) {
+        return node.getNodeStartIp()->to_string();
+    }
+
+    try {
+        return node.getConnection(Network::Profile::Management)
+            .getAddress()
+            .to_string();
+    } catch (const std::exception&) {
+        return "-";
+    }
+}
+
+auto bmcAddressSummary(const opencattus::models::Node& node) -> std::string
+{
+    if (!node.getBMC().has_value()) {
+        return "-";
+    }
+
+    return node.getBMC()->getAddress();
+}
+
+void appendNodeTable(std::vector<std::string>& rows, const Cluster& model)
+{
+    rows.emplace_back("[Nodes]");
+    rows.emplace_back(fmt::format("  {:<16} {:<15} {:<15} {}", "Hostname",
+        "Node IP", "BMC IP", "MAC address"));
+
+    const auto& nodes = model.getNodes();
+    if (nodes.empty()) {
+        rows.emplace_back("  No compute nodes configured");
+        return;
+    }
+
+    for (const auto& node : nodes) {
+        rows.emplace_back(
+            fmt::format("  {:<16} {:<15} {:<15} {}", node.getHostname(),
+                nodeAddressSummary(node), bmcAddressSummary(node),
+                node.getMACAddress().empty() ? "-" : node.getMACAddress()));
+    }
+}
+
+auto buildPreflightRows(Cluster& model) -> std::vector<std::string>
+{
+    std::vector<std::string> rows;
+    rows.emplace_back(
+        fmt::format("{:<14} {}", "Compatibility", compatibilitySummary(model)));
+    rows.emplace_back(
+        fmt::format("{:<14} {}", "ISO and OS", isoSummary(model)));
+    rows.emplace_back(fmt::format("{:<14} {}", "BMC", bmcSummary(model)));
+    rows.emplace_back(
+        fmt::format("{:<14} {}", "Repositories", repositorySummary(model)));
+    rows.emplace_back(
+        fmt::format("{:<14} {}", "Queue system", queueSummary(model)));
+
+    rows.emplace_back("[Networks]");
+    for (const auto& network : networkSummaryRows(model)) {
+        rows.emplace_back(fmt::format("  {}", network));
+    }
+
+    appendNodeTable(rows, model);
+
+    return rows;
 }
 
 } // namespace
@@ -194,8 +249,8 @@ PresenterPreflight::PresenterPreflight(
     std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view)
     : Presenter(model, view)
 {
-    m_view->okCancelMessage(
-        Messages::title, Messages::question, buildPreflightSummary(*m_model));
+    static_cast<void>(m_view->listMenu(Messages::title, Messages::question,
+        buildPreflightRows(*m_model), Messages::help));
 }
 
 }
