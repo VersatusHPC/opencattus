@@ -117,9 +117,9 @@ TEST_CASE("supportedProvisionersFor keeps EL9 xcat and confluent available")
 
 TEST_CASE("supportedProvisionersFor checks headnode and compute node releases")
 {
-    const auto supported = supportedProvisionersFor(
-        OS(OS::Distro::RHEL, OS::Platform::el10, 1),
-        OS(OS::Distro::Rocky, OS::Platform::el9, 6));
+    const auto supported
+        = supportedProvisionersFor(OS(OS::Distro::RHEL, OS::Platform::el10, 1),
+            OS(OS::Distro::Rocky, OS::Platform::el9, 6));
 
     CHECK(supported
         == std::vector<Cluster::Provisioner> {
