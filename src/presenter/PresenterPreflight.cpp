@@ -259,8 +259,10 @@ auto buildPreflightText(Cluster& model) -> std::string
     }
     rows.emplace_back(
         fmt::format("{:<14} {}", "ISO and OS", isoSummary(model)));
+    rows.emplace_back("");
     rows.emplace_back(
         fmt::format("{:<14} {}", "Repositories", repositorySummary(model)));
+    rows.emplace_back("");
     rows.emplace_back(
         fmt::format("{:<14} {}", "Queue system", queueSummary(model)));
 

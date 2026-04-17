@@ -1971,6 +1971,8 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(preflightText.contains(
             "ISO and OS     Rocky 9.6 from "
             "/root/Rocky-9.6-x86_64-dvd.iso"));
+        CHECK(preflightText.contains(
+            "/root/Rocky-9.6-x86_64-dvd.iso\n\nRepositories"));
         CHECK(preflightText.contains("\n\n[Networks]"));
         CHECK(preflightText.contains("External Ethernet"));
         CHECK(preflightText.contains("  Interface"));
@@ -1979,6 +1981,7 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(preflightText.contains("  Gateway"));
         CHECK_FALSE(preflightText.contains("first BMC"));
         CHECK(preflightText.contains("Repositories   Optional: cuda"));
+        CHECK(preflightText.contains("Optional: cuda\n\nQueue system"));
         CHECK(preflightText.contains("Queue system   SLURM partition batch"));
         CHECK(preflightText.contains("\n\n[Nodes]"));
         CHECK(preflightText.contains("Hostname"));
