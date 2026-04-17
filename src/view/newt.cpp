@@ -42,7 +42,7 @@ auto calculateDataWidth(int dialogWidth) -> int
 
 auto calculateMaxListHeight(int rows) -> int
 {
-    return std::max(rows - 14, minListHeight);
+    return std::max(rows - 16, minListHeight);
 }
 
 auto calculateFieldDialogWidth(
@@ -299,7 +299,7 @@ TEST_CASE("newt geometry keeps dialogs readable on an 80x24 terminal")
 {
     CHECK(calculateDialogWidth(80) == 72);
     CHECK(calculateDataWidth(calculateDialogWidth(80)) == 24);
-    CHECK(calculateMaxListHeight(24) == 10);
+    CHECK(calculateMaxListHeight(24) == 8);
     CHECK(calculateFieldDialogWidth(80, 72, 24, 11) == 43);
     CHECK(calculateFieldDialogWidth(80, 72, 24, 20) == 52);
     CHECK(calculateFieldDialogWidth(80, 72, 24, 34) == 66);
