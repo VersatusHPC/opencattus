@@ -215,7 +215,8 @@ auto askYesNo(std::string_view question, bool defaultYes) -> bool
 
 auto executableName(const char** argv) -> std::string_view
 {
-    if (argv == nullptr || argv[0] == nullptr || std::string_view(argv[0]).empty()) {
+    if (argv == nullptr || argv[0] == nullptr
+        || std::string_view(argv[0]).empty()) {
         return "opencattus";
     }
 
@@ -228,7 +229,7 @@ auto checkRootOrExplain(std::string_view executable) -> bool
         opencattus::checkEffectiveUserId();
         return true;
     } catch (const std::exception& ex) {
-        LOG_ERROR("{}", ex.what());
+        LOG_DEBUG("Root privilege check failed: {}", ex.what());
         fmt::print(stderr,
             "OpenCATTUS needs administrator privileges before it can install "
             "or modify this system.\n\n"
