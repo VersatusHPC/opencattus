@@ -1963,9 +1963,11 @@ TEST_SUITE("opencattus::presenter::tui")
         const auto& preflightMessage = firstScrollableMessageByMessage(
             state->scrollableMessages, "Review the installation plan");
         const auto& preflightText = preflightMessage.text;
-        CHECK(preflightText.contains(
-            "Headnode      Rocky 9.6 x86_64 with Confluent"));
-        CHECK(preflightText.contains("Nodes         Rocky 9.6 x86_64"));
+        CHECK(preflightText.contains("Headnode"));
+        CHECK(preflightText.contains("Rocky 9.6 x86_64 with Confluent"));
+        CHECK(preflightText.contains("Nodes"));
+        CHECK(preflightText.contains("Rocky 9.6 x86_64"));
+        CHECK_FALSE(preflightText.contains("Compatibility"));
         CHECK(preflightText.contains(
             "ISO and OS     Rocky 9.6 from "
             "/root/Rocky-9.6-x86_64-dvd.iso"));
