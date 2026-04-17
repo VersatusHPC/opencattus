@@ -53,6 +53,9 @@ public:
     virtual void okCancelMessagePairs(
         const char* title, const char* message, const FieldEntries& pairs)
         = 0;
+    virtual void scrollableMessage(const char* title, const char* message,
+        const char* text, const char* helpMessage)
+        = 0;
 
     template <std::ranges::range T>
     void okCancelMessage(const char* title, const char* message, const T& pairs)

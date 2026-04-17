@@ -218,7 +218,7 @@ void appendNodeTable(std::vector<std::string>& rows, const Cluster& model)
     }
 }
 
-auto buildPreflightRows(Cluster& model) -> std::vector<std::string>
+auto buildPreflightText(Cluster& model) -> std::string
 {
     std::vector<std::string> rows;
     rows.emplace_back(
@@ -238,7 +238,7 @@ auto buildPreflightRows(Cluster& model) -> std::vector<std::string>
 
     appendNodeTable(rows, model);
 
-    return rows;
+    return fmt::format("{}", fmt::join(rows, "\n"));
 }
 
 } // namespace
@@ -249,8 +249,9 @@ PresenterPreflight::PresenterPreflight(
     std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view)
     : Presenter(model, view)
 {
-    static_cast<void>(m_view->listMenu(Messages::title, Messages::question,
-        buildPreflightRows(*m_model), Messages::help));
+    const auto preflightText = buildPreflightText(*m_model);
+    m_view->scrollableMessage(Messages::title, Messages::question,
+        preflightText.c_str(), Messages::help);
 }
 
 }

@@ -174,6 +174,12 @@ struct FieldSnapshot {
     View::FieldEntries items;
 };
 
+struct TextSnapshot {
+    std::string title;
+    std::string message;
+    std::string text;
+};
+
 using Response = std::variant<YesNoReply, ListReply, FieldReply,
     CollectListReply, MultiSelectionReply, AbortReply>;
 
@@ -207,6 +213,7 @@ struct ScriptedViewState {
     std::vector<MenuSnapshot> listMenus;
     std::vector<MenuSnapshot> multiSelectionMenus;
     std::vector<FieldSnapshot> fieldMenus;
+    std::vector<TextSnapshot> scrollableMessages;
     bool allowProgressMenu = false;
 };
 
@@ -295,6 +302,17 @@ public:
         for (const auto& [key, value] : pairs) {
             recordMessage(key.c_str(), value.c_str());
         }
+    }
+
+    void scrollableMessage(const char* title, const char* message,
+        const char* text, const char* /*helpMessage*/) override
+    {
+        recordMessage(title, message);
+        m_state->scrollableMessages.emplace_back(TextSnapshot {
+            .title = title == nullptr ? "" : title,
+            .message = message == nullptr ? "" : message,
+            .text = text == nullptr ? "" : text,
+        });
     }
 
     std::pair<int, std::vector<std::string>> checkboxSelectionMenu(
@@ -585,6 +603,21 @@ auto firstFieldMenuByMessage(const std::vector<FieldSnapshot>& menus,
     if (it == menus.end()) {
         throw std::runtime_error(
             fmt::format("Did not find field menu starting with '{}'", prefix));
+    }
+
+    return *it;
+}
+
+auto firstScrollableMessageByMessage(const std::vector<TextSnapshot>& messages,
+    std::string_view prefix) -> const TextSnapshot&
+{
+    const auto it
+        = std::ranges::find_if(messages, [prefix](const auto& message) {
+              return message.message.starts_with(prefix);
+          });
+    if (it == messages.end()) {
+        throw std::runtime_error(fmt::format(
+            "Did not find scrollable message starting with '{}'", prefix));
     }
 
     return *it;
@@ -1827,8 +1860,6 @@ TEST_SUITE("opencattus::presenter::tui")
 
         auto state = std::make_shared<ScriptedViewState>();
         state->allowProgressMenu = true;
-        const auto preflightChoice = fmt::format("{:<14} {}",
-            "Compatibility", "OK: Rocky 9.6 x86_64 with Confluent");
         state->responses = {
             fields({ "demo", "acme", "admin@example.com" }),
             select("Text"),
@@ -1858,7 +1889,6 @@ TEST_SUITE("opencattus::presenter::tui")
             select("SLURM"),
             fields({ "batch", "dbroot", "slurmdb" }),
             yesNo(false),
-            select(preflightChoice),
         };
 
         if (hasUsableInfinibandInterface()) {
@@ -1930,65 +1960,30 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(queueScreen < mailScreen);
         CHECK(mailScreen < preflightScreen);
 
-        const auto& preflightMenu = firstMenuByMessage(
-            state->listMenus, "Review the installation plan");
-        CHECK(std::ranges::find(preflightMenu.items, preflightChoice)
-            != preflightMenu.items.end());
-        CHECK(std::ranges::find_if(preflightMenu.items,
-                  [](const auto& item) {
-                      return item.starts_with("ISO and OS")
-                          && item.contains(
-                              "/root/Rocky-9.6-x86_64-dvd.iso");
-                  })
-            != preflightMenu.items.end());
-        CHECK(std::ranges::find_if(preflightMenu.items,
-                  [](const auto& item) {
-                      return item.starts_with("  External Ethernet ");
-                  })
-            != preflightMenu.items.end());
-        CHECK(std::ranges::find_if(preflightMenu.items,
-                  [](const auto& item) {
-                      return item.starts_with("BMC")
-                          && item.contains("2 of 2 nodes have BMC");
-                  })
-            != preflightMenu.items.end());
-        CHECK(std::ranges::find_if(preflightMenu.items,
-                  [](const auto& item) {
-                      return item.starts_with("Repositories")
-                          && item.contains("Optional: cuda");
-                  })
-            != preflightMenu.items.end());
-        CHECK(std::ranges::find_if(preflightMenu.items,
-                  [](const auto& item) {
-                      return item.starts_with("Queue system")
-                          && item.contains("SLURM partition batch");
-                  })
-            != preflightMenu.items.end());
-        CHECK(std::ranges::find(preflightMenu.items, "[Nodes]")
-            != preflightMenu.items.end());
-        CHECK(std::ranges::find_if(preflightMenu.items,
-                  [](const auto& item) {
-                      return item.contains("Hostname")
-                          && item.contains("Node IP")
-                          && item.contains("BMC IP");
-                  })
-            != preflightMenu.items.end());
-        CHECK(std::ranges::find_if(preflightMenu.items,
-                  [](const auto& item) {
-                      return item.contains("n01")
-                          && item.contains("192.168.30.101")
-                          && item.contains("172.16.0.11")
-                          && item.contains("52:54:00:00:20:11");
-                  })
-            != preflightMenu.items.end());
-        CHECK(std::ranges::find_if(preflightMenu.items,
-                  [](const auto& item) {
-                      return item.contains("n02")
-                          && item.contains("192.168.30.102")
-                          && item.contains("172.16.0.12")
-                          && item.contains("52:54:00:00:20:12");
-                  })
-            != preflightMenu.items.end());
+        const auto& preflightMessage = firstScrollableMessageByMessage(
+            state->scrollableMessages, "Review the installation plan");
+        const auto& preflightText = preflightMessage.text;
+        CHECK(preflightText.contains(
+            "Compatibility  OK: Rocky 9.6 x86_64 with Confluent"));
+        CHECK(preflightText.contains(
+            "ISO and OS     Rocky 9.6 from "
+            "/root/Rocky-9.6-x86_64-dvd.iso"));
+        CHECK(preflightText.contains("External Ethernet "));
+        CHECK(preflightText.contains("BMC            2 of 2 nodes have BMC"));
+        CHECK(preflightText.contains("Repositories   Optional: cuda"));
+        CHECK(preflightText.contains("Queue system   SLURM partition batch"));
+        CHECK(preflightText.contains("[Nodes]"));
+        CHECK(preflightText.contains("Hostname"));
+        CHECK(preflightText.contains("Node IP"));
+        CHECK(preflightText.contains("BMC IP"));
+        CHECK(preflightText.contains("n01"));
+        CHECK(preflightText.contains("192.168.30.101"));
+        CHECK(preflightText.contains("172.16.0.11"));
+        CHECK(preflightText.contains("52:54:00:00:20:11"));
+        CHECK(preflightText.contains("n02"));
+        CHECK(preflightText.contains("192.168.30.102"));
+        CHECK(preflightText.contains("172.16.0.12"));
+        CHECK(preflightText.contains("52:54:00:00:20:12"));
 
         CHECK(model->getName() == "demo");
         CHECK(model->getCompanyName() == "acme");
@@ -2086,8 +2081,6 @@ TEST_SUITE("opencattus::presenter::tui")
             = tempPath("opencattus-tui-install-dry-run-answerfile", "ini");
 
         auto state = std::make_shared<ScriptedViewState>();
-        const auto preflightChoice = fmt::format("{:<14} {}",
-            "Compatibility", "OK: Rocky 9.6 x86_64 with Confluent");
         state->responses = {
             fields({ "demo", "acme", "admin@example.com" }),
             select("Text"),
@@ -2117,7 +2110,6 @@ TEST_SUITE("opencattus::presenter::tui")
             select("SLURM"),
             fields({ "batch", "dbroot", "slurmdb" }),
             yesNo(false),
-            select(preflightChoice),
         };
 
         if (hasUsableInfinibandInterface()) {

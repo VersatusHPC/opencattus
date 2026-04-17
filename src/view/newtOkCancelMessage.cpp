@@ -5,6 +5,72 @@
 
 #include <opencattus/view/newt.h>
 
+#include <algorithm>
+#include <string_view>
+
+namespace {
+
+auto leadingSpaces(std::string_view line) -> std::size_t
+{
+    return static_cast<std::size_t>(
+        std::ranges::find_if(line, [](char c) { return c != ' '; })
+        - line.begin());
+}
+
+auto wrapLine(std::string_view line, std::size_t width) -> std::string
+{
+    if (line.size() <= width || width == 0) {
+        return std::string(line);
+    }
+
+    std::string out;
+    auto remaining = std::string(line);
+    auto continuationIndent = std::string(leadingSpaces(line) + 2, ' ');
+
+    while (remaining.size() > width) {
+        auto split = remaining.rfind(' ', width);
+        if (split == std::string_view::npos || split == 0) {
+            split = width;
+        }
+
+        out += remaining.substr(0, split);
+        out += '\n';
+        remaining = split + 1 < remaining.size() ? remaining.substr(split + 1)
+                                                 : std::string {};
+        const auto firstText = remaining.find_first_not_of(' ');
+        remaining = firstText == std::string::npos
+            ? std::string {}
+            : remaining.substr(firstText);
+        remaining = continuationIndent + remaining;
+    }
+
+    out += remaining;
+    return out;
+}
+
+auto wrapText(std::string_view text, std::size_t width) -> std::string
+{
+    std::string out;
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        const auto end = text.find('\n', start);
+        const auto line = end == std::string_view::npos
+            ? text.substr(start)
+            : text.substr(start, end - start);
+        out += wrapLine(line, width);
+        if (end == std::string_view::npos) {
+            break;
+        }
+
+        out += '\n';
+        start = end + 1;
+    }
+
+    return out;
+}
+
+} // namespace
+
 void Newt::okCancelMessage(const char* message)
 {
     Newt::okCancelMessage(nullptr, message);
@@ -34,6 +100,81 @@ void Newt::okCancelMessage(const char* title, const char* message)
                     "Something happened. Please run the software again");
         }
     }
+}
+
+void Newt::scrollableMessage(const char* title, const char* message,
+    const char* text, const char* helpMessage)
+{
+    refreshScreenMetrics();
+
+    const auto* safeTitle = title == nullptr ? "" : title;
+    const auto* safeMessage = message == nullptr ? "" : message;
+    const auto bodyWidth = std::clamp(m_suggestedWidth - 10, 36, 62);
+    const auto wrappedText = wrapText(text == nullptr ? "" : text, bodyWidth);
+
+    auto* form = newtForm(nullptr, nullptr, NEWT_FLAG_NOF12);
+    auto* label = newtTextboxReflowed(
+        0, 0, const_cast<char*>(safeMessage), bodyWidth, 0, 0, 0);
+    auto* body = newtTextbox(
+        0, 0, bodyWidth, std::min(m_maxListHeight, 12), NEWT_FLAG_SCROLL);
+    newtTextboxSetColors(
+        body, NEWT_COLORSET_TEXTBOX, NEWT_COLORSET_TEXTBOX);
+    newtTextboxSetText(body, wrappedText.c_str());
+
+    newtGrid grid = newtCreateGrid(1, 3);
+    newtComponent buttonOk, buttonCancel, buttonHelp;
+    newtGrid buttonGrid = newtButtonBar(const_cast<char*>(TUIText::Buttons::ok),
+        &buttonOk, const_cast<char*>(TUIText::Buttons::cancel), &buttonCancel,
+        const_cast<char*>(TUIText::Buttons::help), &buttonHelp, NULL);
+    newtGridSetField(grid, 0, 0, NEWT_GRID_COMPONENT, label, 1, 1, 0, 0, 0,
+        NEWT_GRID_FLAG_GROWX);
+    newtGridSetField(grid, 0, 1, NEWT_GRID_COMPONENT, body, 1, 1, 2, 0, 0,
+        NEWT_GRID_FLAG_GROWX | NEWT_GRID_FLAG_GROWY);
+    newtGridSetField(grid, 0, 2, NEWT_GRID_SUBGRID, buttonGrid, 0, 1, 0, 0, 0,
+        NEWT_GRID_FLAG_GROWX);
+
+    int windowWidth = 0;
+    int windowHeight = 0;
+    newtGridGetSize(grid, &windowWidth, &windowHeight);
+    newtGridWrappedWindowAt(grid, const_cast<char*>(safeTitle),
+        std::max(0, (m_cols - windowWidth) / 2),
+        std::max(1, (m_rows - windowHeight) / 2));
+    newtGridAddComponentsToForm(grid, form, 1);
+    newtRefresh();
+
+    while (true) {
+        newtExitStruct es = {};
+        newtFormRun(form, &es);
+
+        while (es.reason == newtExitStruct::NEWT_EXIT_FDREADY) {
+            newtFormRun(form, &es);
+        }
+
+        if (es.reason == newtExitStruct::NEWT_EXIT_HOTKEY
+            && es.u.key == NEWT_KEY_F12) {
+            continue;
+        }
+
+        if (es.u.co == buttonOk) {
+            break;
+        }
+        if (es.u.co == buttonHelp) {
+            this->helpMessage(helpMessage);
+            continue;
+        }
+        if (es.u.co == body) {
+            continue;
+        }
+
+        newtPopWindow();
+        newtFormDestroy(form);
+        newtRefresh();
+        abort();
+    }
+
+    newtPopWindow();
+    newtFormDestroy(form);
+    newtRefresh();
 }
 
 void Newt::okCancelMessagePairs(

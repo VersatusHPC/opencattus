@@ -96,6 +96,8 @@ public:
     void okCancelMessage(const char* title, const char* message) override;
     void okCancelMessagePairs(const char* title, const char* message,
         const View::FieldEntries& pairs) override;
+    void scrollableMessage(const char* title, const char* message,
+        const char* text, const char* helpMessage) override;
 
     std::pair<int, std::vector<std::string>> checkboxSelectionMenu(
         const char* title, const char* message, const char* help,
