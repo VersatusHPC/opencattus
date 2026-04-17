@@ -62,9 +62,17 @@ auto cidrSuffixFor(const Network& network) -> std::string
     return fmt::format(" mask {}", subnetMask);
 }
 
-auto networkSummaryRows(Cluster& model) -> std::vector<std::string>
+void appendNetworkDetails(std::vector<std::string>& rows, Cluster& model)
 {
-    std::vector<std::string> entries;
+    rows.emplace_back("");
+    rows.emplace_back("[Networks]");
+
+    if (model.getNetworks().empty()) {
+        rows.emplace_back("No networks configured");
+        return;
+    }
+
+    auto firstNetwork = true;
     for (const auto& network : model.getNetworks()) {
         const auto profile
             = opencattus::utils::enums::toString(network->getProfile());
@@ -73,8 +81,15 @@ auto networkSummaryRows(Cluster& model) -> std::vector<std::string>
         const auto networkAddress
             = network->getAddress().to_string() + cidrSuffixFor(*network);
         const auto gateway = network->getGateway().is_unspecified()
-            ? std::string("no gateway")
-            : fmt::format("gw {}", network->getGateway().to_string());
+            ? std::string("none")
+            : network->getGateway().to_string();
+
+        if (!firstNetwork) {
+            rows.emplace_back("");
+        }
+        firstNetwork = false;
+
+        rows.emplace_back(fmt::format("{} {}", profile, type));
 
         try {
             const auto& connection
@@ -82,20 +97,17 @@ auto networkSummaryRows(Cluster& model) -> std::vector<std::string>
             const auto interface = connection.getInterface().has_value()
                 ? std::string(connection.getInterface().value())
                 : std::string("no interface");
-            entries.emplace_back(fmt::format("{} {} {} host {} on {} ({})",
-                profile, type, interface, connection.getAddress().to_string(),
-                networkAddress, gateway));
+            rows.emplace_back(
+                fmt::format("  {:<9} {}", "Interface", interface));
+            rows.emplace_back(fmt::format(
+                "  {:<9} {}", "Host IP", connection.getAddress().to_string()));
         } catch (const std::exception& ex) {
-            entries.emplace_back(fmt::format(
-                "{} {} {} ({})", profile, type, networkAddress, ex.what()));
+            rows.emplace_back(fmt::format("  {:<9} {}", "Host IP", "-"));
+            rows.emplace_back(fmt::format("  {:<9} {}", "Warning", ex.what()));
         }
+        rows.emplace_back(fmt::format("  {:<9} {}", "Network", networkAddress));
+        rows.emplace_back(fmt::format("  {:<9} {}", "Gateway", gateway));
     }
-
-    if (entries.empty()) {
-        return { "No networks configured" };
-    }
-
-    return entries;
 }
 
 auto bmcSummary(const Cluster& model) -> std::string
@@ -215,6 +227,7 @@ auto fitColumn(std::string value, std::size_t width) -> std::string
 
 void appendNodeTable(std::vector<std::string>& rows, const Cluster& model)
 {
+    rows.emplace_back("");
     rows.emplace_back("[Nodes]");
     rows.emplace_back(fmt::format("{:<11} {:<15} {:<15} {:<17}", "Hostname",
         "Node IP", "BMC IP", "MAC address"));
@@ -248,11 +261,7 @@ auto buildPreflightText(Cluster& model) -> std::string
     rows.emplace_back(
         fmt::format("{:<14} {}", "Queue system", queueSummary(model)));
 
-    rows.emplace_back("[Networks]");
-    for (const auto& network : networkSummaryRows(model)) {
-        rows.emplace_back(fmt::format("  {}", network));
-    }
-
+    appendNetworkDetails(rows, model);
     appendNodeTable(rows, model);
 
     return fmt::format("{}", fmt::join(rows, "\n"));

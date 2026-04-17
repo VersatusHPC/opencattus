@@ -1968,11 +1968,16 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(preflightText.contains(
             "ISO and OS     Rocky 9.6 from "
             "/root/Rocky-9.6-x86_64-dvd.iso"));
-        CHECK(preflightText.contains("External Ethernet "));
+        CHECK(preflightText.contains("\n\n[Networks]"));
+        CHECK(preflightText.contains("External Ethernet"));
+        CHECK(preflightText.contains("  Interface"));
+        CHECK(preflightText.contains("  Host IP"));
+        CHECK(preflightText.contains("  Network"));
+        CHECK(preflightText.contains("  Gateway"));
         CHECK(preflightText.contains("BMC            2 of 2 nodes have BMC"));
         CHECK(preflightText.contains("Repositories   Optional: cuda"));
         CHECK(preflightText.contains("Queue system   SLURM partition batch"));
-        CHECK(preflightText.contains("[Nodes]"));
+        CHECK(preflightText.contains("\n\n[Nodes]"));
         CHECK(preflightText.contains("Hostname"));
         CHECK(preflightText.contains("Node IP"));
         CHECK(preflightText.contains("BMC IP"));
