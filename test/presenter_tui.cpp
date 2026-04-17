@@ -1873,7 +1873,7 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(completedSteps
             == std::vector<std::string> { "welcome", "instructions", "general",
                 "time", "locale", "hostname", "networking", "os", "provisioner",
-                "repositories", "nodes", "queue", "mail" });
+                "repositories", "nodes", "queue", "mail", "preflight" });
 
         const auto generalScreen
             = firstMessageIndex(state->messages, "General cluster settings|");
@@ -1899,6 +1899,8 @@ TEST_SUITE("opencattus::presenter::tui")
             = firstMessageIndex(state->messages, "Queue system settings|");
         const auto mailScreen
             = firstMessageIndex(state->messages, "Mail system settings|");
+        const auto preflightScreen
+            = firstMessageIndex(state->messages, "Preflight validation|");
 
         CHECK(generalScreen < timeScreen);
         CHECK(timeScreen < localeScreen);
@@ -1923,6 +1925,25 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(repositoryScreen < nodesScreen);
         CHECK(nodesScreen < queueScreen);
         CHECK(queueScreen < mailScreen);
+        CHECK(mailScreen < preflightScreen);
+
+        CHECK(firstMessageIndex(state->messages,
+                  "Compatibility|OK: Rocky 9.6 x86_64 with Confluent")
+            > preflightScreen);
+        CHECK(firstMessageIndex(state->messages,
+                  "ISO and OS|Rocky 9.6 from "
+                  "/root/Rocky-9.6-x86_64-dvd.iso")
+            > preflightScreen);
+        CHECK(firstMessageIndex(state->messages, "Networks|External Ethernet ")
+            > preflightScreen);
+        CHECK(firstMessageIndex(
+                  state->messages, "BMC|2 of 2 nodes have BMC; first BMC ")
+            > preflightScreen);
+        CHECK(firstMessageIndex(state->messages, "Repositories|Optional: cuda")
+            > preflightScreen);
+        CHECK(firstMessageIndex(
+                  state->messages, "Queue system|SLURM partition batch")
+            > preflightScreen);
 
         CHECK(model->getName() == "demo");
         CHECK(model->getCompanyName() == "acme");

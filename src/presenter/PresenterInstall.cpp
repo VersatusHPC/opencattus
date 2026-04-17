@@ -13,6 +13,7 @@
 #include <opencattus/presenter/PresenterNetwork.h>
 #include <opencattus/presenter/PresenterNodes.h>
 #include <opencattus/presenter/PresenterNodesOperationalSystem.h>
+#include <opencattus/presenter/PresenterPreflight.h>
 #include <opencattus/presenter/PresenterProvisioner.h>
 #include <opencattus/presenter/PresenterQueueSystem.h>
 #include <opencattus/presenter/PresenterRepository.h>
@@ -117,6 +118,7 @@ PresenterInstall::PresenterInstall(std::unique_ptr<Cluster>& model,
     runStep("queue", [&]() { Call<PresenterQueueSystem>(); });
 
     runStep("mail", [&]() { Call<PresenterMailSystem>(); });
+    runStep("preflight", [&]() { Call<PresenterPreflight>(); });
 
     // Destroy the view since we don't need it anymore
     m_view.reset();
