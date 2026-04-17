@@ -388,11 +388,20 @@ int main(int argc, const char** argv)
     }
 
     if (!opts->dumpAnswerfile.empty()) {
-        if (opts->enableTUI) {
-            services::tui::writeDraft(*model, opts->dumpAnswerfile,
-                tuiDraftState.completedSteps, true);
-        } else {
-            model->dumpData(opts->dumpAnswerfile);
+        try {
+            if (opts->enableTUI) {
+                services::tui::writeDraft(*model, opts->dumpAnswerfile,
+                    tuiDraftState.completedSteps, true);
+            } else {
+                model->dumpData(opts->dumpAnswerfile);
+            }
+        } catch (const std::exception& ex) {
+            LOG_ERROR("Failed to write answerfile {}: {}", opts->dumpAnswerfile,
+                ex.what());
+            fmt::print(stderr, "Failed to write answerfile {}: {}\n",
+                opts->dumpAnswerfile, ex.what());
+            Log::shutdown();
+            return EXIT_FAILURE;
         }
         Log::shutdown();
         return EXIT_SUCCESS;

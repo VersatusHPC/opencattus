@@ -585,7 +585,7 @@ auto defaultDraftPath(const Options& options) -> std::filesystem::path
         return path;
     }
 
-    return std::filesystem::temp_directory_path() / "opencattus-tui.ini.draft";
+    return std::filesystem::current_path() / "opencattus-tui.ini.draft";
 }
 
 auto loadDraftState(const std::filesystem::path& path) -> DraftState
@@ -697,6 +697,23 @@ TEST_CASE("TUI draft state reads metadata without loading answerfile sections")
     CHECK(*state.lastCompletedStep == "time");
 
     files::remove(path);
+}
+
+TEST_CASE("TUI draft path defaults to the current directory")
+{
+    Options options {};
+
+    CHECK(defaultDraftPath(options)
+        == std::filesystem::current_path() / "opencattus-tui.ini.draft");
+}
+
+TEST_CASE("TUI draft path follows the dump answerfile path")
+{
+    Options options {};
+    options.dumpAnswerfile = "opencattus-tui.ini";
+
+    CHECK(defaultDraftPath(options)
+        == std::filesystem::path("opencattus-tui.ini.draft"));
 }
 
 } // namespace opencattus::services::tui
