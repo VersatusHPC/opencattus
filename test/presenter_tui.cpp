@@ -2086,6 +2086,8 @@ TEST_SUITE("opencattus::presenter::tui")
             = tempPath("opencattus-tui-install-dry-run-answerfile", "ini");
 
         auto state = std::make_shared<ScriptedViewState>();
+        const auto preflightChoice = fmt::format("{:<14} {}",
+            "Compatibility", "OK: Rocky 9.6 x86_64 with Confluent");
         state->responses = {
             fields({ "demo", "acme", "admin@example.com" }),
             select("Text"),
@@ -2115,6 +2117,7 @@ TEST_SUITE("opencattus::presenter::tui")
             select("SLURM"),
             fields({ "batch", "dbroot", "slurmdb" }),
             yesNo(false),
+            select(preflightChoice),
         };
 
         if (hasUsableInfinibandInterface()) {
