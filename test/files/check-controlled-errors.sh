@@ -9,13 +9,13 @@ assert_fails() {
     shift
 
     set +e
-    local output
-    output=$("$@" 2>&1)
+    local captured_output
+    captured_output=$("$@" 2>&1)
     local status=$?
     set -e
 
     [[ ${status} -ne 0 ]]
-    printf -v "${output_var}" '%s' "${output}"
+    printf -v "${output_var}" '%s' "${captured_output}"
 }
 
 assert_contains() {
