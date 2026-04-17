@@ -1977,6 +1977,8 @@ TEST_SUITE("opencattus::presenter::tui")
         const auto& preflightMessage = firstScrollableMessageByMessage(
             state->scrollableMessages, "Review the installation plan");
         const auto& preflightText = preflightMessage.text;
+        CHECK(preflightText.starts_with("Cluster"));
+        CHECK(preflightText.contains("Cluster        demo"));
         CHECK(preflightText.contains("Headnode"));
         CHECK(preflightText.contains("RHEL 9.6 x86_64 with Confluent"));
         CHECK(preflightText.contains("Nodes"));
@@ -1996,7 +1998,8 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK_FALSE(preflightText.contains("first BMC"));
         CHECK(preflightText.contains("Repositories   Optional: cuda"));
         CHECK(preflightText.contains("Optional: cuda\n\nQueue system"));
-        CHECK(preflightText.contains("Queue system   SLURM partition batch"));
+        CHECK(preflightText.contains("Queue system   SLURM"));
+        CHECK(preflightText.contains("Queue name     batch"));
         CHECK(preflightText.contains("\n\n[Nodes]"));
         CHECK(preflightText.contains("Hostname"));
         CHECK(preflightText.contains("Node IP"));

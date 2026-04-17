@@ -172,26 +172,36 @@ auto isoSummary(const Cluster& model) -> std::string
         model.getDiskImage().getPath().string());
 }
 
-auto queueSummary(const Cluster& model) -> std::string
+void appendQueueDetails(std::vector<std::string>& rows, const Cluster& model)
 {
     const auto& queue = model.getQueueSystem();
     if (!queue.has_value()) {
-        return "No queue system configured";
+        rows.emplace_back(fmt::format("{:<14} {}", "Queue system", "None"));
+        return;
     }
 
     switch (queue.value()->getKind()) {
         case QueueSystem::Kind::SLURM:
-            return fmt::format(
-                "SLURM partition {}", queue.value()->getDefaultQueue());
+            rows.emplace_back(
+                fmt::format("{:<14} {}", "Queue system", "SLURM"));
+            rows.emplace_back(fmt::format(
+                "{:<14} {}", "Queue name", queue.value()->getDefaultQueue()));
+            break;
         case QueueSystem::Kind::PBS: {
             auto* pbs = dynamic_cast<PBS*>(queue.value().get());
             const auto place = pbs == nullptr
                 ? std::string("unknown")
                 : opencattus::utils::enums::toString(pbs->getExecutionPlace());
-            return fmt::format("PBS Professional execution place {}", place);
+            rows.emplace_back(
+                fmt::format("{:<14} {}", "Queue system", "PBS Professional"));
+            rows.emplace_back(fmt::format(
+                "{:<14} {}", "Queue name", queue.value()->getDefaultQueue()));
+            rows.emplace_back(fmt::format("{:<14} {}", "Execution", place));
+            break;
         }
         case QueueSystem::Kind::None:
-            return "No queue system configured";
+            rows.emplace_back(fmt::format("{:<14} {}", "Queue system", "None"));
+            break;
         default:
             std::unreachable();
     }
@@ -262,6 +272,7 @@ void appendNodeTable(std::vector<std::string>& rows, const Cluster& model)
 auto buildPreflightText(Cluster& model) -> std::string
 {
     std::vector<std::string> rows;
+    rows.emplace_back(fmt::format("{:<14} {}", "Cluster", model.getName()));
     rows.emplace_back(fmt::format("{:<14} {} with {}", "Headnode",
         osSummary(model.getHeadnode().getOS()),
         provisionerName(model.getProvisioner())));
@@ -276,8 +287,7 @@ auto buildPreflightText(Cluster& model) -> std::string
     rows.emplace_back(
         fmt::format("{:<14} {}", "Repositories", repositorySummary(model)));
     rows.emplace_back("");
-    rows.emplace_back(
-        fmt::format("{:<14} {}", "Queue system", queueSummary(model)));
+    appendQueueDetails(rows, model);
 
     appendNetworkDetails(rows, model);
     appendNodeTable(rows, model);
