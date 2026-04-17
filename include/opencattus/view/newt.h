@@ -63,6 +63,7 @@ protected:
     int m_flexUp;
     int m_dataWidth;
     int m_maxListHeight;
+    bool m_finished { false };
 
     [[nodiscard]] int fieldDialogWidth(std::size_t longestLabelWidth) const;
     [[nodiscard]] int listDialogWidth(std::size_t longestItemWidth,

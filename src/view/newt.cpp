@@ -131,7 +131,12 @@ Newt::Newt()
     newtRefresh();
 }
 
-Newt::~Newt() { newtFinished(); }
+Newt::~Newt()
+{
+    if (!m_finished) {
+        newtFinished();
+    }
+}
 
 void Newt::refreshScreenMetrics()
 {
@@ -161,10 +166,12 @@ int Newt::listHeight(const std::size_t itemCount) const
 
 void Newt::abort()
 {
-    // TODO: We should only destroy the view and not terminate the application
-    this->~Newt();
+    if (!m_finished) {
+        newtFinished();
+        m_finished = true;
+    }
     LOG_WARN("{}", TUIText::abort)
-    std::exit(EXIT_SUCCESS);
+    throw ViewAbortRequested(TUIText::abort);
 }
 
 bool Newt::allowsEmptyField(const struct newtWinEntry& entry)

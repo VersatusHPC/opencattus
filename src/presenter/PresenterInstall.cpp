@@ -33,84 +33,84 @@ struct NetworkMessages {
 } // namespace
 
 namespace opencattus::presenter {
-PresenterInstall::PresenterInstall(
-    std::unique_ptr<Cluster>& model, std::unique_ptr<View>& view)
+PresenterInstall::PresenterInstall(std::unique_ptr<Cluster>& model,
+    std::unique_ptr<View>& view, StepCompletionCallback onStepComplete,
+    std::set<std::string> completedSteps)
     : Presenter(model, view)
 {
+    const auto runStep = [&](std::string_view step, auto&& body) {
+        const auto stepName = std::string(step);
+        if (completedSteps.contains(stepName)) {
+            LOG_INFO("Skipping completed TUI step {}", stepName);
+            return;
+        }
 
-#if 1 // Welcome messages
-    Call<PresenterWelcome>();
-    Call<PresenterInstructions>();
-#endif
+        body();
 
-#if 1 // Set general settings
-    Call<PresenterGeneralSettings>();
-#endif
+        if (onStepComplete) {
+            onStepComplete(step);
+        }
+    };
 
-#if 1 // Timezone and locale support
-    Call<PresenterTime>();
-    Call<PresenterLocale>();
-#endif
+    runStep("welcome", [&]() { Call<PresenterWelcome>(); });
+    runStep("instructions", [&]() { Call<PresenterInstructions>(); });
 
-#if 1 // Hostname and domain
-    Call<PresenterHostId>();
-#endif
+    runStep("general", [&]() { Call<PresenterGeneralSettings>(); });
 
-    NetworkCreator nc;
-#if 1 // Networking
+    runStep("time", [&]() { Call<PresenterTime>(); });
+    runStep("locale", [&]() { Call<PresenterLocale>(); });
+
+    runStep("hostname", [&]() { Call<PresenterHostId>(); });
+
     // TODO: Under development
     //  * Add it to a loop where it asks to the user which kind of network we
     //  should add, while the operator says it's done adding networks. We remove
     //  the lazy network{1,2} after that.
+    runStep("networking", [&]() {
+        NetworkCreator nc;
 
-    try {
-        Call<PresenterNetwork>(nc, Network::Profile::External);
-    } catch (const std::exception& ex) {
-        LOG_ERROR("Failed to add {} network: {}",
-            opencattus::utils::enums::toString(Network::Profile::External),
-            ex.what());
-    }
-
-    try {
-        Call<PresenterNetwork>(nc, Network::Profile::Management);
-    } catch (const std::exception& ex) {
-        LOG_ERROR("Failed to add {} network: {}",
-            opencattus::utils::enums::toString(Network::Profile::Management),
-            ex.what());
-    }
-
-    if (m_view->yesNoQuestion(NetworkMessages::title,
-            NetworkMessages::serviceQuestion, NetworkMessages::serviceHelp)) {
         try {
-            Call<PresenterNetwork>(nc, Network::Profile::Service);
+            Call<PresenterNetwork>(nc, Network::Profile::External);
         } catch (const std::exception& ex) {
             LOG_ERROR("Failed to add {} network: {}",
-                opencattus::utils::enums::toString(Network::Profile::Service),
+                opencattus::utils::enums::toString(Network::Profile::External),
                 ex.what());
         }
-    }
 
-#endif
+        try {
+            Call<PresenterNetwork>(nc, Network::Profile::Management);
+        } catch (const std::exception& ex) {
+            LOG_ERROR("Failed to add {} network: {}",
+                opencattus::utils::enums::toString(
+                    Network::Profile::Management),
+                ex.what());
+        }
 
-#if 1 // Infiniband support
-    Call<PresenterInfiniband>(nc);
-#endif
-    nc.saveNetworksToModel(*m_model);
+        if (m_view->yesNoQuestion(NetworkMessages::title,
+                NetworkMessages::serviceQuestion,
+                NetworkMessages::serviceHelp)) {
+            try {
+                Call<PresenterNetwork>(nc, Network::Profile::Service);
+            } catch (const std::exception& ex) {
+                LOG_ERROR("Failed to add {} network: {}",
+                    opencattus::utils::enums::toString(
+                        Network::Profile::Service),
+                    ex.what());
+            }
+        }
 
-#if 1 // Compute nodes formation details
-    Call<PresenterNodesOperationalSystem>();
-    Call<PresenterProvisioner>();
-    Call<PresenterRepository>();
-    Call<PresenterNodes>();
-#endif
+        Call<PresenterInfiniband>(nc);
+        nc.saveNetworksToModel(*m_model);
+    });
 
-#if 1 // Queue System
-    Call<PresenterQueueSystem>();
-#endif
+    runStep("os", [&]() { Call<PresenterNodesOperationalSystem>(); });
+    runStep("provisioner", [&]() { Call<PresenterProvisioner>(); });
+    runStep("repositories", [&]() { Call<PresenterRepository>(); });
+    runStep("nodes", [&]() { Call<PresenterNodes>(); });
 
-#if 1 // Mail system
-    Call<PresenterMailSystem>();
-#endif
+    runStep("queue", [&]() { Call<PresenterQueueSystem>(); });
+
+    runStep("mail", [&]() { Call<PresenterMailSystem>(); });
 
     // Destroy the view since we don't need it anymore
     m_view.reset();

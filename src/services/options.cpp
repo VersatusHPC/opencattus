@@ -40,6 +40,7 @@ std::unique_ptr<Options> options::factory(int argc, const char** argv)
         .zabbixVersion = "latest-lts",
         .xcatVersion = "latest",
         .dumpAnswerfile = "",
+        .tuiDraft = "",
     };
     // Define the CLI11 app
     CLI::App app("OpenCATTUS Options");
@@ -85,6 +86,8 @@ std::unique_ptr<Options> options::factory(int argc, const char** argv)
         "Perform an unattended installation");
     app.add_option("--dump-answerfile", opt.dumpAnswerfile,
         "Create an answerfile based on input and save to specified path");
+    app.add_option("--tui-draft", opt.tuiDraft,
+        "Save interactive questionnaire progress to this draft answerfile");
     app.add_option("--config", opt.config,
         "Config file to pass options for the command line from a configuration "
         "file");
@@ -178,6 +181,16 @@ TEST_CASE("options::factory defaults Zabbix to the current LTS")
 
     REQUIRE(options != nullptr);
     CHECK(options->zabbixVersion == "latest-lts");
+}
+
+TEST_CASE("options::factory parses explicit TUI draft path")
+{
+    const char* argv[]
+        = { "opencattus", "--tui-draft", "/tmp/opencattus-tui.ini.draft" };
+    auto options = options::factory(3, argv);
+
+    REQUIRE(options != nullptr);
+    CHECK(options->tuiDraft == "/tmp/opencattus-tui.ini.draft");
 }
 #endif
 

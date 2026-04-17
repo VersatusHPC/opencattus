@@ -3,11 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <algorithm>
 #include <cctype>
 #include <cerrno>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <string_view>
 #include <unistd.h>
 #include <utility>
 #include <vector>
@@ -25,6 +28,7 @@
 #include <opencattus/services/log.h>
 #include <opencattus/services/options.h>
 #include <opencattus/services/shell.h>
+#include <opencattus/services/tui_session.h>
 #include <opencattus/services/xcat.h>
 #include <opencattus/utils/formatters.h>
 #include <opencattus/utils/singleton.h>
@@ -191,6 +195,7 @@ int main(int argc, const char** argv)
     // factory should return constant options, we also mutate the options during
     // the tests
     auto optsMut = options::factory(argc, argv);
+    const bool requestedTui = optsMut->enableTUI || !optsMut->tuiDraft.empty();
     const bool shouldRunInteractiveQuestionnaire
         = optsMut->answerfile.empty() && optsMut->testCommand.empty();
 
@@ -218,7 +223,7 @@ int main(int argc, const char** argv)
         fmt::print("Roles: {}", roles);
         return EXIT_SUCCESS;
     }
-    optsMut->enableTUI = shouldRunInteractiveQuestionnaire;
+    optsMut->enableTUI = requestedTui || shouldRunInteractiveQuestionnaire;
     Log::init(optsMut->logLevelInput, !optsMut->enableTUI);
 
 #ifndef NDEBUG
@@ -226,7 +231,9 @@ int main(int argc, const char** argv)
 #endif
     LOG_INFO("{} Started", productName)
 
-    if (optsMut->testCommand.empty() && optsMut->dumpAnswerfile.empty()) {
+    const bool outputOnlyTui = optsMut->enableTUI && optsMut->dryRun;
+    if (optsMut->testCommand.empty() && optsMut->dumpAnswerfile.empty()
+        && !outputOnlyTui) {
         // skip during tests, we do not want to run tests as root
         opencattus::checkEffectiveUserId();
     }
@@ -273,10 +280,42 @@ int main(int argc, const char** argv)
     auto model = std::make_unique<opencattus::models::Cluster>();
     LOG_INFO("Model initialized");
     std::unique_ptr<models::AnswerFile> answerfile;
+    auto tuiDraftState = services::tui::DraftState {};
+    auto tuiDraftPath = std::filesystem::path {};
+
     if (!opts->answerfile.empty()) {
-        LOG_INFO("Loading the answerfile: {}", opts->answerfile)
-        answerfile = std::make_unique<models::AnswerFile>(opts->answerfile);
-        model->fillData(*answerfile);
+        if (services::tui::isDraftAnswerfile(opts->answerfile)) {
+            if (!opts->enableTUI) {
+                fmt::print(stderr,
+                    "Answerfile {} is an incomplete TUI draft. Resume it with "
+                    "--tui --answerfile {}, or finish the questionnaire and "
+                    "use the completed output for unattended installs.\n",
+                    opts->answerfile, opts->answerfile);
+                Log::shutdown();
+                return EXIT_FAILURE;
+            }
+
+            LOG_INFO("Loading the TUI draft answerfile: {}", opts->answerfile)
+            tuiDraftPath = opts->answerfile;
+            tuiDraftState = services::tui::loadDraftState(tuiDraftPath);
+            services::tui::applyDraftToModel(*model, tuiDraftPath);
+        } else {
+            LOG_INFO("Loading the answerfile: {}", opts->answerfile)
+            answerfile = std::make_unique<models::AnswerFile>(opts->answerfile);
+            model->fillData(*answerfile);
+        }
+    } else if (opts->enableTUI) {
+        tuiDraftPath = services::tui::defaultDraftPath(*opts);
+        if (!opts->dumpAnswerfile.empty()
+            && services::tui::isDraftAnswerfile(opts->dumpAnswerfile)) {
+            tuiDraftPath = opts->dumpAnswerfile;
+        }
+
+        if (services::tui::isDraftAnswerfile(tuiDraftPath)) {
+            LOG_INFO("Resuming TUI draft answerfile: {}", tuiDraftPath.string())
+            tuiDraftState = services::tui::loadDraftState(tuiDraftPath);
+            services::tui::applyDraftToModel(*model, tuiDraftPath);
+        }
     }
     LOG_INFO("Answerfile loaded: {}", opts->answerfile)
 
@@ -286,12 +325,62 @@ int main(int argc, const char** argv)
 #endif
 
     if (opts->enableTUI) {
+        if (tuiDraftPath.empty()) {
+            tuiDraftPath = services::tui::defaultDraftPath(*opts);
+        }
+        auto completedSteps = tuiDraftState.completedSteps;
+        const auto saveTuiDraft = [&](std::string_view step) {
+            const auto stepName = std::string(step);
+            if (std::find(
+                    completedSteps.begin(), completedSteps.end(), stepName)
+                == completedSteps.end()) {
+                completedSteps.push_back(stepName);
+            }
+
+            try {
+                services::tui::writeDraft(*model, tuiDraftPath, completedSteps);
+            } catch (const std::exception& ex) {
+                LOG_WARN("Failed to save TUI draft {} after step {}: {}",
+                    tuiDraftPath.string(), stepName, ex.what());
+            }
+        };
+
         // Entrypoint; if the view is constructed it will start the TUI.
-        std::unique_ptr<View> view = std::make_unique<Newt>();
-        auto presenter
-            = std::make_unique<opencattus::presenter::PresenterInstall>(
-                model, view);
+        try {
+            std::unique_ptr<View> view = std::make_unique<Newt>();
+            auto presenter
+                = std::make_unique<opencattus::presenter::PresenterInstall>(
+                    model, view, saveTuiDraft,
+                    services::tui::completedStepSet(tuiDraftState));
+        } catch (const ViewAbortRequested& ex) {
+            try {
+                services::tui::writeDraft(*model, tuiDraftPath, completedSteps);
+                fmt::print(
+                    "TUI stopped. Draft saved to {}\n", tuiDraftPath.string());
+            } catch (const std::exception& saveError) {
+                LOG_ERROR("Failed to save TUI draft {}: {}",
+                    tuiDraftPath.string(), saveError.what());
+                fmt::print(stderr,
+                    "TUI stopped, but saving the draft to {} failed: {}\n",
+                    tuiDraftPath.string(), saveError.what());
+                Log::shutdown();
+                return EXIT_FAILURE;
+            }
+            LOG_INFO("{}", ex.what());
+            Log::shutdown();
+            return EXIT_SUCCESS;
+        }
+
         answerfile = generateAnswerfileFromTuiModel(*model);
+
+        tuiDraftState.completedSteps = completedSteps;
+        try {
+            services::tui::writeDraft(
+                *model, tuiDraftPath, completedSteps, true);
+        } catch (const std::exception& ex) {
+            LOG_WARN("Failed to mark TUI draft complete at {}: {}",
+                tuiDraftPath.string(), ex.what());
+        }
 
         if (opts->dumpAnswerfile.empty() && !opts->dryRun) {
             Log::init(opts->logLevelInput, true);
@@ -299,7 +388,12 @@ int main(int argc, const char** argv)
     }
 
     if (!opts->dumpAnswerfile.empty()) {
-        model->dumpData(opts->dumpAnswerfile);
+        if (opts->enableTUI) {
+            services::tui::writeDraft(*model, opts->dumpAnswerfile,
+                tuiDraftState.completedSteps, true);
+        } else {
+            model->dumpData(opts->dumpAnswerfile);
+        }
         Log::shutdown();
         return EXIT_SUCCESS;
     }

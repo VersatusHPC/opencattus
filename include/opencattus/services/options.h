@@ -34,6 +34,7 @@ struct Options final {
     std::string zabbixVersion;
     std::string xcatVersion;
     std::string dumpAnswerfile;
+    std::string tuiDraft;
     std::string stopAfterStep;
     std::set<std::string> skipSteps;
     std::set<std::string> forceSteps;

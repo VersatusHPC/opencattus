@@ -1852,11 +1852,17 @@ TEST_SUITE("opencattus::presenter::tui")
                 state->responses.begin() + 12, yesNo(false));
         }
 
+        std::vector<std::string> completedSteps;
         std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
-        PresenterInstall(model, view);
+        PresenterInstall(model, view,
+            [&](std::string_view step) { completedSteps.emplace_back(step); });
 
         CHECK_FALSE(view);
         CHECK(state->responses.empty());
+        CHECK(completedSteps
+            == std::vector<std::string> { "welcome", "instructions", "general",
+                "time", "locale", "hostname", "networking", "os", "provisioner",
+                "repositories", "nodes", "queue", "mail" });
 
         const auto generalScreen
             = firstMessageIndex(state->messages, "General cluster settings|");
