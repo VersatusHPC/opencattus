@@ -14,12 +14,6 @@
 
 static constexpr int scrollBarWidth = 3;
 
-static auto dialogTopFor(int rows, int windowHeight) -> int
-{
-    const auto safeRows = std::max(1, rows - 2);
-    return 1 + std::max(0, (safeRows - windowHeight) / 2);
-}
-
 static auto checkboxLabel(std::string_view label, bool selected) -> std::string
 {
     return fmt::format(" [{}] {}", selected ? "*" : " ", label);
@@ -134,8 +128,7 @@ std::string Newt::listMenuImpl(const char* title, const char* message,
     int windowHeight = 0;
     newtGridGetSize(grid, &windowWidth, &windowHeight);
     newtGridWrappedWindowAt(grid, const_cast<char*>(safeTitle),
-        std::max(0, (m_cols - windowWidth) / 2),
-        dialogTopFor(m_rows, windowHeight));
+        dialogLeftFor(windowWidth), dialogTopFor(windowHeight));
     newtGridAddComponentsToForm(grid, form, 1);
     newtRefresh();
 
@@ -249,8 +242,7 @@ std::pair<int, std::vector<std::string>> Newt::checkboxSelectionMenu(
     int windowHeight = 0;
     newtGridGetSize(grid, &windowWidth, &windowHeight);
     newtGridWrappedWindowAt(grid, const_cast<char*>(title),
-        std::max(0, (m_cols - windowWidth) / 2),
-        dialogTopFor(m_rows, windowHeight));
+        dialogLeftFor(windowWidth), dialogTopFor(windowHeight));
 
     newtGridAddComponentsToForm(grid, form, 1);
 

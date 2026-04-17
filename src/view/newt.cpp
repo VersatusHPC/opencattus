@@ -28,6 +28,8 @@ constexpr int maxDataWidth = 28;
 constexpr int minListHeight = 4;
 constexpr int minFieldDialogWidth = 34;
 constexpr int minListDialogWidth = 34;
+constexpr int preferredDialogTop = 2;
+constexpr int reservedBottomRows = 3;
 
 auto calculateDialogWidth(int cols) -> int
 {
@@ -43,6 +45,15 @@ auto calculateDataWidth(int dialogWidth) -> int
 auto calculateMaxListHeight(int rows) -> int
 {
     return std::max(rows - 16, minListHeight);
+}
+
+auto calculateMaxDialogHeight(int rows) -> int { return std::max(8, rows - 4); }
+
+auto calculateDialogTop(int rows, int windowHeight) -> int
+{
+    const auto lastSafeTop
+        = std::max(1, rows - windowHeight - reservedBottomRows);
+    return std::min(preferredDialogTop, lastSafeTop);
 }
 
 auto calculateFieldDialogWidth(
@@ -164,6 +175,18 @@ int Newt::listHeight(const std::size_t itemCount) const
     return calculateListHeight(m_maxListHeight, itemCount);
 }
 
+int Newt::dialogLeftFor(const int windowWidth) const
+{
+    return std::max(0, (m_cols - windowWidth) / 2);
+}
+
+int Newt::dialogTopFor(const int windowHeight) const
+{
+    return calculateDialogTop(m_rows, windowHeight);
+}
+
+int Newt::maxDialogHeight() const { return calculateMaxDialogHeight(m_rows); }
+
 void Newt::abort()
 {
     if (!m_finished) {
@@ -261,7 +284,11 @@ bool Newt::progressMenu(const char* title, const char* message,
         NEWT_GRID_FLAG_GROWX | NEWT_GRID_FLAG_GROWY);
     newtGridSetField(grid, 0, 2, NEWT_GRID_SUBGRID, buttonGrid, 0, 1, 0, 0, 0,
         NEWT_GRID_FLAG_GROWX);
-    newtGridWrappedWindow(grid, dtitle);
+    int windowWidth = 0;
+    int windowHeight = 0;
+    newtGridGetSize(grid, &windowWidth, &windowHeight);
+    newtGridWrappedWindowAt(
+        grid, dtitle, dialogLeftFor(windowWidth), dialogTopFor(windowHeight));
 
     newtFormAddComponents(form, progress, label, b1, nullptr);
     newtFormWatchFd(form, cmd.pipe_stream.pipe().native_source(), NEWT_FD_READ);
@@ -300,6 +327,9 @@ TEST_CASE("newt geometry keeps dialogs readable on an 80x24 terminal")
     CHECK(calculateDialogWidth(80) == 72);
     CHECK(calculateDataWidth(calculateDialogWidth(80)) == 24);
     CHECK(calculateMaxListHeight(24) == 8);
+    CHECK(calculateMaxDialogHeight(24) == 20);
+    CHECK(calculateDialogTop(24, 18) == 2);
+    CHECK(calculateDialogTop(24, 20) == 1);
     CHECK(calculateFieldDialogWidth(80, 72, 24, 11) == 43);
     CHECK(calculateFieldDialogWidth(80, 72, 24, 20) == 52);
     CHECK(calculateFieldDialogWidth(80, 72, 24, 34) == 66);

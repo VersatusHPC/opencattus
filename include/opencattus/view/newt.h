@@ -69,6 +69,9 @@ protected:
     [[nodiscard]] int listDialogWidth(std::size_t longestItemWidth,
         std::string_view message, std::string_view title) const;
     [[nodiscard]] int listHeight(std::size_t itemCount) const;
+    [[nodiscard]] int dialogLeftFor(int windowWidth) const;
+    [[nodiscard]] int dialogTopFor(int windowHeight) const;
+    [[nodiscard]] int maxDialogHeight() const;
     void refreshScreenMetrics();
 
     void abort() override;

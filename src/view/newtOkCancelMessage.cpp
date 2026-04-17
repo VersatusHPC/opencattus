@@ -69,18 +69,6 @@ auto wrapText(std::string_view text, std::size_t width) -> std::string
     return out;
 }
 
-auto dialogTopFor(int rows, int windowHeight) -> int
-{
-    constexpr auto preferredTop = 2;
-    const auto lastSafeTop = std::max(1, rows - windowHeight - 3);
-    return std::min(preferredTop, lastSafeTop);
-}
-
-auto maxScrollableWindowHeight(int rows) -> int
-{
-    return std::max(8, rows - 4);
-}
-
 auto scrollableBodyHeight(int maxListHeight) -> int
 {
     return std::max(4, std::min(maxListHeight, 12));
@@ -153,7 +141,7 @@ void Newt::scrollableMessage(const char* title, const char* message,
     int windowWidth = 0;
     int windowHeight = 0;
     newtGridGetSize(grid, &windowWidth, &windowHeight);
-    const auto maxWindowHeight = maxScrollableWindowHeight(m_rows);
+    const auto maxWindowHeight = maxDialogHeight();
     while (bodyHeight > 4 && windowHeight > maxWindowHeight) {
         --bodyHeight;
         newtTextboxSetHeight(body, bodyHeight);
@@ -161,8 +149,7 @@ void Newt::scrollableMessage(const char* title, const char* message,
     }
 
     newtGridWrappedWindowAt(grid, const_cast<char*>(safeTitle),
-        std::max(0, (m_cols - windowWidth) / 2),
-        dialogTopFor(m_rows, windowHeight));
+        dialogLeftFor(windowWidth), dialogTopFor(windowHeight));
     newtGridAddComponentsToForm(grid, form, 1);
     newtFormSetCurrent(form, buttonOk);
     newtRefresh();
