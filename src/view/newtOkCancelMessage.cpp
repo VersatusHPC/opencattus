@@ -78,12 +78,12 @@ auto dialogTopFor(int rows, int windowHeight) -> int
 
 auto maxScrollableWindowHeight(int rows) -> int
 {
-    return std::max(8, rows - 6);
+    return std::max(8, rows - 4);
 }
 
 auto scrollableBodyHeight(int maxListHeight) -> int
 {
-    return std::max(4, std::min(maxListHeight - 2, 10));
+    return std::max(4, std::min(maxListHeight, 12));
 }
 
 } // namespace
