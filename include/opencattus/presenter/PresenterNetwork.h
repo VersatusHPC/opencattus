@@ -56,7 +56,7 @@ private:
     std::unique_ptr<Network> m_network;
 
     struct Messages {
-        static constexpr const auto title = "Network Settings";
+        static constexpr const auto title = "Network settings";
         static constexpr const auto errorInsufficient
             = "Not enough interfaces!\nYou need at least two separate cards: "
               "one internal and one external";
@@ -71,14 +71,19 @@ private:
             }
 
             static constexpr const auto help
-                = Presenter::Messages::Placeholder::help;
+                = "Pick the physical or VLAN interface for this network. "
+                  "External, management, service, and application networks "
+                  "must not overlap unless the prompt explicitly allows it.";
         };
 
         struct Details {
             static constexpr const auto question
                 = "Fill the required network details";
             static constexpr const auto help
-                = Presenter::Messages::Placeholder::help;
+                = "Enter the head-node address, subnet mask, gateway when "
+                  "required, DNS domain, and nameservers for the selected "
+                  "network. Service and application gateways may be left "
+                  "empty.";
         };
 
         struct Error {

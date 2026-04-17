@@ -182,7 +182,7 @@ auto formatNoMatchingIsoMessage(
     const fs::path& directory, const OS::Distro distro) -> std::string
 {
     return fmt::format(
-        "No ISO matching the selected distro was found in the "
+        "No ISO matching the selected distribution was found in the "
         "provided directory.\n\nDirectory: {}\nLooked for: *.iso "
         "filenames containing \"{}\"\nExample: {}",
         directory.string(), isoSearchToken(distro), exampleIsoName(distro));
@@ -401,8 +401,8 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
                 Messages::OperationalSystemDownloadIso::SecondStage::help);
 
             const auto selectedDistro = distros.find(distroToDownload);
-            LOG_ASSERT(
-                selectedDistro != distros.end(), "selected distro missing");
+            LOG_ASSERT(selectedDistro != distros.end(),
+                "selected distribution missing");
             if (downloadSelectedDistro(
                     selectedDistro->first, selectedDistro->second)) {
                 break;
@@ -446,8 +446,8 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
                     Messages::OperationalSystemDistro::help);
 
                 const auto selectedDistro = distros.find(selectedDistroName);
-                LOG_ASSERT(
-                    selectedDistro != distros.end(), "selected distro missing");
+                LOG_ASSERT(selectedDistro != distros.end(),
+                    "selected distribution missing");
 
                 const auto isoRoot = fs::path(isoDirectoryPath.data()->second);
                 auto isos = findMatchingIsos(isoRoot, selectedDistro->second);

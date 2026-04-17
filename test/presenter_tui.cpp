@@ -1024,7 +1024,7 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(model->getHeadnode().getOS().getDistro() == OS::Distro::Rocky);
         CHECK(std::ranges::any_of(state->messages, [](const auto& message) {
             return message
-                == "Nodes operational system settings|Unfortunately, we do "
+                == "Compute node OS settings|Unfortunately, we do "
                    "not support downloading Red Hat Enterprise Linux yet.\n"
                    "Please download the ISO yourself and put in an "
                    "appropriate location.";
@@ -1059,7 +1059,7 @@ TEST_SUITE("opencattus::presenter::tui")
             == isoDir / "Rocky-9.6-x86_64-dvd.iso");
         CHECK(std::ranges::any_of(state->messages, [](const auto& message) {
             return message
-                == "Nodes operational system settings|The specified path is "
+                == "Compute node OS settings|The specified path is "
                    "not a readable directory";
         }));
 
@@ -1481,7 +1481,7 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(state->responses.empty());
         CHECK(std::ranges::any_of(state->messages, [](const auto& message) {
             return message
-                == "Network Settings|Gateway must be inside the selected "
+                == "Network settings|Gateway must be inside the selected "
                    "subnet";
         }));
 
@@ -1534,7 +1534,7 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(state->responses.empty());
         CHECK(std::ranges::any_of(state->messages, [](const auto& message) {
             return message
-                == "Network Settings|The service network must use a separate "
+                == "Network settings|The service network must use a separate "
                    "subnet from the management network";
         }));
 
@@ -1884,11 +1884,11 @@ TEST_SUITE("opencattus::presenter::tui")
         const auto hostScreen
             = firstMessageIndex(state->messages, "Hostname settings|");
         const auto networkScreens = messageIndices(state->messages,
-            "Network Settings|We will now ask questions about your ");
+            "Network settings|We will now ask questions about your ");
         const auto servicePrompt = firstMessageIndex(state->messages,
             "Network settings|Do you want to configure a service network?");
-        const auto osScreen = firstMessageIndex(
-            state->messages, "Nodes operational system settings|");
+        const auto osScreen
+            = firstMessageIndex(state->messages, "Compute node OS settings|");
         const auto provisionerScreen
             = firstMessageIndex(state->messages, "Provisioner settings|");
         const auto repositoryScreen
@@ -1896,7 +1896,7 @@ TEST_SUITE("opencattus::presenter::tui")
         const auto nodesScreen
             = firstMessageIndex(state->messages, "Compute nodes settings|");
         const auto queueScreen
-            = firstMessageIndex(state->messages, "Queue System settings|");
+            = firstMessageIndex(state->messages, "Queue system settings|");
         const auto mailScreen
             = firstMessageIndex(state->messages, "Mail system settings|");
 
@@ -1909,12 +1909,12 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(networkScreens[1] < servicePrompt);
         if (hasUsableInfinibandInterface()) {
             const auto infinibandScreen = firstMessageIndex(state->messages,
-                "Infiniband settings|Do you have an Infiniband Fabric "
+                "InfiniBand settings|Do you have an InfiniBand fabric "
                 "available?");
             CHECK(servicePrompt < infinibandScreen);
             CHECK(infinibandScreen < osScreen);
         } else {
-            CHECK(messageIndices(state->messages, "Infiniband settings|")
+            CHECK(messageIndices(state->messages, "InfiniBand settings|")
                     .empty());
             CHECK(servicePrompt < osScreen);
         }

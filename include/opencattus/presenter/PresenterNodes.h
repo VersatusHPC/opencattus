@@ -21,7 +21,9 @@ private:
             static constexpr const auto question
                 = "Enter the compute nodes information";
             static constexpr const auto help
-                = Presenter::Messages::Placeholder::help;
+                = "The prefix and padding generate node names such as n01. "
+                  "The first compute IP is incremented for each node. Leave "
+                  "BMC first IP empty when nodes have no BMC.";
 
             static constexpr const auto prefix = "Prefix";
             static constexpr const auto padding = "Padding";
@@ -37,7 +39,9 @@ private:
             static constexpr const auto question
                 = "Enter the compute node topology and BMC defaults";
             static constexpr const auto help
-                = Presenter::Messages::Placeholder::help;
+                = "Topology values are used to generate scheduler node "
+                  "definitions. BMC defaults are copied to each node that has "
+                  "a BMC IP address.";
 
             static constexpr const auto sockets = "Sockets";
             static constexpr const auto coresPerSocket = "Cores per socket";
@@ -76,7 +80,9 @@ private:
             static constexpr const auto question
                 = "Enter the compute nodes quantity information";
             static constexpr const auto help
-                = Presenter::Messages::Placeholder::help;
+                = "Enter how many racks and nodes per rack should be "
+                  "generated. "
+                  "The start number controls the first generated hostname.";
 
             static constexpr const auto racks = "Racks";
             static constexpr const auto nodes = "Nodes";
@@ -87,7 +93,9 @@ private:
             static constexpr const auto question
                 = "Enter the management MAC and BMC IP address for node";
             static constexpr const auto help
-                = Presenter::Messages::Placeholder::help;
+                = "The management MAC address is required for provisioning and "
+                  "network boot. The BMC IP address is optional and should use "
+                  "the service network when one exists.";
 
             static constexpr const auto macAddress = "Management MAC address";
             static constexpr const auto bmcAddress

@@ -17,7 +17,9 @@ private:
         static constexpr const auto question
             = "Choose how the cluster nodes should be provisioned";
         static constexpr const auto help
-            = Presenter::Messages::Placeholder::help;
+            = "The provisioner imports node images, tracks compute nodes, and "
+              "drives network boot. xCAT is available on supported Enterprise "
+              "Linux releases; Confluent is required for EL10 today.";
 
         static constexpr const auto confluentOnly
             = "Confluent is currently required for EL10 installs";

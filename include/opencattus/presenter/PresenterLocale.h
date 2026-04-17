@@ -21,7 +21,9 @@ private:
         static constexpr const auto legacyQuestion
             = "Pick an advanced or legacy locale";
         static constexpr const auto help
-            = Presenter::Messages::Placeholder::help;
+            = "Choose the default locale for command output, sorting, date "
+              "formats, and other regional behavior. UTF-8 locales are "
+              "preferred for new systems.";
     };
 
 public:

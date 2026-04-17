@@ -18,21 +18,22 @@ using PresenterNodesVersionCombo
 class PresenterNodesOperationalSystem : public Presenter {
 private:
     struct Messages {
-        static constexpr const auto title = "Nodes operational system settings";
+        static constexpr const auto title = "Compute node OS settings";
 
         struct OperationalSystemDownloadIso {
             struct FirstStage {
                 static constexpr const auto question
-                    = "You want to download a ISO for your node?";
+                    = "Do you want to download an ISO for your nodes?";
                 static constexpr const auto help
-                    = "Choose 'YES' if you want to download a new one or 'NO' "
-                      "if you already have an ISO.";
+                    = "Choose Yes to download a supported installation DVD, "
+                      "or No to select an ISO already available on this host.";
             };
             struct SecondStage {
                 static constexpr const auto question
                     = "Choose an ISO to download";
                 static constexpr const auto help
-                    = Presenter::Messages::Placeholder::help;
+                    = "Select the distribution installed on compute nodes. Red "
+                      "Hat Enterprise Linux must be provided as a local ISO.";
             };
             struct Progress {
                 static constexpr const auto download
@@ -42,23 +43,25 @@ private:
 
         struct OperationalSystemDirectoryPath {
             static constexpr const auto question
-                = "Inform the directory where your operational system images "
-                  "are";
+                = "Enter the directory containing installation ISO images";
             static constexpr const auto help
-                = Presenter::Messages::Placeholder::help;
+                = "Provide a readable directory path. The next screen lists "
+                  "matching ISO files for the selected distribution.";
             static constexpr const auto field = "Path to ISOs directory:";
 
             static constexpr const auto nonExistent
-                = "The specified directory do not exist";
+                = "The specified directory does not exist";
             static constexpr const auto notReadable
                 = "The specified path is not a readable directory";
         };
 
         struct OperationalSystemDistro {
             static constexpr const auto question
-                = "Choose your operational system distro";
+                = "Choose the operating system distribution";
             static constexpr const auto help
-                = Presenter::Messages::Placeholder::help;
+                = "Select the distribution family for the compute node image. "
+                  "This controls ISO matching, repository selection, and "
+                  "provisioner defaults.";
         };
 
         struct OperationalSystemVersion {
@@ -74,7 +77,8 @@ private:
             static constexpr const auto invalidArch
                 = "Supported architectures are x86_64 and ppc64le";
             static constexpr const auto help
-                = Presenter::Messages::Placeholder::help;
+                = "Enter the OS version and CPU architecture for the compute "
+                  "node image. The version should match the ISO filename.";
 
             static constexpr const auto version = "Version";
             static constexpr const auto architecture = "Architecture";
@@ -82,11 +86,13 @@ private:
 
         struct OperationalSystem {
             static constexpr const auto question
-                = "Choose your operational system ISO";
+                = "Choose the operating system ISO";
             static constexpr const auto help
-                = Presenter::Messages::Placeholder::help;
+                = "Select the installation DVD ISO to import into the "
+                  "provisioner. Boot, minimal, and live images are not "
+                  "suitable.";
             static constexpr const auto noneFound
-                = "No ISO matching the selected distro was found in the "
+                = "No ISO matching the selected distribution was found in the "
                   "provided directory";
             static constexpr const auto downloadMissing
                 = "Download an ISO for this distro instead? Choose No to enter "

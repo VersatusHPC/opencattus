@@ -19,7 +19,9 @@ private:
             static constexpr const auto question
                 = "Fill the required data about your new cluster";
             static constexpr const auto help
-                = Presenter::Messages::Placeholder::help;
+                = "Use a short cluster name without spaces. The administrator "
+                  "e-mail is used for generated service configuration and "
+                  "cluster notifications.";
 
             static constexpr const auto clusterName = "Cluster Name";
             static constexpr const auto companyName = "Company Name";
@@ -30,7 +32,8 @@ private:
             static constexpr const auto question
                 = "Select the boot target for the headnode";
             static constexpr const auto help
-                = Presenter::Messages::Placeholder::help;
+                = "Choose Text for a server-style boot target. Graphical is "
+                  "only useful when this head node should boot into a desktop.";
         };
     };
 
