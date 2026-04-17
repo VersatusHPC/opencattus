@@ -19,6 +19,17 @@ static auto checkboxLabel(std::string_view label, bool selected) -> std::string
     return fmt::format(" [{}] {}", selected ? "*" : " ", label);
 }
 
+static auto centeredListLabel(std::string_view label, int width) -> std::string
+{
+    if (width <= 0 || label.size() >= static_cast<std::size_t>(width)) {
+        return std::string(label);
+    }
+
+    const auto padding = static_cast<std::size_t>(width) - label.size();
+    const auto leftPadding = padding / 2;
+    return fmt::format("{}{}", std::string(leftPadding, ' '), label);
+}
+
 static std::vector<std::string> retrieveSelectedItems(newtComponent list)
 {
     int selectCount = 0;
@@ -107,8 +118,12 @@ std::string Newt::listMenuImpl(const char* title, const char* message,
     auto* list = newtListbox(
         0, 0, visibleListHeight, listFlags | NEWT_FLAG_RETURNEXIT);
     newtListboxSetWidth(list, listWidth);
+    const auto listTextWidth = listWidth - scrollAdjust;
+    std::vector<std::string> labels;
+    labels.reserve(items.size());
     for (const auto& item : items) {
-        newtListboxAppendEntry(list, item.c_str(), item.c_str());
+        labels.emplace_back(centeredListLabel(item, listTextWidth));
+        newtListboxAppendEntry(list, labels.back().c_str(), item.c_str());
     }
 
     newtGrid grid = newtCreateGrid(1, 3);
