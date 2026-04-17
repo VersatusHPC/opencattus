@@ -28,7 +28,6 @@ constexpr int maxDataWidth = 28;
 constexpr int minListHeight = 4;
 constexpr int minFieldDialogWidth = 34;
 constexpr int minListDialogWidth = 34;
-constexpr int preferredDialogTop = 2;
 constexpr int reservedBottomRows = 3;
 
 auto calculateDialogWidth(int cols) -> int
@@ -51,9 +50,10 @@ auto calculateMaxDialogHeight(int rows) -> int { return std::max(8, rows - 4); }
 
 auto calculateDialogTop(int rows, int windowHeight) -> int
 {
+    const auto centeredTop = std::max(1, (rows - windowHeight) / 2);
     const auto lastSafeTop
         = std::max(1, rows - windowHeight - reservedBottomRows);
-    return std::min(preferredDialogTop, lastSafeTop);
+    return std::min(centeredTop, lastSafeTop);
 }
 
 auto calculateFieldDialogWidth(
@@ -328,7 +328,8 @@ TEST_CASE("newt geometry keeps dialogs readable on an 80x24 terminal")
     CHECK(calculateDataWidth(calculateDialogWidth(80)) == 24);
     CHECK(calculateMaxListHeight(24) == 8);
     CHECK(calculateMaxDialogHeight(24) == 20);
-    CHECK(calculateDialogTop(24, 18) == 2);
+    CHECK(calculateDialogTop(24, 16) == 4);
+    CHECK(calculateDialogTop(24, 18) == 3);
     CHECK(calculateDialogTop(24, 20) == 1);
     CHECK(calculateFieldDialogWidth(80, 72, 24, 11) == 43);
     CHECK(calculateFieldDialogWidth(80, 72, 24, 20) == 52);
