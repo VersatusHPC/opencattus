@@ -2111,6 +2111,8 @@ TEST_SUITE("opencattus::presenter::tui")
         }
 
         auto model = std::make_unique<Cluster>();
+        model->getHeadnode().setOS(
+            OS(OS::Distro::RHEL, OS::Platform::el9, 6, OS::Arch::x86_64));
         const auto outputPath
             = tempPath("opencattus-tui-install-dry-run-answerfile", "ini");
 
