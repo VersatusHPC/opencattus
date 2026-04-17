@@ -28,7 +28,11 @@ constexpr int maxDataWidth = 28;
 constexpr int minListHeight = 4;
 constexpr int minFieldDialogWidth = 34;
 constexpr int minListDialogWidth = 34;
-constexpr int reservedBottomRows = 3;
+constexpr int wrappedWindowRows = 2;
+constexpr int windowShadowRows = 1;
+constexpr int reservedHeaderRows = 1;
+constexpr int reservedFooterRows = 1;
+constexpr int minWindowTop = reservedHeaderRows + 1;
 
 auto calculateDialogWidth(int cols) -> int
 {
@@ -46,13 +50,20 @@ auto calculateMaxListHeight(int rows) -> int
     return std::max(rows - 16, minListHeight);
 }
 
-auto calculateMaxDialogHeight(int rows) -> int { return std::max(8, rows - 4); }
+auto calculateMaxDialogHeight(int rows) -> int
+{
+    return std::max(8,
+        rows - reservedHeaderRows - reservedFooterRows - wrappedWindowRows
+            - windowShadowRows - minWindowTop);
+}
 
 auto calculateDialogTop(int rows, int windowHeight) -> int
 {
-    const auto centeredTop = std::max(1, (rows - windowHeight) / 2);
-    const auto lastSafeTop
-        = std::max(1, rows - windowHeight - reservedBottomRows);
+    const auto wrappedHeight = windowHeight + wrappedWindowRows;
+    const auto centeredTop = std::max(minWindowTop, (rows - wrappedHeight) / 2);
+    const auto lastSafeTop = std::max(minWindowTop,
+        rows - windowHeight - wrappedWindowRows - windowShadowRows
+            - reservedFooterRows);
     return std::min(centeredTop, lastSafeTop);
 }
 
@@ -327,10 +338,10 @@ TEST_CASE("newt geometry keeps dialogs readable on an 80x24 terminal")
     CHECK(calculateDialogWidth(80) == 72);
     CHECK(calculateDataWidth(calculateDialogWidth(80)) == 24);
     CHECK(calculateMaxListHeight(24) == 8);
-    CHECK(calculateMaxDialogHeight(24) == 20);
-    CHECK(calculateDialogTop(24, 16) == 4);
-    CHECK(calculateDialogTop(24, 18) == 3);
-    CHECK(calculateDialogTop(24, 20) == 1);
+    CHECK(calculateMaxDialogHeight(24) == 17);
+    CHECK(calculateDialogTop(24, 16) == 3);
+    CHECK(calculateDialogTop(24, 17) == 2);
+    CHECK(calculateDialogTop(24, 19) == 2);
     CHECK(calculateFieldDialogWidth(80, 72, 24, 11) == 43);
     CHECK(calculateFieldDialogWidth(80, 72, 24, 20) == 52);
     CHECK(calculateFieldDialogWidth(80, 72, 24, 34) == 66);
