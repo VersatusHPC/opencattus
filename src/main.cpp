@@ -10,6 +10,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <iostream>
+#include <limits>
+#include <string>
 #include <string_view>
 #include <unistd.h>
 #include <utility>
@@ -183,6 +186,33 @@ auto generateAnswerfileFromTuiModel(opencattus::models::Cluster& model)
     return std::make_unique<opencattus::models::AnswerFile>(path);
 }
 
+auto askYesNo(std::string_view question, bool defaultYes) -> bool
+{
+    while (true) {
+        fmt::print("{} [{}]\n", question, defaultYes ? "Y/n" : "y/N");
+
+        std::string response;
+        if (!std::getline(std::cin, response)) {
+            return defaultYes;
+        }
+
+        if (response.empty()) {
+            return defaultYes;
+        }
+
+        const auto choice = static_cast<char>(
+            std::toupper(static_cast<unsigned char>(response.front())));
+        if (choice == 'Y') {
+            return true;
+        }
+        if (choice == 'N') {
+            return false;
+        }
+
+        fmt::print("Please answer yes or no.\n");
+    }
+}
+
 }; // anonymous namespace
 
 /**
@@ -252,6 +282,7 @@ int main(int argc, const char** argv)
                        "continue? [Y/N]\n",
                 opencattus::productName);
             std::cin >> response;
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
             if (std::toupper(response) == 'Y') {
                 LOG_INFO("Running {}.\n", opencattus::productName)
@@ -312,9 +343,21 @@ int main(int argc, const char** argv)
         }
 
         if (services::tui::isDraftAnswerfile(tuiDraftPath)) {
-            LOG_INFO("Resuming TUI draft answerfile: {}", tuiDraftPath.string())
-            tuiDraftState = services::tui::loadDraftState(tuiDraftPath);
-            services::tui::applyDraftToModel(*model, tuiDraftPath);
+            const auto resumeDraft
+                = askYesNo(fmt::format("A TUI draft was found at {}. "
+                                       "Do you want to continue "
+                                       "from there?",
+                               tuiDraftPath.string()),
+                    true);
+            if (resumeDraft) {
+                LOG_INFO(
+                    "Resuming TUI draft answerfile: {}", tuiDraftPath.string())
+                tuiDraftState = services::tui::loadDraftState(tuiDraftPath);
+                services::tui::applyDraftToModel(*model, tuiDraftPath);
+            } else {
+                LOG_INFO(
+                    "Ignoring TUI draft answerfile: {}", tuiDraftPath.string())
+            }
         }
     }
     LOG_INFO("Answerfile loaded: {}", opts->answerfile)
