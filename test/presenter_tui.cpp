@@ -1976,6 +1976,21 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(preflightText.contains("Hostname"));
         CHECK(preflightText.contains("Node IP"));
         CHECK(preflightText.contains("BMC IP"));
+        for (std::size_t start = 0; start < preflightText.size();) {
+            const auto end = preflightText.find('\n', start);
+            const auto line = end == std::string::npos
+                ? std::string_view(preflightText).substr(start)
+                : std::string_view(preflightText).substr(start, end - start);
+            if (line.starts_with("Hostname") || line.starts_with("n01")
+                || line.starts_with("n02")) {
+                CHECK(line.size() <= 61);
+            }
+
+            if (end == std::string::npos) {
+                break;
+            }
+            start = end + 1;
+        }
         CHECK(preflightText.contains("n01"));
         CHECK(preflightText.contains("192.168.30.101"));
         CHECK(preflightText.contains("172.16.0.11"));

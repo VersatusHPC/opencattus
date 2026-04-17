@@ -198,10 +198,25 @@ auto bmcAddressSummary(const opencattus::models::Node& node) -> std::string
     return node.getBMC()->getAddress();
 }
 
+auto fitColumn(std::string value, std::size_t width) -> std::string
+{
+    if (value.size() <= width) {
+        return value;
+    }
+
+    if (width == 0) {
+        return "";
+    }
+
+    value.resize(width);
+    value.back() = '~';
+    return value;
+}
+
 void appendNodeTable(std::vector<std::string>& rows, const Cluster& model)
 {
     rows.emplace_back("[Nodes]");
-    rows.emplace_back(fmt::format("  {:<16} {:<15} {:<15} {}", "Hostname",
+    rows.emplace_back(fmt::format("{:<11} {:<15} {:<15} {:<17}", "Hostname",
         "Node IP", "BMC IP", "MAC address"));
 
     const auto& nodes = model.getNodes();
@@ -211,10 +226,12 @@ void appendNodeTable(std::vector<std::string>& rows, const Cluster& model)
     }
 
     for (const auto& node : nodes) {
-        rows.emplace_back(
-            fmt::format("  {:<16} {:<15} {:<15} {}", node.getHostname(),
-                nodeAddressSummary(node), bmcAddressSummary(node),
-                node.getMACAddress().empty() ? "-" : node.getMACAddress()));
+        rows.emplace_back(fmt::format("{:<11} {:<15} {:<15} {:<17}",
+            fitColumn(node.getHostname(), 11),
+            fitColumn(nodeAddressSummary(node), 15),
+            fitColumn(bmcAddressSummary(node), 15),
+            fitColumn(node.getMACAddress().empty() ? "-" : node.getMACAddress(),
+                17)));
     }
 }
 
