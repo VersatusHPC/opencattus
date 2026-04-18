@@ -53,6 +53,8 @@ namespace {
     constexpr std::string_view metadataLastCompletedStep
         = "last_completed_step";
     constexpr std::string_view metadataFormatVersion = "format_version";
+    constexpr std::string_view metadataPendingDiskImageDownloadURL
+        = "pending_disk_image_download_url";
 
     auto optionalString(const KeyFile& file, std::string_view group,
         std::string_view key) -> std::optional<std::string>
@@ -244,11 +246,16 @@ namespace {
     {
         if (const auto diskImage
             = optionalString(file, "system", "disk_image")) {
-            try {
-                model.setDiskImage(*diskImage);
-            } catch (const std::exception& ex) {
-                LOG_WARN("Skipping TUI draft disk image {}: {}", *diskImage,
-                    ex.what());
+            if (const auto pendingURL = optionalString(
+                    file, metadataGroup, metadataPendingDiskImageDownloadURL)) {
+                model.setPendingDiskImageDownload(*diskImage, *pendingURL);
+            } else {
+                try {
+                    model.setDiskImage(*diskImage);
+                } catch (const std::exception& ex) {
+                    LOG_WARN("Skipping TUI draft disk image {}: {}", *diskImage,
+                        ex.what());
+                }
             }
         }
 
@@ -671,6 +678,10 @@ void writeDraft(models::Cluster& model, const std::filesystem::path& path,
     file.setString(std::string(metadataGroup),
         std::string(metadataCompletedSteps),
         boost::algorithm::join(completedSteps, ", "));
+    if (const auto pendingDownload = model.getPendingDiskImageDownloadURL()) {
+        file.setString(std::string(metadataGroup),
+            std::string(metadataPendingDiskImageDownloadURL), *pendingDownload);
+    }
     if (!completedSteps.empty()) {
         file.setString(std::string(metadataGroup),
             std::string(metadataLastCompletedStep), completedSteps.back());
@@ -736,6 +747,41 @@ TEST_CASE("TUI answerfile path follows the dump answerfile path")
 
     CHECK(
         defaultAnswerfilePath(options) == std::filesystem::path("custom.ini"));
+}
+
+TEST_CASE("TUI draft persists pending disk image download")
+{
+    const auto path = std::filesystem::temp_directory_path()
+        / "opencattus-tui-pending-download-test.ini";
+
+    models::Cluster model;
+    model.setName("demo");
+    model.setCompanyName("acme");
+    model.setAdminMail("admin@example.com");
+    model.getHeadnode().setHostname(std::string("headnode"));
+    model.setDomainName("cluster.example.com");
+    model.setLocale("en_US.utf8");
+    model.setPendingDiskImageDownload("/root/Rocky-9.6-x86_64-dvd.iso",
+        "https://download.rockylinux.org/pub/rocky/9/isos/x86_64/"
+        "Rocky-9.6-x86_64-dvd.iso");
+
+    writeDraft(model, path, { "os" });
+
+    const KeyFile file(path);
+    CHECK(file.getString("tui", "pending_disk_image_download_url")
+        == "https://download.rockylinux.org/pub/rocky/9/isos/x86_64/"
+           "Rocky-9.6-x86_64-dvd.iso");
+
+    models::Cluster resumed;
+    applyDraftToModel(resumed, path);
+    CHECK(resumed.getDiskImage().getPath()
+        == std::filesystem::path("/root/Rocky-9.6-x86_64-dvd.iso"));
+    REQUIRE(resumed.getPendingDiskImageDownloadURL().has_value());
+    CHECK(resumed.getPendingDiskImageDownloadURL().value()
+        == "https://download.rockylinux.org/pub/rocky/9/isos/x86_64/"
+           "Rocky-9.6-x86_64-dvd.iso");
+
+    files::remove(path);
 }
 
 } // namespace opencattus::services::tui

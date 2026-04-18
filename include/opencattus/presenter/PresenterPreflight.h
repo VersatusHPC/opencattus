@@ -14,8 +14,6 @@ class PresenterPreflight : public Presenter {
 private:
     struct Messages {
         static constexpr const auto title = "Preflight validation";
-        static constexpr const auto question
-            = "Review the installation plan before the system is modified.";
         static constexpr const auto help
             = "This final check summarizes the selected operating system, "
               "provisioner, networks, BMC coverage, repositories, and queue "

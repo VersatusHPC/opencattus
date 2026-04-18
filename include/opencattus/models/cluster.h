@@ -79,6 +79,7 @@ private:
 
     bool m_updateSystem { false };
     DiskImage m_diskImage;
+    std::optional<std::string> m_pendingDiskImageDownloadURL;
 
 public:
     Cluster();
@@ -197,6 +198,11 @@ public:
 
     const DiskImage& getDiskImage() const;
     void setDiskImage(const std::filesystem::path& diskImagePath);
+    void setPendingDiskImageDownload(
+        const std::filesystem::path& diskImagePath, std::string downloadURL);
+    [[nodiscard]] const std::optional<std::string>&
+    getPendingDiskImageDownloadURL() const;
+    void clearPendingDiskImageDownload();
 
     // TODO: Add std::optional to BMC with std::nullopt as default initializer
     [[nodiscard]] const std::vector<Node>& getNodes() const;

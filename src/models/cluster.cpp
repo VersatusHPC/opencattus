@@ -293,6 +293,7 @@ void Cluster::setDiskImage(const std::filesystem::path& diskImagePath)
     std::error_code statusError;
     if (std::filesystem::exists(diskImagePath, statusError)) {
         m_diskImage.setPath(diskImagePath);
+        clearPendingDiskImageDownload();
         return;
     }
 
@@ -302,6 +303,7 @@ void Cluster::setDiskImage(const std::filesystem::path& diskImagePath)
                  "file exists",
             diskImagePath.string());
         m_diskImage.setPath(diskImagePath);
+        clearPendingDiskImageDownload();
         return;
     }
 
@@ -309,6 +311,7 @@ void Cluster::setDiskImage(const std::filesystem::path& diskImagePath)
         LOG_WARN("Accepting disk image path {} despite permission error: {}",
             diskImagePath.string(), statusError.message());
         m_diskImage.setPath(diskImagePath);
+        clearPendingDiskImageDownload();
         return;
     }
 
@@ -320,6 +323,24 @@ void Cluster::setDiskImage(const std::filesystem::path& diskImagePath)
 
     throw std::runtime_error(fmt::format(
         "Disk image path {} doesn't exist", diskImagePath.string()));
+}
+
+void Cluster::setPendingDiskImageDownload(
+    const std::filesystem::path& diskImagePath, std::string downloadURL)
+{
+    m_diskImage.setPath(diskImagePath);
+    m_pendingDiskImageDownloadURL = std::move(downloadURL);
+}
+
+const std::optional<std::string>&
+Cluster::getPendingDiskImageDownloadURL() const
+{
+    return m_pendingDiskImageDownloadURL;
+}
+
+void Cluster::clearPendingDiskImageDownload()
+{
+    m_pendingDiskImageDownloadURL.reset();
 }
 
 const std::vector<Node>& Cluster::getNodes() const { return m_nodes; }

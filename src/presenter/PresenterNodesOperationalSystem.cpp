@@ -3,15 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <opencattus/functions.h>
 #include <opencattus/presenter/PresenterNodesOperationalSystem.h>
 #include <opencattus/services/log.h>
+#include <opencattus/utils/enums.h>
 #include <opencattus/utils/string.h>
 
 #include <algorithm>
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/lexical_cast.hpp>
 #include <filesystem>
 #include <fmt/args.h>
 #include <fmt/core.h>
@@ -317,7 +314,7 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
     distros["Oracle Linux"] = OS::Distro::OL;
 
     const auto downloadSelectedDistro
-        = [&](const std::string& distroName, OS::Distro distro) -> bool {
+        = [&](const std::string&, OS::Distro distro) -> bool {
         if (distro == OS::Distro::RHEL) {
             m_view->message(
                 Messages::title, Messages::OperationalSystemVersion::rhelError);
@@ -329,67 +326,12 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
         std::string isoName
             = distroDownloadURL.substr(distroDownloadURL.find_last_of('/') + 1);
 
-        const auto opts
-            = opencattus::Singleton<const opencattus::services::Options>::get();
-        if (opts->dryRun) {
-            LOG_INFO("Dry Run: Would download {} from {}",
-                fmt::format("/root/{}", isoName), distroDownloadURL);
-        } else {
-            //@TODO Implement newt GUI progress bar
-            auto command = Singleton<IRunner>::get()->executeCommandIter(
-                fmt::format("wget -NP /root {}", distroDownloadURL),
-                opencattus::services::Stream::Stderr);
-
-            auto desc = fmt::format(
-                Messages::OperationalSystemDownloadIso::Progress::download,
-                distroName, distroDownloadURL);
-            m_view->progressMenu(Messages::title, desc.c_str(),
-                std::move(command),
-                [&](opencattus::services::CommandProxy& cmd)
-                    -> std::optional<double> {
-                    auto out = cmd.getline();
-                    if (!out) {
-                        return std::nullopt;
-                    }
-                    std::string line = *out;
-
-                    // If we have a line like ERROR 404: Not Found
-                    // this means, obviously, that we did not found the URL.
-                    if (line.contains("ERROR 404: Not Found")) {
-                        LOG_ERROR("URL {} not found", distroDownloadURL);
-                        return std::nullopt;
-                    }
-
-                    // Line example
-                    //  <<<338950K .......... .......... ..........
-                    //  ..........
-                    //  ..........  3% 31.8M 10m40s>>
-
-                    // TODO: (on the progress bar) maybe allow altering some
-                    // menu parameters (like the text)
-                    std::vector<std::string> slots;
-
-                    boost::split(slots, line, boost::is_any_of("\t\r "),
-                        boost::token_compress_on);
-
-                    if (slots.size() <= 6) {
-                        return std::make_optional(0.0);
-                    }
-
-                    auto num = slots[6].substr(0, slots[6].find_first_of('%'));
-
-                    try {
-                        return std::make_optional(
-                            boost::lexical_cast<double>(num));
-                    } catch (boost::bad_lexical_cast&) {
-                        return std::make_optional(0.0);
-                    }
-                });
-        }
-
-        m_model->setDiskImage(fmt::format("/root/{}", isoName));
+        const auto plannedIsoPath = fs::path("/root") / isoName;
+        m_model->setPendingDiskImageDownload(plannedIsoPath, distroDownloadURL);
         m_model->setComputeNodeOS(makeOperatingSystem(distro, versioncombo));
-        LOG_DEBUG("Selected ISO: {}", fmt::format("/root/{}", isoName))
+        LOG_INFO("Scheduled ISO download {} from {}", plannedIsoPath.string(),
+            distroDownloadURL);
+        LOG_DEBUG("Selected ISO: {}", plannedIsoPath.string())
         return true;
     };
 

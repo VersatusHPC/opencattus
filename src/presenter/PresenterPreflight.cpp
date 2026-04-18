@@ -7,6 +7,7 @@
 #include <opencattus/presenter/PresenterPreflight.h>
 #include <opencattus/services/repos.h>
 #include <opencattus/utils/enums.h>
+#include <opencattus/utils/singleton.h>
 
 #include <algorithm>
 #include <fmt/ranges.h>
@@ -301,6 +302,18 @@ auto buildPreflightText(Cluster& model) -> std::string
     return fmt::format("{}", fmt::join(rows, "\n"));
 }
 
+auto preflightQuestion() -> const char*
+{
+    const auto opts = opencattus::utils::singleton::options();
+    if (opts->dryRun) {
+        return "Review the installation plan. Dry-run mode will not modify "
+               "this system.";
+    }
+
+    return "Review the installation plan. Choosing OK will start modifying "
+           "this system.";
+}
+
 } // namespace
 
 namespace opencattus::presenter {
@@ -310,7 +323,7 @@ PresenterPreflight::PresenterPreflight(
     : Presenter(model, view)
 {
     const auto preflightText = buildPreflightText(*m_model);
-    m_view->scrollableMessage(Messages::title, Messages::question,
+    m_view->scrollableMessage(Messages::title, preflightQuestion(),
         preflightText.c_str(), Messages::help);
 }
 
