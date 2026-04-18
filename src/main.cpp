@@ -203,7 +203,7 @@ auto checkRootOrExplain() -> bool
 /**
  * @brief The entrypoint.
  */
-int main(int argc, const char** argv)
+int runApplication(int argc, const char** argv)
 {
     // Options are not const yet because some parameters are mutated during the
     // initialization in main, maybe this should be moved to options.cpp and
@@ -489,4 +489,19 @@ int main(int argc, const char** argv)
     Log::shutdown();
 
     return EXIT_SUCCESS;
+}
+
+int main(int argc, const char** argv)
+{
+    try {
+        return runApplication(argc, argv);
+    } catch (const std::exception& ex) {
+        Log::shutdown();
+        fmt::print(stderr, "{}: {}\n", productName, ex.what());
+        return EXIT_FAILURE;
+    } catch (...) {
+        Log::shutdown();
+        fmt::print(stderr, "{}: unexpected fatal error\n", productName);
+        return EXIT_FAILURE;
+    }
 }

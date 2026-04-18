@@ -3,6 +3,8 @@
 set -Eeuo pipefail
 
 binary=${1:?missing OpenCATTUS test binary path}
+tmpdir=$(mktemp -d)
+trap 'rm -rf "${tmpdir}"' EXIT
 
 assert_fails() {
     local output_var=${1}
@@ -39,6 +41,13 @@ assert_contains "${output}" "Run with --help"
 assert_fails output "${binary}" --cli --dry
 assert_contains "${output}" "The command-line questionnaire is not implemented yet."
 assert_contains "${output}" "Use --tui"
+
+assert_fails output "${binary}" \
+    --answerfile "${tmpdir}/missing.answerfile.ini" \
+    --dump-answerfile "${tmpdir}/output.answerfile.ini"
+assert_contains "${output}" "OpenCATTUS:"
+assert_not_contains "${output}" "terminate called"
+assert_not_contains "${output}" "std::runtime_error"
 
 if [[ $(id -u) -ne 0 ]]; then
     assert_fails output "${binary}" --answerfile test/sample/answerfile/correct.answerfile.ini
