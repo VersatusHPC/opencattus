@@ -186,9 +186,7 @@ std::pair<int, std::vector<std::string>> Newt::checkboxSelectionMenu(
 
     auto* form = newtForm(nullptr, nullptr, NEWT_FLAG_NOF12);
     const auto maxListWidth = std::max(28, m_suggestedWidth - 10);
-    const auto maxVisibleRows = std::min(m_maxListHeight, 8);
-    const auto visibleListHeight
-        = std::min(listHeight(items.size()), maxVisibleRows);
+    const auto visibleListHeight = listHeight(items.size());
     const auto listFlags
         = items.size() > static_cast<std::size_t>(visibleListHeight)
         ? NEWT_FLAG_SCROLL
