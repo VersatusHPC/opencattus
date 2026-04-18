@@ -331,9 +331,10 @@ private:
      * @brief Validates the settings for a node.
      *
      * @param node The node to validate.
+     * @param section The answerfile section name for error context.
      * @return The validated node settings.
      */
-    AFNode validateNode(AFNode node);
+    AFNode validateNode(AFNode node, const std::string& section);
 
     /**
      * @brief Validates an attribute against a generic attribute.
