@@ -162,7 +162,7 @@ jobs:
               if [ -f /opt/rh/gcc-toolset-14/enable ]; then
                 source /opt/rh/gcc-toolset-14/enable
               fi
-              conan profile detect
+              conan profile detect --force
               git config --global --add safe.directory "${{ github.workspace }}"
               VERSION=$(awk "/Version:/ {print \$2}" rpmspecs/opencattus.spec)
               rpmdev-setuptree
