@@ -153,7 +153,7 @@ jobs:
             bash -lc '
               set -euo pipefail
               ${{ matrix.setup }}
-              dnf install -y curl git rpmdevtools rpm-build tar gzip \
+              dnf install -y git rpmdevtools rpm-build tar gzip \
                 make cmake ninja-build newt-devel systemd-devel \
                 python3 python3-pip \
                 autoconf automake libtool meson perl-core \
