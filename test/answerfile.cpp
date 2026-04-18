@@ -163,6 +163,19 @@ void appendOFEDSection(const std::filesystem::path& path, std::string_view kind,
         << "version=" << version << '\n';
 }
 
+void appendPostfixRelaySection(
+    const std::filesystem::path& path, std::string_view port)
+{
+    std::ofstream out(path, std::ios::app);
+    REQUIRE(out.is_open());
+    out << "\n[postfix]\n"
+        << "profile=Relay\n"
+        << "destination=cluster.example.com\n\n"
+        << "[postfix.relay]\n"
+        << "server=smtp.example.com\n"
+        << "port=" << port << '\n';
+}
+
 void appendSecondNodeSection(const std::filesystem::path& path)
 {
     std::ofstream out(path, std::ios::app);
@@ -465,6 +478,86 @@ TEST_SUITE("opencattus::models::answerfile")
         CHECK_THROWS_WITH_AS(AnswerFile { answerfilePath },
             doctest::Contains(
                 "Section 'node.1' field 'sockets' validation failed"),
+            std::invalid_argument);
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("loadOptions rejects invalid postfix profiles")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath = tempAnswerfilePath(
+            "opencattus-answerfile-invalid-postfix-profile");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-invalid-postfix-profile");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front());
+
+        {
+            std::ofstream out(answerfilePath, std::ios::app);
+            REQUIRE(out.is_open());
+            out << "\n[postfix]\n"
+                << "profile=SMTP\n";
+        }
+
+        CHECK_THROWS_WITH_AS(AnswerFile { answerfilePath },
+            doctest::Contains(
+                "Section 'postfix' field 'profile' validation failed"),
+            std::invalid_argument);
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("loadOptions rejects invalid postfix relay ports")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-invalid-postfix-port");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-invalid-postfix-port");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front());
+        appendPostfixRelaySection(answerfilePath, "smtp");
+
+        CHECK_THROWS_WITH_AS(AnswerFile { answerfilePath },
+            doctest::Contains(
+                "Section 'postfix.relay' field 'port' validation failed"),
+            std::invalid_argument);
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("loadOptions rejects invalid OFED kinds")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-invalid-ofed-kind");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-invalid-ofed-kind");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front());
+        appendOFEDSection(answerfilePath, "roce", "latest");
+
+        CHECK_THROWS_WITH_AS(AnswerFile { answerfilePath },
+            doctest::Contains("Section 'ofed' field 'kind' validation failed"),
             std::invalid_argument);
 
         std::filesystem::remove(answerfilePath);
