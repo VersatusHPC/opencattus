@@ -3,12 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <algorithm>
+#include <cctype>
+#include <charconv>
 #include <cstddef>
 #include <fmt/core.h>
 #include <iterator>
 #include <map>
 #include <ranges>
+#include <stdexcept>
 #include <string_view>
+#include <system_error>
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/join.hpp>
@@ -125,6 +130,89 @@ namespace {
                     *node.bmc_address, fmt::format("{} bmc_address", owner));
             }
         }
+    }
+
+    auto parseUnsignedAnswerfileField(const std::string& section,
+        const std::string& field, const std::string& value, bool allowZero)
+        -> std::size_t
+    {
+        const auto expectedType
+            = allowZero ? "an unsigned integer" : "a positive integer";
+        const auto fail = [&](std::string_view reason) {
+            throw std::invalid_argument(fmt::format(
+                "Section '{}' field '{}' validation failed - {} (expected {}, "
+                "value is '{}')",
+                section, field, reason, expectedType, value));
+        };
+
+        if (value.empty()) {
+            fail("empty value");
+        }
+
+        if (!std::ranges::all_of(value, [](unsigned char character) {
+                return std::isdigit(character) != 0;
+            })) {
+            fail("not a number");
+        }
+
+        std::size_t parsed = 0;
+        const auto* begin = value.data();
+        const auto* end = value.data() + value.size();
+        const auto [ptr, error] = std::from_chars(begin, end, parsed);
+        if (error == std::errc::result_out_of_range) {
+            fail("value is out of range");
+        }
+        if (error != std::errc {} || ptr != end) {
+            fail("not a number");
+        }
+        if (!allowZero && parsed == 0) {
+            fail("zero is not valid");
+        }
+
+        return parsed;
+    }
+
+    void validateUnsignedAnswerfileField(const std::string& section,
+        const std::string& field, const std::optional<std::string>& value,
+        bool allowZero = false)
+    {
+        if (!value.has_value()) {
+            return;
+        }
+
+        parseUnsignedAnswerfileField(section, field, value.value(), allowZero);
+    }
+
+    void validateGenericNodeScalars(const AFNode& node)
+    {
+        validateUnsignedAnswerfileField("node", "padding", node.padding, true);
+        validateUnsignedAnswerfileField("node", "sockets", node.sockets);
+        validateUnsignedAnswerfileField(
+            "node", "cores_per_socket", node.cores_per_socket);
+        validateUnsignedAnswerfileField(
+            "node", "cpus_per_node", node.cpus_per_node);
+        validateUnsignedAnswerfileField(
+            "node", "threads_per_core", node.threads_per_core);
+        validateUnsignedAnswerfileField(
+            "node", "real_memory", node.real_memory);
+        validateUnsignedAnswerfileField(
+            "node", "bmc_serialport", node.bmc_serialport, true);
+        validateUnsignedAnswerfileField(
+            "node", "bmc_serialspeed", node.bmc_serialspeed);
+    }
+
+    void validateResolvedNodeScalars(
+        const std::string& section, const AFNode& node)
+    {
+        validateUnsignedAnswerfileField(section, "sockets", node.sockets);
+        validateUnsignedAnswerfileField(
+            section, "cores_per_socket", node.cores_per_socket);
+        validateUnsignedAnswerfileField(
+            section, "threads_per_core", node.threads_per_core);
+        validateUnsignedAnswerfileField(
+            section, "bmc_serialport", node.bmc_serialport, true);
+        validateUnsignedAnswerfileField(
+            section, "bmc_serialspeed", node.bmc_serialspeed);
     }
 
 } // namespace
@@ -669,11 +757,18 @@ void AnswerFile::loadSystemSettings()
 
     system.version = m_keyfile.getString("system", "version");
     system.kernel = m_keyfile.getStringOpt("system", "kernel");
-    system.provisioner = utils::optional::unwrap(
-        m_keyfile.getStringOpt("system", "provisioner"),
-        "[system].provisioner missing in the answerfile {}, expecting one of: "
-        "confluent, xcat",
-        path());
+    system.provisioner = opencattus::utils::string::lower(
+        utils::optional::unwrap(m_keyfile.getStringOpt("system", "provisioner"),
+            "[system].provisioner missing in the answerfile {}, expecting one "
+            "of: "
+            "confluent, xcat",
+            path()));
+    if (system.provisioner != "confluent" && system.provisioner != "xcat") {
+        throw std::invalid_argument(fmt::format(
+            "Section 'system' field 'provisioner' validation failed - "
+            "unsupported provisioner '{}' (expected confluent or xcat)",
+            system.provisioner));
+    }
 }
 
 AFNode AnswerFile::loadNode(const std::string& section)
@@ -697,8 +792,16 @@ AFNode AnswerFile::loadNode(const std::string& section)
         node.bmc_password = m_keyfile.getString(section, "bmc_password");
         node.bmc_serialport = m_keyfile.getString(section, "bmc_serialport");
         node.bmc_serialspeed = m_keyfile.getString(section, "bmc_serialspeed");
-        node.start_ip
-            = convertStringToAddress(m_keyfile.getString(section, "node_ip"));
+        try {
+            node.start_ip = convertStringToAddress(
+                m_keyfile.getString(section, "node_ip"));
+        } catch (const std::invalid_argument& e) {
+            throw std::invalid_argument(
+                fmt::format("Section '{}' field 'node_ip' "
+                            "validation failed - {}",
+                    section, e.what()));
+        }
+        validateGenericNodeScalars(node);
         LOG_DEBUG("Node generic configuration loaded");
         return node;
     } else {
@@ -796,7 +899,7 @@ void AnswerFile::loadNodes()
         }
 
         try {
-            newNode = validateNode(newNode);
+            newNode = validateNode(newNode, nodeSection);
         } catch (const std::invalid_argument& e) {
             throw std::invalid_argument(
                 fmt::format("Section node.{} validation failed - {}",
@@ -809,7 +912,7 @@ void AnswerFile::loadNodes()
     validateNodeInventoryTopology(nodes.nodes);
 }
 
-AFNode AnswerFile::validateNode(AFNode node)
+AFNode AnswerFile::validateNode(AFNode node, const std::string& section)
 {
     const auto hasText = [](const std::optional<std::string>& value) {
         return value.has_value() && !value->empty();
@@ -850,6 +953,8 @@ AFNode AnswerFile::validateNode(AFNode node)
         clearIfEmpty(node.bmc_serialport);
         clearIfEmpty(node.bmc_serialspeed);
     }
+
+    validateResolvedNodeScalars(section, node);
 
     return node;
 }

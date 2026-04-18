@@ -388,6 +388,89 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(diskImagePath);
     }
 
+    TEST_CASE("loadOptions rejects unsupported provisioners")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-invalid-provisioner");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-invalid-provisioner");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "warewulf");
+
+        CHECK_THROWS_WITH_AS(AnswerFile { answerfilePath },
+            doctest::Contains(
+                "Section 'system' field 'provisioner' validation failed"),
+            std::invalid_argument);
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("loadOptions rejects invalid generic node numeric fields")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-invalid-node-number");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-invalid-node-number");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front());
+        replaceInFile(answerfilePath, "sockets=1", "sockets=two");
+
+        CHECK_THROWS_WITH_AS(AnswerFile { answerfilePath },
+            doctest::Contains(
+                "Section 'node' field 'sockets' validation failed"),
+            std::invalid_argument);
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("loadOptions rejects invalid node-specific numeric fields")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-invalid-node-override");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-invalid-node-override");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front());
+        replaceInFile(answerfilePath,
+            "[node.1]\n"
+            "hostname=n01\n"
+            "mac_address=52:54:00:00:20:11\n"
+            "node_ip=192.168.30.1\n",
+            "[node.1]\n"
+            "hostname=n01\n"
+            "mac_address=52:54:00:00:20:11\n"
+            "node_ip=192.168.30.1\n"
+            "sockets=two\n");
+
+        CHECK_THROWS_WITH_AS(AnswerFile { answerfilePath },
+            doctest::Contains(
+                "Section 'node.1' field 'sockets' validation failed"),
+            std::invalid_argument);
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
     TEST_CASE(
         "fillData keeps the service connection bound to the service interface")
     {
