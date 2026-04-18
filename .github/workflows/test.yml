@@ -137,6 +137,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${HOME}/.cache/opencattus/conan/${{ matrix.el }}"
+          mkdir -p "${HOME}/.cache/opencattus/cpm/${{ matrix.el }}"
 
       - name: Build RPM in ${{ matrix.el }} container
         run: |
@@ -144,6 +145,7 @@ jobs:
           podman run --rm \
             -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:z" \
             -v "${HOME}/.cache/opencattus/conan/${{ matrix.el }}:/root/.conan2:z" \
+            -v "${HOME}/.cache/opencattus/cpm/${{ matrix.el }}:/root/.cache/CPM:z" \
             -w "${GITHUB_WORKSPACE}" \
             ${{ matrix.image }} \
             bash -lc '
