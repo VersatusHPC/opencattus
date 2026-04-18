@@ -18,6 +18,7 @@
 namespace {
 using opencattus::models::AnswerFile;
 using opencattus::models::Cluster;
+using opencattus::models::QueueSystem;
 using opencattus::services::DryRunner;
 using opencattus::services::Options;
 
@@ -174,6 +175,27 @@ void appendPostfixRelaySection(
         << "[postfix.relay]\n"
         << "server=smtp.example.com\n"
         << "port=" << port << '\n';
+}
+
+void appendPBSSection(const std::filesystem::path& path,
+    std::string_view executionPlace = "Scatter")
+{
+    std::ofstream out(path, std::ios::app);
+    REQUIRE(out.is_open());
+    out << "\n[pbs]\n"
+        << "execution_place=" << executionPlace << '\n';
+}
+
+void replaceSlurmWithPBS(const std::filesystem::path& path,
+    std::string_view executionPlace = "Scatter")
+{
+    replaceInFile(path,
+        "[slurm]\n"
+        "mariadb_root_password=LabMariadbRoot!23\n"
+        "slurmdb_password=LabSlurmDb!23\n"
+        "storage_password=LabStorage!23\n"
+        "partition_name=batch\n\n",
+        fmt::format("[pbs]\nexecution_place={}\n\n", executionPlace));
 }
 
 void appendSecondNodeSection(const std::filesystem::path& path)
@@ -559,6 +581,90 @@ TEST_SUITE("opencattus::models::answerfile")
         CHECK_THROWS_WITH_AS(AnswerFile { answerfilePath },
             doctest::Contains("Section 'ofed' field 'kind' validation failed"),
             std::invalid_argument);
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("loadOptions rejects mixed queue system sections")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-mixed-queues");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-mixed-queues");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front());
+        appendPBSSection(answerfilePath);
+
+        CHECK_THROWS_WITH_AS(AnswerFile { answerfilePath },
+            doctest::Contains("Queue system validation failed"),
+            std::invalid_argument);
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("loadOptions rejects invalid PBS execution places")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-invalid-pbs");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-answerfile-invalid-pbs");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front());
+        replaceSlurmWithPBS(answerfilePath, "RoundRobin");
+
+        CHECK_THROWS_WITH_AS(AnswerFile { answerfilePath },
+            doctest::Contains(
+                "Section 'pbs' field 'execution_place' validation failed"),
+            std::invalid_argument);
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("fillData loads PBS answerfiles")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-answerfile-pbs");
+        const auto diskImagePath = tempIsoPath("opencattus-answerfile-pbs");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front());
+        replaceSlurmWithPBS(answerfilePath);
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            Cluster cluster;
+            cluster.fillData(answerfile);
+
+            REQUIRE(answerfile.pbs.enabled);
+            CHECK_FALSE(answerfile.slurm.enabled);
+            REQUIRE(cluster.getQueueSystem().has_value());
+            CHECK(cluster.getQueueSystem().value()->getKind()
+                == QueueSystem::Kind::PBS);
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while filling PBS queue system");
+        }
 
         std::filesystem::remove(answerfilePath);
         std::filesystem::remove(diskImagePath);
