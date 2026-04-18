@@ -1,6 +1,10 @@
-include(cmake/CPM.cmake)
 set(CPM_USE_LOCAL_PACKAGES OFF)
-set(CPM_SOURCE_CACHE=$HOME/.cache/CPM)
+if(DEFINED ENV{CPM_SOURCE_CACHE})
+  set(CPM_SOURCE_CACHE "$ENV{CPM_SOURCE_CACHE}")
+elseif(DEFINED ENV{HOME})
+  set(CPM_SOURCE_CACHE "$ENV{HOME}/.cache/CPM")
+endif()
+include(cmake/CPM.cmake)
 
 # Done as a function so that updates to variables like
 # CMAKE_CXX_FLAGS don't propagate out to other
