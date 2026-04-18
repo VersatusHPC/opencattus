@@ -24,6 +24,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   rocky9-xcat-lab:
     name: Rocky 9 xCAT lab
