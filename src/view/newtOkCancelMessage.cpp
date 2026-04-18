@@ -71,7 +71,12 @@ auto wrapText(std::string_view text, std::size_t width) -> std::string
 
 auto scrollableBodyHeight(int maxListHeight) -> int
 {
-    return std::max(4, std::min(maxListHeight + 2, 12));
+    return std::max(4, maxListHeight + 2);
+}
+
+auto scrollableBodyWidth(int columns) -> int
+{
+    return std::max(24, columns - 18);
 }
 
 } // namespace
@@ -114,7 +119,7 @@ void Newt::scrollableMessage(const char* title, const char* message,
 
     const auto* safeTitle = title == nullptr ? "" : title;
     const auto* safeMessage = message == nullptr ? "" : message;
-    const auto bodyWidth = std::clamp(m_suggestedWidth - 10, 36, 62);
+    const auto bodyWidth = scrollableBodyWidth(m_cols);
     const auto wrappedText = wrapText(
         text == nullptr ? "" : text, static_cast<std::size_t>(bodyWidth));
 
