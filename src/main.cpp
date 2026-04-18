@@ -198,6 +198,39 @@ auto checkRootOrExplain() -> bool
     }
 }
 
+auto confirmSystemModification(const services::Options& opts) -> bool
+{
+    if (opts.dryRun || opts.enableTUI || !opts.testCommand.empty()
+        || !opts.dumpAnswerfile.empty()) {
+        return true;
+    }
+
+    if (opts.unattended) {
+        fmt::print("{} will now modify your system.\n", productName);
+        LOG_INFO("Running {} unattended.\n", productName)
+        return true;
+    }
+
+    while (true) {
+        char response = 'N';
+        fmt::print("{} will now modify your system, do you want to "
+                   "continue? [Y/N]\n",
+            opencattus::productName);
+        std::cin >> response;
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+        if (std::toupper(response) == 'Y') {
+            LOG_INFO("Running {}.\n", opencattus::productName)
+            return true;
+        }
+
+        if (std::toupper(response) == 'N') {
+            LOG_INFO("Stopping {}.\n", opencattus::productName)
+            return false;
+        }
+    }
+}
+
 }; // anonymous namespace
 
 /**
@@ -267,23 +300,6 @@ int runApplication(int argc, const char** argv)
 
     if (optsMut->dryRun) {
         LOG_INFO("Dry run enabled.");
-    } else {
-        while (!optsMut->unattended && optsMut->dumpAnswerfile.empty()) {
-            char response = 'N';
-            fmt::print("{} will now modify your system, do you want to "
-                       "continue? [Y/N]\n",
-                opencattus::productName);
-            std::cin >> response;
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-            if (std::toupper(response) == 'Y') {
-                LOG_INFO("Running {}.\n", opencattus::productName)
-                break;
-            } else if (std::toupper(response) == 'N') {
-                LOG_INFO("Stopping {}.\n", opencattus::productName)
-                return EXIT_SUCCESS;
-            }
-        }
     }
 
     //@TODO implement CLI feature
@@ -462,6 +478,11 @@ int runApplication(int argc, const char** argv)
     if (opts->dryRun && opts->enableTUI) {
         LOG_INFO("Dry run questionnaire complete; skipping the installation "
                  "engine");
+        Log::shutdown();
+        return EXIT_SUCCESS;
+    }
+
+    if (!confirmSystemModification(*opts)) {
         Log::shutdown();
         return EXIT_SUCCESS;
     }

@@ -50,6 +50,7 @@ CommandProxy runCommandIter(
                     boost::process::std_err>
                     pipe_stream);
             return CommandProxy { .valid = true,
+                .hasProcess = true,
                 .child = std::move(child),
                 .pipe_stream = std::move(pipe_stream) };
 
@@ -59,6 +60,7 @@ CommandProxy runCommandIter(
                     boost::process::std_out>
                     pipe_stream);
             return CommandProxy { .valid = true,
+                .hasProcess = true,
                 .child = std::move(child),
                 .pipe_stream = std::move(pipe_stream) };
         }
@@ -255,9 +257,9 @@ int Runner::run(const ScriptBuilder& script)
     return exitCode;
 }
 
-CommandProxy Runner::executeCommandIter(const std::string& cmd, Stream /*out*/)
+CommandProxy Runner::executeCommandIter(const std::string& cmd, Stream out)
 {
-    return CommandProxy {}; // Return an invalid CommandProxy
+    return runCommandIter(cmd, out, true);
 }
 
 int Runner::downloadFile(const std::string& url, const std::string& file)

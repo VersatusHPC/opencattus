@@ -1040,7 +1040,35 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(versionFields.items[1].second == "x86_64");
         CHECK(model->getDiskImage().getPath()
             == std::filesystem::path("/root/Rocky-9.7-x86_64-dvd.iso"));
+        REQUIRE(model->getPendingDiskImageDownloadURL().has_value());
+        CHECK(model->getPendingDiskImageDownloadURL().value()
+            == "https://download.rockylinux.org/pub/rocky/9/isos/x86_64/"
+               "Rocky-9.7-x86_64-dvd.iso");
         CHECK(model->getComputeNodeOS().getVersion() == "9.7");
+    }
+
+    TEST_CASE("ISO download choice is scheduled until preflight confirms")
+    {
+        initializePresenterTestEnvironment(defaultRunnerOutputs());
+
+        auto model = std::make_unique<Cluster>();
+        auto state = std::make_shared<ScriptedViewState>();
+        state->responses = {
+            yesNo(true),
+            select("Rocky Linux"),
+            fields({ "9.6", "x86_64" }),
+        };
+
+        std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
+        PresenterNodesOperationalSystem(model, view);
+
+        CHECK(state->responses.empty());
+        CHECK(model->getDiskImage().getPath()
+            == std::filesystem::path("/root/Rocky-9.6-x86_64-dvd.iso"));
+        REQUIRE(model->getPendingDiskImageDownloadURL().has_value());
+        CHECK(model->getPendingDiskImageDownloadURL().value()
+            == "https://download.rockylinux.org/pub/rocky/9/isos/x86_64/"
+               "Rocky-9.6-x86_64-dvd.iso");
     }
 
     TEST_CASE("RHEL download choice retries instead of aborting the TUI")
@@ -1170,6 +1198,7 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(state->responses.empty());
         CHECK(model->getDiskImage().getPath()
             == std::filesystem::path("/root/Rocky-9.6-x86_64-dvd.iso"));
+        REQUIRE(model->getPendingDiskImageDownloadURL().has_value());
         CHECK(model->getComputeNodeOS().getDistro() == OS::Distro::Rocky);
 
         std::filesystem::remove_all(emptyDir);
@@ -1212,8 +1241,8 @@ TEST_SUITE("opencattus::presenter::tui")
         const auto& pbs
             = dynamic_cast<PBS*>(model->getQueueSystem().value().get());
         CHECK(pbs->getExecutionPlace() == PBS::ExecutionPlace::Scatter);
-        CHECK(model->getQueueSystem().value()->getDefaultQueue()
-            == "execution");
+        CHECK(
+            model->getQueueSystem().value()->getDefaultQueue() == "execution");
 
         model->dumpData(outputPath);
         const auto dumped = opencattus::services::files::read(outputPath);
@@ -1969,6 +1998,8 @@ TEST_SUITE("opencattus::presenter::tui")
             = firstMessageIndex(state->messages, "Mail system settings|");
         const auto preflightScreen
             = firstMessageIndex(state->messages, "Preflight validation|");
+        const auto downloadScreen = firstMessageIndex(
+            state->messages, "Compute node OS settings|Downloading ISO");
 
         CHECK(generalScreen < timeScreen);
         CHECK(timeScreen < localeScreen);
@@ -1994,12 +2025,13 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(nodesScreen < queueScreen);
         CHECK(queueScreen < mailScreen);
         CHECK(mailScreen < preflightScreen);
+        CHECK(preflightScreen < downloadScreen);
 
         const auto& preflightMessage = firstScrollableMessageByMessage(
             state->scrollableMessages, "Review the installation plan");
         CHECK(preflightMessage.message
-            == "Review the installation plan before the system is modified.");
-        CHECK_FALSE(preflightMessage.message.contains("Choose OK"));
+            == "Review the installation plan. Choosing OK will start "
+               "modifying this system.");
         const auto& preflightText = preflightMessage.text;
         CHECK(preflightText.starts_with("Cluster"));
         CHECK(preflightText.contains("Cluster        demo"));
@@ -2008,9 +2040,8 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(preflightText.contains("Nodes"));
         CHECK(preflightText.contains("Rocky 9.6 x86_64"));
         CHECK_FALSE(preflightText.contains("Compatibility"));
-        CHECK(preflightText.contains(
-            "ISO and OS     Rocky 9.6 from "
-            "/root/Rocky-9.6-x86_64-dvd.iso"));
+        CHECK(preflightText.contains("ISO and OS     Rocky 9.6 from "
+                                     "/root/Rocky-9.6-x86_64-dvd.iso"));
         CHECK(preflightText.contains(
             "/root/Rocky-9.6-x86_64-dvd.iso\n\nRepositories"));
         CHECK(preflightText.contains("\n\n[Networks]"));
@@ -2062,6 +2093,7 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(model->getProvisioner() == Cluster::Provisioner::Confluent);
         CHECK(model->getHeadnode().getOS().getDistro() == OS::Distro::RHEL);
         CHECK(model->getComputeNodeOS().getDistro() == OS::Distro::Rocky);
+        CHECK_FALSE(model->getPendingDiskImageDownloadURL().has_value());
         REQUIRE(model->getEnabledRepositories().has_value());
         CHECK(model->getEnabledRepositories().value()
             == std::vector<std::string> { "cuda" });
@@ -2196,6 +2228,7 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(model->getTimezone().getTimezone() == "America/Sao_Paulo");
         CHECK(model->getLocale() == "en_US.utf8");
         CHECK(model->getProvisioner() == Cluster::Provisioner::Confluent);
+        CHECK_FALSE(model->getPendingDiskImageDownloadURL().has_value());
         REQUIRE(model->getEnabledRepositories().has_value());
         CHECK(model->getEnabledRepositories().value()
             == std::vector<std::string> { "cuda" });

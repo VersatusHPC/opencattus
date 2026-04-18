@@ -35,10 +35,6 @@ private:
                     = "Select the distribution installed on compute nodes. Red "
                       "Hat Enterprise Linux must be provided as a local ISO.";
             };
-            struct Progress {
-                static constexpr const auto download
-                    = "Downloading ISO from {0}\nSource: {1}";
-            };
         };
 
         struct OperationalSystemDirectoryPath {

@@ -244,6 +244,7 @@ namespace opencattus::services {
  */
 struct CommandProxy {
     bool valid = false;
+    bool hasProcess = false;
     boost::process::child child;
     boost::process::ipstream pipe_stream;
 
