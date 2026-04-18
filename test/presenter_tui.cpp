@@ -1387,6 +1387,25 @@ TEST_SUITE("opencattus::presenter::tui")
             == std::vector<std::string> { "beegfs", "grafana", "influxdata" });
     }
 
+    TEST_CASE("repository questionnaire stop aborts the questionnaire")
+    {
+        initializePresenterTestEnvironment(defaultRunnerOutputs());
+
+        auto model = std::make_unique<Cluster>();
+        const auto os
+            = OS(OS::Distro::Rocky, OS::Platform::el9, 6, OS::Arch::x86_64);
+        model->setComputeNodeOS(os);
+
+        auto state = std::make_shared<ScriptedViewState>();
+        state->responses = {
+            multi(2, {}),
+        };
+        std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
+
+        CHECK_THROWS_AS(PresenterRepository(model, view), ViewAbortRequested);
+        CHECK_FALSE(model->getEnabledRepositories().has_value());
+    }
+
     TEST_CASE("network questionnaires hide already consumed interfaces while "
               "keeping service and management sharing available")
     {

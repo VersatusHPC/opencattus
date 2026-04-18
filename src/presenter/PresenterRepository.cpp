@@ -84,14 +84,16 @@ PresenterRepository::PresenterRepository(
 
     LOG_DEBUG("{} repos selected", toEnable.size());
 
-    if (ret == 1) {
-        const auto expandedSelection
-            = services::repos::expandSelectedRepositoryIds(toEnable);
-        if (expandedSelection.empty()) {
-            m_model->clearEnabledRepositories();
-        } else {
-            m_model->setEnabledRepositories(expandedSelection);
-        }
+    if (ret != 1) {
+        m_view->abort();
+    }
+
+    const auto expandedSelection
+        = services::repos::expandSelectedRepositoryIds(toEnable);
+    if (expandedSelection.empty()) {
+        m_model->clearEnabledRepositories();
+    } else {
+        m_model->setEnabledRepositories(expandedSelection);
     }
 }
 
