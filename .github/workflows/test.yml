@@ -133,11 +133,17 @@ jobs:
           podman system migrate || true
           podman info >/dev/null
 
+      - name: Prepare Conan cache
+        run: |
+          set -euo pipefail
+          mkdir -p "${HOME}/.cache/opencattus/conan/${{ matrix.el }}"
+
       - name: Build RPM in ${{ matrix.el }} container
         run: |
           set -euo pipefail
           podman run --rm \
             -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:z" \
+            -v "${HOME}/.cache/opencattus/conan/${{ matrix.el }}:/root/.conan2:z" \
             -w "${GITHUB_WORKSPACE}" \
             ${{ matrix.image }} \
             bash -lc '
