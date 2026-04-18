@@ -157,9 +157,14 @@ function(opencattus_package_project)
   unset(_PackageProject_TARGETS)
 
   # download ForwardArguments
+  set(_fargs_url "https://github.com/polysquare/cmake-forward-arguments/archive/8c50d1f956172edb34e95efa52a2d5cb1f686ed2.zip")
+  if(DEFINED ENV{OPENCATTUS_FARGS_ARCHIVE}
+     AND EXISTS "$ENV{OPENCATTUS_FARGS_ARCHIVE}")
+    set(_fargs_url "$ENV{OPENCATTUS_FARGS_ARCHIVE}")
+  endif()
   FetchContent_Declare(
           _fargs
-          URL https://github.com/polysquare/cmake-forward-arguments/archive/8c50d1f956172edb34e95efa52a2d5cb1f686ed2.zip)
+          URL "${_fargs_url}")
   FetchContent_GetProperties(_fargs)
   if(NOT _fargs_POPULATED)
     FetchContent_Populate(_fargs)
@@ -179,7 +184,12 @@ function(opencattus_package_project)
           "${_multiValueArgs};DEPENDENCIES;PRIVATE_DEPENDENCIES")
 
   # download ycm
-  FetchContent_Declare(_ycm URL https://github.com/robotology/ycm/archive/refs/tags/v0.13.0.zip)
+  set(_ycm_url "https://github.com/robotology/ycm/archive/refs/tags/v0.13.0.zip")
+  if(DEFINED ENV{OPENCATTUS_YCM_ARCHIVE}
+     AND EXISTS "$ENV{OPENCATTUS_YCM_ARCHIVE}")
+    set(_ycm_url "$ENV{OPENCATTUS_YCM_ARCHIVE}")
+  endif()
+  FetchContent_Declare(_ycm URL "${_ycm_url}")
   FetchContent_GetProperties(_ycm)
   if(NOT _ycm_POPULATED)
     FetchContent_Populate(_ycm)
