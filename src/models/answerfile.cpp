@@ -183,6 +183,39 @@ namespace {
         parseUnsignedAnswerfileField(section, field, value.value(), allowZero);
     }
 
+    auto parsePortAnswerfileField(const std::string& section,
+        const std::string& field, const std::string& value) -> int
+    {
+        const auto port
+            = parseUnsignedAnswerfileField(section, field, value, false);
+        if (port > 65535) {
+            throw std::invalid_argument(fmt::format(
+                "Section '{}' field '{}' validation failed - port is out of "
+                "range (expected 1-65535, value is '{}')",
+                section, field, value));
+        }
+
+        return static_cast<int>(port);
+    }
+
+    auto normalizeOFEDKind(std::string_view rawKind)
+        -> std::optional<std::string>
+    {
+        auto normalized
+            = opencattus::utils::string::lower(std::string(rawKind));
+        if (normalized == "mellanox") {
+            return "doca";
+        }
+
+        if (opencattus::utils::enums::ofStringOpt<OFED::Kind>(
+                normalized, opencattus::utils::enums::Case::Insensitive)
+                .has_value()) {
+            return normalized;
+        }
+
+        return std::nullopt;
+    }
+
     void validateGenericNodeScalars(const AFNode& node)
     {
         validateUnsignedAnswerfileField("node", "padding", node.padding, true);
@@ -991,14 +1024,17 @@ void AnswerFile::loadPostfix()
             boost::is_any_of(", "), boost::token_compress_on);
     }
 
+    const auto profileValue = m_keyfile.getString("postfix", "profile");
     auto castProfile = opencattus::utils::enums::ofStringOpt<Postfix::Profile>(
-        m_keyfile.getString("postfix", "profile"),
-        opencattus::utils::enums::Case::Insensitive);
+        profileValue, opencattus::utils::enums::Case::Insensitive);
 
     if (castProfile.has_value())
         postfix.profile = castProfile.value();
     else {
-        throw std::runtime_error(fmt::format("Invalid Postfix profile"));
+        throw std::invalid_argument(fmt::format(
+            "Section 'postfix' field 'profile' validation failed - unsupported "
+            "profile '{}' (expected Local, Relay, or SASL)",
+            profileValue));
     }
 
     AFPostfix::SMTP smtp;
@@ -1009,12 +1045,14 @@ void AnswerFile::loadPostfix()
             break;
         case Postfix::Profile::Relay:
             smtp.server = m_keyfile.getString("postfix.relay", "server");
-            smtp.port = std::stoi(m_keyfile.getString("postfix.relay", "port"));
+            smtp.port = parsePortAnswerfileField("postfix.relay", "port",
+                m_keyfile.getString("postfix.relay", "port"));
             postfix.smtp = smtp;
             break;
         case Postfix::Profile::SASL:
             smtp.server = m_keyfile.getString("postfix.sasl", "server");
-            smtp.port = std::stoi(m_keyfile.getString("postfix.sasl", "port"));
+            smtp.port = parsePortAnswerfileField("postfix.sasl", "port",
+                m_keyfile.getString("postfix.sasl", "port"));
             sasl.username = m_keyfile.getString("postfix.sasl", "username");
             sasl.password = m_keyfile.getString("postfix.sasl", "password");
             smtp.sasl = sasl;
@@ -1033,8 +1071,16 @@ void AnswerFile::loadOFED()
     if (m_keyfile.hasGroup("ofed")) {
         auto kind = m_keyfile.getString("ofed", "kind");
         if (kind != "") {
+            auto normalizedKind = normalizeOFEDKind(kind);
+            if (!normalizedKind.has_value()) {
+                throw std::invalid_argument(fmt::format(
+                    "Section 'ofed' field 'kind' validation failed - "
+                    "unsupported OFED kind '{}' (expected inbox, doca, oracle, "
+                    "or mellanox)",
+                    kind));
+            }
             ofed.enabled = true;
-            ofed.kind = kind;
+            ofed.kind = normalizedKind.value();
             auto afVersion = m_keyfile.getString("ofed", "version");
             if (afVersion != "") {
                 ofed.version = afVersion;
