@@ -216,6 +216,15 @@ namespace {
         return std::nullopt;
     }
 
+    void validateSingleQueueSystem(bool slurmEnabled, bool pbsEnabled)
+    {
+        if (slurmEnabled && pbsEnabled) {
+            throw std::invalid_argument(
+                "Queue system validation failed - answerfile cannot contain "
+                "both [slurm] and [pbs] sections");
+        }
+    }
+
     void validateGenericNodeScalars(const AFNode& node)
     {
         validateUnsignedAnswerfileField("node", "padding", node.padding, true);
@@ -284,6 +293,7 @@ void AnswerFile::loadOptions()
     loadOFED();
     loadSlurm();
     loadPBS();
+    validateSingleQueueSystem(slurm.enabled, pbs.enabled);
 }
 
 void AnswerFile::dumpNetwork(
@@ -1161,9 +1171,10 @@ void AnswerFile::loadPBS()
         = opencattus::utils::enums::ofStringOpt<PBS::ExecutionPlace>(
             executionPlace, opencattus::utils::enums::Case::Insensitive);
     if (!parsedExecutionPlace.has_value()) {
-        throw std::runtime_error(
-            fmt::format("Invalid PBS execution_place '{}' in answerfile {}",
-                executionPlace, path()));
+        throw std::invalid_argument(fmt::format(
+            "Section 'pbs' field 'execution_place' validation failed - "
+            "unsupported execution place '{}' (expected Shared or Scatter)",
+            executionPlace));
     }
 
     pbs.execution_place = parsedExecutionPlace.value();

@@ -738,8 +738,8 @@ public:
     {
         LOG_DEBUG("Loading repo config: {}", path);
         if (!opencattus::functions::exists(path)) {
-            opencattus::functions::abort(
-                "Trying to parse missing repo config {}", path);
+            throw std::runtime_error(fmt::format(
+                "Repository configuration file is missing: {}", path));
         }
         auto file = KeyFile(path);
         auto repoNames = file.getGroups();
@@ -997,9 +997,9 @@ auto repoConfigBasePath() -> std::filesystem::path
         return *basePath;
     }
 
-    opencattus::functions::abort(
-        "Could not find repository configuration. Checked: {}",
-        formatRepoConfigCandidates(candidates));
+    throw std::runtime_error(
+        fmt::format("Repository configuration was not found. Checked: {}",
+            formatRepoConfigCandidates(candidates)));
 }
 
 TEST_CASE("repo config discovery finds source repos from build-tree binary")
@@ -1040,6 +1040,18 @@ TEST_CASE("repo config discovery ignores directories without repos.conf")
     CHECK_FALSE(selected.has_value());
 
     std::filesystem::remove_all(basePath);
+}
+
+TEST_CASE("repo config parser reports missing config files")
+{
+    const auto missing = std::filesystem::path(
+        "test/output/repo-config-parser-missing/repos.conf");
+
+    std::filesystem::remove(missing);
+
+    CHECK_THROWS_WITH_AS(RepoConfigParser::parseTest(missing),
+        doctest::Contains("Repository configuration file is missing"),
+        std::runtime_error);
 }
 
 TEST_CASE("repo config discovery resolves the runtime repository config path")
