@@ -107,6 +107,10 @@ PresenterInfiniband::PresenterInfiniband(std::unique_ptr<Cluster>& model,
         try {
             Call<PresenterNetwork>(
                 nc, Network::Profile::Application, Network::Type::Infiniband);
+        } catch (const ViewBackRequested&) {
+            throw;
+        } catch (const ViewAbortRequested&) {
+            throw;
         } catch (const std::exception& ex) {
             LOG_ERROR("Failed to add {} network: {}",
                 opencattus::utils::enums::toString(

@@ -17,7 +17,8 @@ private:
         static constexpr const auto help
             = "This final check summarizes the selected operating system, "
               "provisioner, networks, BMC coverage, repositories, and queue "
-              "system before installation starts.";
+              "system before installation starts. Choose Stop to save the "
+              "current draft and leave the installer.";
     };
 
 public:

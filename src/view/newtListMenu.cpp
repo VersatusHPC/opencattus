@@ -113,9 +113,10 @@ std::string Newt::listMenuImpl(const char* title, const char* message,
     }
 
     newtGrid grid = newtCreateGrid(1, 3);
-    newtComponent buttonOk, buttonCancel, buttonHelp;
+    newtComponent buttonOk, buttonBack, buttonQuit, buttonHelp;
     newtGrid buttonGrid = newtButtonBar(const_cast<char*>(TUIText::Buttons::ok),
-        &buttonOk, const_cast<char*>(TUIText::Buttons::cancel), &buttonCancel,
+        &buttonOk, const_cast<char*>(TUIText::Buttons::back), &buttonBack,
+        const_cast<char*>(TUIText::Buttons::quit), &buttonQuit,
         const_cast<char*>(TUIText::Buttons::help), &buttonHelp, NULL);
     newtGridSetField(grid, 0, 0, NEWT_GRID_COMPONENT, label, 1, 1, 0, 0, 0,
         NEWT_GRID_FLAG_GROWX);
@@ -154,6 +155,13 @@ std::string Newt::listMenuImpl(const char* title, const char* message,
             }
         } else if (es.u.co == buttonHelp) {
             this->helpMessage(helpMessage);
+        } else if (es.u.co == buttonBack) {
+            stopRequested = true;
+            selected = std::nullopt;
+            newtPopWindow();
+            newtFormDestroy(form);
+            newtRefresh();
+            goBack();
         } else {
             stopRequested = true;
         }
@@ -226,9 +234,10 @@ std::pair<int, std::vector<std::string>> Newt::checkboxSelectionMenu(
     newtComponentAddCallback(list, updateCheckboxListLabels, &checkboxState);
 
     newtGrid grid = newtCreateGrid(1, 3);
-    newtComponent buttonOk, buttonCancel, buttonHelp;
+    newtComponent buttonOk, buttonBack, buttonQuit, buttonHelp;
     newtGrid buttonGrid = newtButtonBar(const_cast<char*>(TUIText::Buttons::ok),
-        &buttonOk, const_cast<char*>(TUIText::Buttons::cancel), &buttonCancel,
+        &buttonOk, const_cast<char*>(TUIText::Buttons::back), &buttonBack,
+        const_cast<char*>(TUIText::Buttons::quit), &buttonQuit,
         const_cast<char*>(TUIText::Buttons::help), &buttonHelp, NULL);
     newtGridSetField(grid, 0, 0, NEWT_GRID_COMPONENT, label, 1, 1, 0, 0, 0,
         NEWT_GRID_FLAG_GROWX);
@@ -263,11 +272,15 @@ std::pair<int, std::vector<std::string>> Newt::checkboxSelectionMenu(
 
         if (es.u.co == buttonOk) {
             retval = 1;
+        } else if (es.u.co == buttonBack) {
+            retval = 2;
+        } else if (es.u.co == buttonQuit) {
+            retval = 3;
         } else if (es.u.co == buttonHelp) {
             this->helpMessage(help);
             continue;
         } else {
-            retval = 2;
+            retval = 3;
         }
     }
 
@@ -275,6 +288,13 @@ std::pair<int, std::vector<std::string>> Newt::checkboxSelectionMenu(
     newtPopWindow();
     newtFormDestroy(form);
     newtRefresh();
+
+    if (retval == 2) {
+        goBack();
+    }
+    if (retval == 3) {
+        abort();
+    }
 
     return std::make_pair(retval, ret);
 }

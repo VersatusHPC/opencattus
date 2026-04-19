@@ -194,6 +194,10 @@ private:
         std::optional<std::vector<std::string>> enabled;
     };
 
+    struct AFOHPC {
+        std::optional<std::vector<std::string>> enabled;
+    };
+
     std::filesystem::path m_path;
     opencattus::services::files::KeyFile m_keyfile;
 
@@ -312,6 +316,8 @@ private:
     void dumpOFED();
     void loadRepositories();
     void dumpRepositories();
+    void loadOHPC();
+    void dumpOHPC();
 
     void dumpNodes();
 
@@ -394,6 +400,7 @@ public:
     AFPostfix postfix;
     AFOFED ofed;
     AFRepositories repositories;
+    AFOHPC ohpc;
     AFSlurm slurm;
     AFPBS pbs;
 

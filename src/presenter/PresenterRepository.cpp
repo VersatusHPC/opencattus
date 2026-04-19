@@ -66,7 +66,8 @@ PresenterRepository::PresenterRepository(
     const auto optionalRepos = selectableRepositoriesFrom(
         services::repos::RepoManager::defaultRepositoriesFor(
             m_model->getComputeNodeOS(), ofedVersion,
-            m_model->getEnabledRepositories()));
+            m_model->getEnabledRepositories(),
+            m_model->getEnabledOpenHPCBundles()));
     if (optionalRepos.empty()) {
         m_model->clearEnabledRepositories();
         return;

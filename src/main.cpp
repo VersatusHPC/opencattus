@@ -389,19 +389,13 @@ int runApplication(int argc, const char** argv)
             tuiDraftPath = services::tui::defaultDraftPath(*opts);
         }
         auto completedSteps = tuiDraftState.completedSteps;
-        const auto saveTuiDraft = [&](std::string_view step) {
-            const auto stepName = std::string(step);
-            if (std::find(
-                    completedSteps.begin(), completedSteps.end(), stepName)
-                == completedSteps.end()) {
-                completedSteps.push_back(stepName);
-            }
-
+        const auto saveTuiDraft = [&](const std::vector<std::string>& steps) {
+            completedSteps = steps;
             try {
                 services::tui::writeDraft(*model, tuiDraftPath, completedSteps);
             } catch (const std::exception& ex) {
-                LOG_WARN("Failed to save TUI draft {} after step {}: {}",
-                    tuiDraftPath.string(), stepName, ex.what());
+                LOG_WARN("Failed to save TUI draft {}: {}",
+                    tuiDraftPath.string(), ex.what());
             }
         };
 

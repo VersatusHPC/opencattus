@@ -65,6 +65,7 @@ private:
     Provisioner m_provisioner { Provisioner::xCAT };
     std::optional<OFED> m_ofed;
     std::optional<std::vector<std::string>> m_enabledRepositories;
+    std::optional<std::vector<std::string>> m_enabledOpenHPCBundles;
     std::optional<std::unique_ptr<QueueSystem>> m_queueSystem {};
     std::optional<services::Postfix> m_mailSystem {};
     std::vector<Node> m_nodes;
@@ -188,6 +189,10 @@ public:
     getEnabledRepositories() const;
     void setEnabledRepositories(std::vector<std::string> repositories);
     void clearEnabledRepositories();
+    [[nodiscard]] const std::optional<std::vector<std::string>>&
+    getEnabledOpenHPCBundles() const;
+    void setEnabledOpenHPCBundles(std::vector<std::string> bundles);
+    void clearEnabledOpenHPCBundles();
 
     [[nodiscard]] const std::optional<std::unique_ptr<QueueSystem>>&
     getQueueSystem() const;

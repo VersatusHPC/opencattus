@@ -94,7 +94,7 @@ void Newt::okCancelMessage(const char* title, const char* message)
     while (true) {
         returnValue = newtWinChoice(const_cast<char*>(title),
             const_cast<char*>(TUIText::Buttons::ok),
-            const_cast<char*>(TUIText::Buttons::cancel),
+            const_cast<char*>(TUIText::Buttons::stop),
             const_cast<char*>(message));
 
         switch (returnValue) {
@@ -134,7 +134,7 @@ void Newt::scrollableMessage(const char* title, const char* message,
     newtGrid grid = newtCreateGrid(1, 3);
     newtComponent buttonOk, buttonCancel, buttonHelp;
     newtGrid buttonGrid = newtButtonBar(const_cast<char*>(TUIText::Buttons::ok),
-        &buttonOk, const_cast<char*>(TUIText::Buttons::cancel), &buttonCancel,
+        &buttonOk, const_cast<char*>(TUIText::Buttons::stop), &buttonCancel,
         const_cast<char*>(TUIText::Buttons::help), &buttonHelp, NULL);
     newtGridSetField(grid, 0, 0, NEWT_GRID_COMPONENT, label, 1, 0, 0, 0, 0,
         NEWT_GRID_FLAG_GROWX);
@@ -208,7 +208,7 @@ void Newt::okCancelMessagePairs(
     while (true) {
         returnValue = newtWinChoice(const_cast<char*>(title),
             const_cast<char*>(TUIText::Buttons::ok),
-            const_cast<char*>(TUIText::Buttons::cancel),
+            const_cast<char*>(TUIText::Buttons::stop),
             const_cast<char*>(newMessage.c_str()));
 
         switch (returnValue) {

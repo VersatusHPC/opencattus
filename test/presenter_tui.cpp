@@ -160,6 +160,8 @@ struct MultiSelectionReply {
     std::vector<std::string> values;
 };
 
+struct BackReply { };
+
 struct AbortReply { };
 
 struct MenuSnapshot {
@@ -181,7 +183,7 @@ struct TextSnapshot {
 };
 
 using Response = std::variant<YesNoReply, ListReply, FieldReply,
-    CollectListReply, MultiSelectionReply, AbortReply>;
+    CollectListReply, MultiSelectionReply, BackReply, AbortReply>;
 
 auto responseKind(const Response& response) -> std::string_view
 {
@@ -198,6 +200,8 @@ auto responseKind(const Response& response) -> std::string_view
                 return "collectListMenu";
             } else if constexpr (std::is_same_v<T, MultiSelectionReply>) {
                 return "checkboxSelectionMenu";
+            } else if constexpr (std::is_same_v<T, BackReply>) {
+                return "back";
             } else if constexpr (std::is_same_v<T, AbortReply>) {
                 return "abort";
             } else {
@@ -231,6 +235,10 @@ private:
         if (std::holds_alternative<AbortReply>(m_state->responses.front())) {
             m_state->responses.pop_front();
             throw ViewAbortRequested("scripted abort");
+        }
+        if (std::holds_alternative<BackReply>(m_state->responses.front())) {
+            m_state->responses.pop_front();
+            throw ViewBackRequested("scripted back");
         }
 
         if (const auto value = std::get_if<T>(&m_state->responses.front())) {
@@ -442,6 +450,8 @@ auto multi(int status, std::initializer_list<std::string> values) -> Response
 }
 
 auto abortSelection() -> Response { return AbortReply {}; }
+
+auto backSelection() -> Response { return BackReply {}; }
 
 auto isUsableQuestionnaireInterface(const std::string& interface) -> bool
 {
@@ -1943,6 +1953,7 @@ TEST_SUITE("opencattus::presenter::tui")
             select("Rocky Linux"),
             fields({ "9.6", "x86_64" }),
             select("confluent"),
+            multi(1, { "serial-libs", "parallel-libs" }),
             multi(1, { "cuda" }),
             fields({ "n", "2", "192.168.30.101", "", "labroot", "labroot" }),
             fields(
@@ -1961,15 +1972,19 @@ TEST_SUITE("opencattus::presenter::tui")
         }
 
         std::vector<std::string> completedSteps;
+        std::vector<std::vector<std::string>> callbackStates;
         std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
-        PresenterInstall(model, view,
-            [&](std::string_view step) { completedSteps.emplace_back(step); });
+        PresenterInstall(
+            model, view, [&](const std::vector<std::string>& steps) {
+                completedSteps = steps;
+                callbackStates.push_back(steps);
+            });
 
         CHECK_FALSE(view);
         CHECK(state->responses.empty());
         CHECK(completedSteps
-            == std::vector<std::string> { "welcome", "instructions", "general",
-                "time", "locale", "hostname", "networking", "os", "provisioner",
+            == std::vector<std::string> { "general", "time", "locale",
+                "hostname", "networking", "os", "provisioner", "ohpc",
                 "repositories", "nodes", "queue", "mail", "preflight" });
 
         const auto generalScreen
@@ -1988,6 +2003,8 @@ TEST_SUITE("opencattus::presenter::tui")
             = firstMessageIndex(state->messages, "Compute node OS settings|");
         const auto provisionerScreen
             = firstMessageIndex(state->messages, "Provisioner settings|");
+        const auto ohpcScreen
+            = firstMessageIndex(state->messages, "OpenHPC bundles|");
         const auto repositoryScreen
             = firstMessageIndex(state->messages, "Repositories|");
         const auto nodesScreen
@@ -2020,7 +2037,8 @@ TEST_SUITE("opencattus::presenter::tui")
             CHECK(servicePrompt < osScreen);
         }
         CHECK(osScreen < provisionerScreen);
-        CHECK(provisionerScreen < repositoryScreen);
+        CHECK(provisionerScreen < ohpcScreen);
+        CHECK(ohpcScreen < repositoryScreen);
         CHECK(repositoryScreen < nodesScreen);
         CHECK(nodesScreen < queueScreen);
         CHECK(queueScreen < mailScreen);
@@ -2052,7 +2070,13 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(preflightText.contains("  Gateway"));
         CHECK_FALSE(preflightText.contains("first BMC"));
         CHECK(preflightText.contains("Repositories   Optional: cuda"));
-        CHECK(preflightText.contains("Optional: cuda\n\nQueue system"));
+        CHECK(
+            preflightText.contains("OpenHPC        base GNU compilers and MPI "
+                                   "stacks"));
+        CHECK(preflightText.contains(
+            "serial scientific libs, parallel scientific libs"));
+        CHECK(
+            preflightText.contains("parallel scientific libs\n\nQueue system"));
         CHECK(preflightText.contains("Queue system   SLURM"));
         CHECK(preflightText.contains("Queue name     batch"));
         CHECK(preflightText.contains("\n\n[Nodes]"));
@@ -2094,6 +2118,9 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(model->getHeadnode().getOS().getDistro() == OS::Distro::RHEL);
         CHECK(model->getComputeNodeOS().getDistro() == OS::Distro::Rocky);
         CHECK_FALSE(model->getPendingDiskImageDownloadURL().has_value());
+        REQUIRE(model->getEnabledOpenHPCBundles().has_value());
+        CHECK(model->getEnabledOpenHPCBundles().value()
+            == std::vector<std::string> { "serial-libs", "parallel-libs" });
         REQUIRE(model->getEnabledRepositories().has_value());
         CHECK(model->getEnabledRepositories().value()
             == std::vector<std::string> { "cuda" });
@@ -2110,6 +2137,9 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(answerfile.time.locale == "en_US.utf8");
         CHECK(answerfile.system.provisioner == "confluent");
         CHECK(answerfile.system.version == "9.6");
+        REQUIRE(answerfile.ohpc.enabled.has_value());
+        CHECK(answerfile.ohpc.enabled.value()
+            == std::vector<std::string> { "serial-libs", "parallel-libs" });
         REQUIRE(answerfile.repositories.enabled.has_value());
         CHECK(answerfile.repositories.enabled.value()
             == std::vector<std::string> {
@@ -2156,13 +2186,17 @@ TEST_SUITE("opencattus::presenter::tui")
         std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
 
         CHECK_THROWS_AS(PresenterInstall(model, view,
-                            [&](std::string_view step) {
-                                completedSteps.emplace_back(step);
+                            [&](const std::vector<std::string>& steps) {
+                                completedSteps = steps;
                             }),
             ViewAbortRequested);
         CHECK(completedSteps
-            == std::vector<std::string> { "welcome", "instructions", "general",
-                "time", "locale", "hostname" });
+            == std::vector<std::string> {
+                "general",
+                "time",
+                "locale",
+                "hostname",
+            });
     }
 
     TEST_CASE("presenter install can drive the questionnaire end to end on "
@@ -2203,6 +2237,7 @@ TEST_SUITE("opencattus::presenter::tui")
             select("Rocky Linux"),
             fields({ "9.6", "x86_64" }),
             select("confluent"),
+            multi(1, { "serial-libs", "parallel-libs" }),
             multi(1, { "cuda" }),
             fields({ "n", "2", "192.168.30.101", "", "labroot", "labroot" }),
             fields(
@@ -2229,6 +2264,9 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(model->getLocale() == "en_US.utf8");
         CHECK(model->getProvisioner() == Cluster::Provisioner::Confluent);
         CHECK_FALSE(model->getPendingDiskImageDownloadURL().has_value());
+        REQUIRE(model->getEnabledOpenHPCBundles().has_value());
+        CHECK(model->getEnabledOpenHPCBundles().value()
+            == std::vector<std::string> { "serial-libs", "parallel-libs" });
         REQUIRE(model->getEnabledRepositories().has_value());
         CHECK(model->getEnabledRepositories().value()
             == std::vector<std::string> { "cuda" });
@@ -2238,7 +2276,95 @@ TEST_SUITE("opencattus::presenter::tui")
         CHECK(answerfile.time.timezone == "America/Sao_Paulo");
         CHECK(answerfile.time.locale == "en_US.utf8");
         CHECK(answerfile.system.provisioner == "confluent");
+        REQUIRE(answerfile.ohpc.enabled.has_value());
+        CHECK(answerfile.ohpc.enabled.value()
+            == std::vector<std::string> { "serial-libs", "parallel-libs" });
 
         std::filesystem::remove(outputPath);
+    }
+
+    TEST_CASE("presenter install rewinds to the previous step when Back is "
+              "requested")
+    {
+        initializePresenterTestEnvironment(defaultRunnerOutputs());
+
+        const auto interfaces = usableHostInterfaces();
+        if (interfaces.size() < 2) {
+            MESSAGE("Skipping PresenterInstall back-navigation test: need at "
+                    "least two interfaces");
+            return;
+        }
+
+        auto model = std::make_unique<Cluster>();
+        model->getHeadnode().setOS(
+            OS(OS::Distro::RHEL, OS::Platform::el9, 6, OS::Arch::x86_64));
+
+        auto state = std::make_shared<ScriptedViewState>();
+        state->allowProgressMenu = true;
+        state->responses = {
+            fields({ "demo", "acme", "admin@example.com" }),
+            select("Text"),
+            select("America"),
+            backSelection(),
+            fields({ "demo", "acme", "admin@example.com" }),
+            select("Text"),
+            select("America"),
+            select("Sao_Paulo"),
+            collect({ "0.pool.ntp.org", "1.pool.ntp.org" }),
+            select("English (en)"),
+            fields({ "headnode", "cluster.example.com" }),
+            select(interfaces[0]),
+            fields({ "192.168.124.10", "255.255.255.0", "192.168.124.1",
+                "external.cluster.example.com", "1.1.1.1, 8.8.8.8" }),
+            select(interfaces[1]),
+            fields({ "192.168.30.254", "255.255.255.0", "192.168.30.1",
+                "cluster.example.com", "9.9.9.9" }),
+            yesNo(false),
+            yesNo(true),
+            select("Rocky Linux"),
+            fields({ "9.6", "x86_64" }),
+            select("confluent"),
+            multi(1, { "serial-libs", "parallel-libs" }),
+            multi(1, { "cuda" }),
+            fields({ "n", "1", "192.168.30.101", "", "labroot", "labroot" }),
+            fields(
+                { "1", "8", "2", "32768", "admin", "secret", "1", "115200" }),
+            fields({ "1" }),
+            fields({ "52:54:00:00:20:11", "172.16.0.11" }),
+            select("SLURM"),
+            fields({ "batch", "dbroot", "slurmdb" }),
+            yesNo(false),
+        };
+
+        if (hasUsableInfinibandInterface()) {
+            state->responses.insert(
+                state->responses.begin() + 16, yesNo(false));
+        }
+
+        std::vector<std::string> completedSteps;
+        std::vector<std::vector<std::string>> callbackStates;
+        std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
+        PresenterInstall(
+            model, view, [&](const std::vector<std::string>& steps) {
+                completedSteps = steps;
+                callbackStates.push_back(steps);
+            });
+
+        CHECK_FALSE(view);
+        CHECK(state->responses.empty());
+        CHECK(completedSteps
+            == std::vector<std::string> { "general", "time", "locale",
+                "hostname", "networking", "os", "provisioner", "ohpc",
+                "repositories", "nodes", "queue", "mail", "preflight" });
+
+        const auto generalPrompts
+            = messageIndices(state->messages, "General cluster settings|");
+        const auto timePrompts
+            = messageIndices(state->messages, "Time and clock settings|");
+        CHECK(generalPrompts.size() >= 2);
+        CHECK(timePrompts.size() >= 2);
+        CHECK(std::ranges::find(callbackStates, std::vector<std::string> {})
+            != callbackStates.end());
+        CHECK(model->getTimezone().getTimezone() == "America/Sao_Paulo");
     }
 }

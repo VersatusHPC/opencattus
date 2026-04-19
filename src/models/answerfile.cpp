@@ -288,6 +288,7 @@ void AnswerFile::loadOptions()
     loadHostnameSettings();
     loadSystemSettings();
     loadRepositories();
+    loadOHPC();
     loadNodes();
     loadPostfix();
     loadOFED();
@@ -583,6 +584,16 @@ void AnswerFile::dumpRepositories()
         boost::algorithm::join(repositories.enabled.value(), ", "));
 }
 
+void AnswerFile::dumpOHPC()
+{
+    if (!ohpc.enabled.has_value()) {
+        return;
+    }
+
+    m_keyfile.setString(
+        "ohpc", "enabled", boost::algorithm::join(ohpc.enabled.value(), ", "));
+}
+
 void AnswerFile::dumpOptions()
 {
     LOG_TRACE("Dump answerfile variables")
@@ -596,6 +607,7 @@ void AnswerFile::dumpOptions()
     dumpHostnameSettings();
     dumpSystemSettings();
     dumpRepositories();
+    dumpOHPC();
     dumpSlurm();
     dumpPBS();
 
@@ -1119,6 +1131,24 @@ void AnswerFile::loadRepositories()
     boost::split(values, enabled.value(), boost::is_any_of(", "),
         boost::token_compress_on);
     repositories.enabled = std::move(values);
+}
+
+void AnswerFile::loadOHPC()
+{
+    if (!m_keyfile.hasGroup("ohpc")) {
+        return;
+    }
+
+    ohpc.enabled = std::vector<std::string> {};
+    const auto enabled = m_keyfile.getStringOpt("ohpc", "enabled");
+    if (!enabled.has_value() || enabled->empty()) {
+        return;
+    }
+
+    std::vector<std::string> values;
+    boost::split(values, enabled.value(), boost::is_any_of(", "),
+        boost::token_compress_on);
+    ohpc.enabled = std::move(values);
 }
 
 auto AnswerFile::path() const -> const std::filesystem::path& { return m_path; }

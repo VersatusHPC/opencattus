@@ -625,7 +625,7 @@ std::string buildDHCPDynamicRangeCommand(
         "chdef -t network {} net={} mask={} mgtifname={} dynamicrange={}",
         buildNetworkDefinitionName(network), network.getAddress().to_string(),
         network.getSubnetMask().to_string(), interface,
-        shellSingleQuote(defaultDHCPDynamicRangeFor(network)));
+        defaultDHCPDynamicRangeFor(network));
 }
 
 std::string buildPrecreateMyPostscriptsCommand(bool enabled)
@@ -1825,7 +1825,7 @@ TEST_CASE("buildDHCPDynamicRangeCommand updates the xCAT network table")
         == "chdef -t network 192_168_30_0-255_255_255_0 "
            "net=192.168.30.0 mask=255.255.255.0 "
            "mgtifname=oc-mgmt0 "
-           "dynamicrange='192.168.30.153-192.168.30.252'");
+           "dynamicrange=192.168.30.153-192.168.30.252");
 }
 
 TEST_CASE(

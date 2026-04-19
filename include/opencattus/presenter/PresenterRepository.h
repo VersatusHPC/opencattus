@@ -18,7 +18,9 @@ private:
             static constexpr const auto help
                 = "Only optional repositories are listed here. Distribution, "
                   "EPEL, OpenHPC, and provisioner repositories are enabled by "
-                  "the installer when required.";
+                  "the installer when required. BeeGFS also enables Grafana "
+                  "and InfluxDB. The Intel oneAPI repository is implied when "
+                  "the Intel OpenHPC bundle is selected.";
         };
     };
 

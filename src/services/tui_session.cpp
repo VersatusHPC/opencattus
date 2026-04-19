@@ -296,6 +296,13 @@ namespace {
         }
     }
 
+    void applyOHPC(models::Cluster& model, const KeyFile& file)
+    {
+        if (const auto enabled = optionalString(file, "ohpc", "enabled")) {
+            model.setEnabledOpenHPCBundles(splitValues(*enabled));
+        }
+    }
+
     void applyOFED(models::Cluster& model, const KeyFile& file)
     {
         if (!file.hasGroup("ofed")) {
@@ -649,6 +656,7 @@ void applyDraftToModel(
     applyNetworks(model, file);
     applySystem(model, file);
     applyRepositories(model, file);
+    applyOHPC(model, file);
     applyOFED(model, file);
     applyNodes(model, file);
     applyQueueSystem(model, file);

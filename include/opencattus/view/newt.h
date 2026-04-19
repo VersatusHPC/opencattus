@@ -42,7 +42,9 @@ private:
 
         struct Buttons {
             static constexpr const auto ok = "OK";
-            static constexpr const auto cancel = "Stop";
+            static constexpr const auto back = "Back";
+            static constexpr const auto quit = "Quit";
+            static constexpr const auto stop = "Stop";
             static constexpr const auto yes = "Yes";
             static constexpr const auto add = "Add";
             static constexpr const auto remove = "Remove";
@@ -75,6 +77,7 @@ protected:
     void refreshScreenMetrics();
 
     void abort() override;
+    [[noreturn]] void goBack();
     void helpMessage(const char*) override;
     static bool hasEmptyField(const struct newtWinEntry*);
     static bool allowsEmptyField(const struct newtWinEntry&);
@@ -135,7 +138,7 @@ public:
         while (true) {
             returnValue = newtWinChoice(const_cast<char*>(title),
                 const_cast<char*>(TUIText::Buttons::ok),
-                const_cast<char*>(TUIText::Buttons::cancel),
+                const_cast<char*>(TUIText::Buttons::stop),
                 const_cast<char*>(newMessage.c_str()));
 
             switch (returnValue) {
@@ -212,7 +215,8 @@ public:
                 listHeight(tempStrings.size()),
                 const_cast<char**>(cStrings.data()), &selector,
                 const_cast<char*>(TUIText::Buttons::ok),
-                const_cast<char*>(TUIText::Buttons::cancel),
+                const_cast<char*>(TUIText::Buttons::back),
+                const_cast<char*>(TUIText::Buttons::quit),
                 const_cast<char*>(TUIText::Buttons::add),
                 const_cast<char*>(TUIText::Buttons::remove),
                 const_cast<char*>(TUIText::Buttons::help), nullptr);
@@ -226,9 +230,12 @@ public:
                 case 1:
                     return tempStrings;
                 case 2:
+                    goBack();
+                    break;
+                case 3:
                     abort();
                     break;
-                case 3: { // add
+                case 4: { // add
                     bool ret = addCallback(tempStrings);
                     if (ret) {
                         cStrings = convertToNewtList(tempStrings);
@@ -238,7 +245,7 @@ public:
                     }
                     break;
                 }
-                case 4: // remove
+                case 5: // remove
                     if (selector >= 0
                         && static_cast<size_t>(selector) < cStrings.size()) {
                         tempStrings.erase(tempStrings.begin() + selector);
@@ -246,7 +253,7 @@ public:
                     }
                     stay = true;
                     break;
-                case 5:
+                case 6:
                     this->helpMessage(helpMessage);
                     stay = true;
                     break;
@@ -293,7 +300,8 @@ public:
                 listHeight(tempStrings.size()),
                 const_cast<char**>(cStrings.data()), &selector,
                 const_cast<char*>(TUIText::Buttons::ok),
-                const_cast<char*>(TUIText::Buttons::cancel),
+                const_cast<char*>(TUIText::Buttons::back),
+                const_cast<char*>(TUIText::Buttons::quit),
                 const_cast<char*>(TUIText::Buttons::help), nullptr);
             stay = false;
 
@@ -305,9 +313,12 @@ public:
                     return tempStrings[boost::lexical_cast<std::size_t>(
                         selector)];
                 case 2:
-                    abort();
+                    goBack();
                     break;
                 case 3:
+                    abort();
+                    break;
+                case 4:
                     this->helpMessage(helpMessage);
                     stay = true;
                     break;
@@ -382,7 +393,8 @@ public:
                 const_cast<char*>(message), dialogWidth, m_flexDown, m_flexUp,
                 m_dataWidth, field.get(),
                 const_cast<char*>(TUIText::Buttons::ok),
-                const_cast<char*>(TUIText::Buttons::cancel),
+                const_cast<char*>(TUIText::Buttons::back),
+                const_cast<char*>(TUIText::Buttons::quit),
                 const_cast<char*>(TUIText::Buttons::help), nullptr);
             stay = false;
 
@@ -411,9 +423,12 @@ public:
 
                     return returnArray;
                 case 2:
-                    abort();
+                    goBack();
                     break;
                 case 3:
+                    abort();
+                    break;
+                case 4:
                     this->helpMessage(helpMessage);
                     stay = true;
                     break;

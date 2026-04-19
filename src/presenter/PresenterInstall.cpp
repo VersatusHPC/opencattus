@@ -13,6 +13,7 @@
 #include <opencattus/presenter/PresenterNetwork.h>
 #include <opencattus/presenter/PresenterNodes.h>
 #include <opencattus/presenter/PresenterNodesOperationalSystem.h>
+#include <opencattus/presenter/PresenterOpenHPC.h>
 #include <opencattus/presenter/PresenterPreflight.h>
 #include <opencattus/presenter/PresenterProvisioner.h>
 #include <opencattus/presenter/PresenterQueueSystem.h>
@@ -154,90 +155,121 @@ void downloadPendingDiskImage(opencattus::models::Cluster& model, View& view)
 
 namespace opencattus::presenter {
 PresenterInstall::PresenterInstall(std::unique_ptr<Cluster>& model,
-    std::unique_ptr<View>& view, StepCompletionCallback onStepComplete,
+    std::unique_ptr<View>& view, StepStateCallback onStepComplete,
     std::set<std::string> completedSteps)
     : Presenter(model, view)
 {
-    const auto runStep = [&](std::string_view step, auto&& body) {
-        const auto stepName = std::string(step);
-        if (completedSteps.contains(stepName)) {
-            LOG_INFO("Skipping completed TUI step {}", stepName);
-            return;
+    if (completedSteps.empty()) {
+        Call<PresenterWelcome>();
+        Call<PresenterInstructions>();
+    }
+
+    using Step = std::pair<std::string, std::function<void()>>;
+    const auto steps = std::vector<Step> {
+        { "general", [&]() { Call<PresenterGeneralSettings>(); } },
+        { "time", [&]() { Call<PresenterTime>(); } },
+        { "locale", [&]() { Call<PresenterLocale>(); } },
+        { "hostname", [&]() { Call<PresenterHostId>(); } },
+        { "networking",
+            [&]() {
+                NetworkCreator nc;
+
+                try {
+                    Call<PresenterNetwork>(nc, Network::Profile::External);
+                } catch (const ViewAbortRequested&) {
+                    throw;
+                } catch (const ViewBackRequested&) {
+                    throw;
+                } catch (const std::exception& ex) {
+                    LOG_ERROR("Failed to add {} network: {}",
+                        opencattus::utils::enums::toString(
+                            Network::Profile::External),
+                        ex.what());
+                }
+
+                try {
+                    Call<PresenterNetwork>(nc, Network::Profile::Management);
+                } catch (const ViewAbortRequested&) {
+                    throw;
+                } catch (const ViewBackRequested&) {
+                    throw;
+                } catch (const std::exception& ex) {
+                    LOG_ERROR("Failed to add {} network: {}",
+                        opencattus::utils::enums::toString(
+                            Network::Profile::Management),
+                        ex.what());
+                }
+
+                if (m_view->yesNoQuestion(NetworkMessages::title,
+                        NetworkMessages::serviceQuestion,
+                        NetworkMessages::serviceHelp)) {
+                    try {
+                        Call<PresenterNetwork>(nc, Network::Profile::Service);
+                    } catch (const ViewAbortRequested&) {
+                        throw;
+                    } catch (const ViewBackRequested&) {
+                        throw;
+                    } catch (const std::exception& ex) {
+                        LOG_ERROR("Failed to add {} network: {}",
+                            opencattus::utils::enums::toString(
+                                Network::Profile::Service),
+                            ex.what());
+                    }
+                }
+
+                Call<PresenterInfiniband>(nc);
+                nc.saveNetworksToModel(*m_model);
+            } },
+        { "os", [&]() { Call<PresenterNodesOperationalSystem>(); } },
+        { "provisioner", [&]() { Call<PresenterProvisioner>(); } },
+        { "ohpc", [&]() { Call<PresenterOpenHPC>(); } },
+        { "repositories", [&]() { Call<PresenterRepository>(); } },
+        { "nodes", [&]() { Call<PresenterNodes>(); } },
+        { "queue", [&]() { Call<PresenterQueueSystem>(); } },
+        { "mail", [&]() { Call<PresenterMailSystem>(); } },
+        { "preflight", [&]() { Call<PresenterPreflight>(); } },
+    };
+
+    auto completedHistory = std::vector<std::string> {};
+    std::size_t startIndex = 0;
+    for (; startIndex < steps.size(); ++startIndex) {
+        if (!completedSteps.contains(steps[startIndex].first)) {
+            break;
         }
+        completedHistory.emplace_back(steps[startIndex].first);
+    }
 
-        body();
-
+    const auto syncStepState = [&]() {
         if (onStepComplete) {
-            onStepComplete(step);
+            onStepComplete(completedHistory);
         }
     };
 
-    runStep("welcome", [&]() { Call<PresenterWelcome>(); });
-    runStep("instructions", [&]() { Call<PresenterInstructions>(); });
-
-    runStep("general", [&]() { Call<PresenterGeneralSettings>(); });
-
-    runStep("time", [&]() { Call<PresenterTime>(); });
-    runStep("locale", [&]() { Call<PresenterLocale>(); });
-
-    runStep("hostname", [&]() { Call<PresenterHostId>(); });
-
-    // TODO: Under development
-    //  * Add it to a loop where it asks to the user which kind of network we
-    //  should add, while the operator says it's done adding networks. We remove
-    //  the lazy network{1,2} after that.
-    runStep("networking", [&]() {
-        NetworkCreator nc;
-
+    for (auto stepIndex = startIndex; stepIndex < steps.size();) {
         try {
-            Call<PresenterNetwork>(nc, Network::Profile::External);
-        } catch (const ViewAbortRequested&) {
-            throw;
-        } catch (const std::exception& ex) {
-            LOG_ERROR("Failed to add {} network: {}",
-                opencattus::utils::enums::toString(Network::Profile::External),
-                ex.what());
-        }
-
-        try {
-            Call<PresenterNetwork>(nc, Network::Profile::Management);
-        } catch (const ViewAbortRequested&) {
-            throw;
-        } catch (const std::exception& ex) {
-            LOG_ERROR("Failed to add {} network: {}",
-                opencattus::utils::enums::toString(
-                    Network::Profile::Management),
-                ex.what());
-        }
-
-        if (m_view->yesNoQuestion(NetworkMessages::title,
-                NetworkMessages::serviceQuestion,
-                NetworkMessages::serviceHelp)) {
-            try {
-                Call<PresenterNetwork>(nc, Network::Profile::Service);
-            } catch (const ViewAbortRequested&) {
-                throw;
-            } catch (const std::exception& ex) {
-                LOG_ERROR("Failed to add {} network: {}",
-                    opencattus::utils::enums::toString(
-                        Network::Profile::Service),
-                    ex.what());
+            steps[stepIndex].second();
+            if (completedHistory.size() == stepIndex) {
+                completedHistory.emplace_back(steps[stepIndex].first);
+            } else if (completedHistory.size() < stepIndex) {
+                completedHistory.resize(stepIndex);
+                completedHistory.emplace_back(steps[stepIndex].first);
+            } else {
+                completedHistory.resize(stepIndex + 1);
+                completedHistory.back() = steps[stepIndex].first;
             }
+            syncStepState();
+            ++stepIndex;
+        } catch (const ViewBackRequested&) {
+            if (stepIndex == 0) {
+                throw ViewAbortRequested("Questionnaire stopped by operator "
+                                         "request");
+            }
+
+            completedHistory.resize(stepIndex - 1);
+            syncStepState();
+            --stepIndex;
         }
-
-        Call<PresenterInfiniband>(nc);
-        nc.saveNetworksToModel(*m_model);
-    });
-
-    runStep("os", [&]() { Call<PresenterNodesOperationalSystem>(); });
-    runStep("provisioner", [&]() { Call<PresenterProvisioner>(); });
-    runStep("repositories", [&]() { Call<PresenterRepository>(); });
-    runStep("nodes", [&]() { Call<PresenterNodes>(); });
-
-    runStep("queue", [&]() { Call<PresenterQueueSystem>(); });
-
-    runStep("mail", [&]() { Call<PresenterMailSystem>(); });
-    runStep("preflight", [&]() { Call<PresenterPreflight>(); });
+    }
 
     downloadPendingDiskImage(*m_model, *m_view);
 

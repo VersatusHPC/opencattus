@@ -96,7 +96,8 @@ public:
 
     [[nodiscard]] static std::vector<RepositorySelection>
     defaultRepositoriesFor(const OS& osinfo, std::string_view ofedVersion,
-        const std::optional<std::vector<std::string>>& enabledRepositories
+        const std::optional<std::vector<std::string>>& enabledRepositories,
+        const std::optional<std::vector<std::string>>& enabledOpenHPCBundles
         = std::nullopt);
     void initializeDefaultRepositories();
     void enable(const std::string& repo);
