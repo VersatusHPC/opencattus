@@ -230,6 +230,11 @@ private:
      */
     static void configureEL9();
 
+    /**
+     * @brief Configures xCAT netboot templates for Ubuntu 24.04.
+     */
+    static void configureUbuntu24();
+
 public:
     XCAT();
 

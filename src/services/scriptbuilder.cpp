@@ -1,4 +1,5 @@
 #include <filesystem>
+#include <utility>
 #include <vector>
 
 #include <boost/algorithm/string/join.hpp>
@@ -52,17 +53,42 @@ ScriptBuilder& ScriptBuilder::stopService(const std::string_view service)
 
 ScriptBuilder& ScriptBuilder::addPackage(const std::string_view pkg)
 {
-    return addCommand("dnf install -y {}", pkg);
+    switch (m_os.getPackageType()) {
+        case OS::PackageType::RPM:
+            return addCommand("dnf install -y {}", pkg);
+        case OS::PackageType::DEB:
+            return addCommand(
+                "DEBIAN_FRONTEND=noninteractive apt-get install -y {}", pkg);
+    }
+
+    std::unreachable();
 };
 
 ScriptBuilder& ScriptBuilder::addPackages(const std::set<std::string>& pkgs)
 {
-    return addCommand("dnf install -y {}", fmt::join(pkgs, " "));
+    switch (m_os.getPackageType()) {
+        case OS::PackageType::RPM:
+            return addCommand("dnf install -y {}", fmt::join(pkgs, " "));
+        case OS::PackageType::DEB:
+            return addCommand(
+                "DEBIAN_FRONTEND=noninteractive apt-get install -y {}",
+                fmt::join(pkgs, " "));
+    }
+
+    std::unreachable();
 }
 
 ScriptBuilder& ScriptBuilder::removePackage(const std::string_view pkg)
 {
-    return addCommand("dnf remove -y {}", pkg);
+    switch (m_os.getPackageType()) {
+        case OS::PackageType::RPM:
+            return addCommand("dnf remove -y {}", pkg);
+        case OS::PackageType::DEB:
+            return addCommand(
+                "DEBIAN_FRONTEND=noninteractive apt-get remove -y {}", pkg);
+    }
+
+    std::unreachable();
 }
 
 ScriptBuilder& ScriptBuilder::removeLineWithKeyFromFile(

@@ -124,6 +124,9 @@ OS::OS(const Distro& distro, const Platform& platform,
         case OS::Platform::el8:
             m_majorVersion = 8;
             break;
+        case OS::Platform::ubuntu24:
+            m_majorVersion = 24;
+            break;
         default:
             opencattus::functions::abort("Invalid platform: {}",
                 opencattus::utils::enums::toString(platform));
@@ -203,6 +206,9 @@ std::string OS::getDistroString() const
         case OS::Distro::OL:
             distro = "ol";
             break;
+        case OS::Distro::Ubuntu:
+            distro = "ubuntu";
+            break;
         default:
             std::unreachable();
     }
@@ -218,6 +224,8 @@ OS::PackageType OS::getPackageType() const
         case Distro::Rocky:
         case Distro::AlmaLinux:
             return PackageType::RPM;
+        case Distro::Ubuntu:
+            return PackageType::DEB;
         default:
             throw std::runtime_error("Unknonw distro type");
     };
@@ -231,6 +239,9 @@ void OS::setDistro(std::string_view distro)
     auto normalizedDistro = utils::string::lower(std::string(distro));
     if (normalizedDistro == "alma") {
         normalizedDistro = "almalinux";
+    } else if (normalizedDistro == "ubuntu24"
+        || normalizedDistro == "ubuntu24.04") {
+        normalizedDistro = "ubuntu";
     }
 
     if (const auto& rval = enums::ofStringOpt<OS::Distro>(
@@ -261,9 +272,12 @@ void OS::setMajorVersion(unsigned int majorVersion)
         case 10:
             m_platform = OS::Platform::el10;
             break;
+        case 24:
+            m_platform = OS::Platform::ubuntu24;
+            break;
         default:
             throw std::runtime_error(fmt::format(
-                "Unsupported release: EL{} is not supported.", majorVersion));
+                "Unsupported release: {} is not supported.", majorVersion));
     }
 
     m_majorVersion = majorVersion;
@@ -278,6 +292,11 @@ void OS::setMinorVersion(unsigned int minorVersion)
 
 std::string OS::getVersion() const
 {
+    if (getPlatform() == OS::Platform::ubuntu24) {
+        return fmt::format(
+            "{}.{}", m_majorVersion, fmt::format("{:02}", m_minorVersion));
+    }
+
     return fmt::format("{}.{}", m_majorVersion, m_minorVersion);
 }
 

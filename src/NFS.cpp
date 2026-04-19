@@ -82,6 +82,10 @@ opencattus::services::ScriptBuilder NFS::imageInstallScript(
 {
     using namespace opencattus;
     services::ScriptBuilder builder(osinfo);
+    const auto nfsClientPackage
+        = osinfo.getPackageType() == OS::PackageType::DEB
+        ? std::string_view("nfs-common")
+        : std::string_view("nfs-utils");
     builder.addNewLine()
         .addCommand("# Define variables (for shell script execution)")
         .addCommand("IMAGE=\"{}\"", args.imageName)
@@ -96,7 +100,7 @@ opencattus::services::ScriptBuilder NFS::imageInstallScript(
         .addCommand("chmod +x \"${{POSTINSTALL}}\"")
         .addNewLine()
         .addCommand("# Add required packages to the image")
-        .addLineToFile("${PKGLIST}", "nfs-utils", "nfs-utils")
+        .addLineToFile("${PKGLIST}", nfsClientPackage, "{}", nfsClientPackage)
         .addLineToFile("${PKGLIST}", "autofs", "autofs")
         .addNewLine()
         .addCommand("# Configure autofs")
@@ -183,6 +187,20 @@ TEST_CASE("installImageScript")
         R"(echo "* -fstype=nfs,ro,no_subtree_check ${HEADNODE}:/opt/ohpc/pub/&" >> "${ROOTFS}/etc/auto.ohpc")"));
     CHECK(script.contains(
         R"(chdef -t osimage ${IMAGE} postinstall="${POSTINSTALL}")"));
+};
+
+TEST_CASE("installImageScript uses Debian package names for Ubuntu images")
+{
+    const OS osinfo
+        = opencattus::models::OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+    const auto builder = NFS::imageInstallScript(osinfo,
+        { .imageName = "ubuntu24.04-x86_64-netboot-compute",
+            .rootfs = "/install/netboot/ubuntu24.04/x86_64/compute/rootimg",
+            .postinstall = "/install/custom/netboot/compute.postinstall",
+            .pkglist = "/install/custom/netboot/compute.otherpkglist" });
+    const std::string script = builder.toString();
+    CHECK(script.contains(R"(echo "nfs-common" >> "${PKGLIST}")"));
+    CHECK_FALSE(script.contains(R"(echo "nfs-utils" >> "${PKGLIST}")"));
 };
 
 }

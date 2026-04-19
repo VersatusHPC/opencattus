@@ -48,13 +48,13 @@ public:
      * @enum Platform
      * @brief Enumeration representing different platforms of the OS.
      */
-    enum class Platform { el8, el9, el10 };
+    enum class Platform { el8, el9, el10, ubuntu24 };
 
     /**
      * @enum Distro
      * @brief Enumeration representing different distributions of the OS.
      */
-    enum class Distro { RHEL, OL, Rocky, AlmaLinux };
+    enum class Distro { RHEL, OL, Rocky, AlmaLinux, Ubuntu };
 
     /**
      * @enum PackageManager

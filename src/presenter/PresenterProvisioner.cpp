@@ -23,6 +23,8 @@ using OS = opencattus::models::OS;
 auto supportedProvisionersFor(const OS& os) -> std::vector<Cluster::Provisioner>
 {
     switch (os.getPlatform()) {
+        case OS::Platform::ubuntu24:
+            return { Cluster::Provisioner::xCAT };
         case OS::Platform::el10:
             return { Cluster::Provisioner::Confluent };
         case OS::Platform::el8:

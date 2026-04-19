@@ -1070,9 +1070,11 @@ std::string defaultOpenHPCVersionFor(const OS& osinfo)
             return "3";
         case OS::Platform::el10:
             return "4";
+        case OS::Platform::ubuntu24:
+            return "versatushpc-4";
         default:
             throw std::runtime_error(
-                fmt::format("Unsupported OpenHPC repository baseline for EL{}",
+                fmt::format("Unsupported OpenHPC repository baseline for {}",
                     osinfo.getMajorVersion()));
     }
 }
@@ -1139,6 +1141,10 @@ bool usesDocaMajorVersionRepo(std::string_view ofedVersion)
 std::string defaultDOCARepoTargetFor(
     const OS& osinfo, std::string_view ofedVersion)
 {
+    if (osinfo.getDistro() == OS::Distro::Ubuntu) {
+        return "";
+    }
+
     if (usesDocaMajorVersionRepo(ofedVersion)) {
         switch (osinfo.getPlatform()) {
             case OS::Platform::el8:
@@ -1178,15 +1184,21 @@ std::string defaultCUDAGPGKeyFor(const OS& osinfo)
             return "D42D0685.pub";
         case OS::Platform::el10:
             return "CDF6BA43.pub";
+        case OS::Platform::ubuntu24:
+            return "";
         default:
             throw std::runtime_error(
-                fmt::format("Unsupported CUDA repository baseline for EL{}",
+                fmt::format("Unsupported CUDA repository baseline for {}",
                     osinfo.getMajorVersion()));
     }
 }
 
 std::string defaultRHELCodeReadyMirrorRepoFor(const OS& osinfo)
 {
+    if (osinfo.getDistro() == OS::Distro::Ubuntu) {
+        return "";
+    }
+
     const auto arch = opencattus::utils::enums::toString(osinfo.getArch());
     switch (osinfo.getPlatform()) {
         case OS::Platform::el8:
@@ -1205,6 +1217,10 @@ std::string defaultRHELCodeReadyMirrorRepoFor(const OS& osinfo)
 
 std::string defaultRHELBaseMirrorGPGKeyFor(const OS& osinfo)
 {
+    if (osinfo.getDistro() == OS::Distro::Ubuntu) {
+        return "";
+    }
+
     switch (osinfo.getPlatform()) {
         case OS::Platform::el8:
         case OS::Platform::el9:
@@ -1220,6 +1236,10 @@ std::string defaultRHELBaseMirrorGPGKeyFor(const OS& osinfo)
 
 std::string defaultRHELCodeReadyMirrorGPGKeyFor(const OS& osinfo)
 {
+    if (osinfo.getDistro() == OS::Distro::Ubuntu) {
+        return "";
+    }
+
     switch (osinfo.getPlatform()) {
         case OS::Platform::el8:
         case OS::Platform::el9:
@@ -1658,6 +1678,9 @@ TEST_CASE("defaultOpenHPCVersionFor maps the supported EL releases")
     CHECK(defaultOpenHPCVersionFor(
               OS(models::OS::Distro::Rocky, OS::Platform::el10, 1))
         == "4");
+    CHECK(defaultOpenHPCVersionFor(
+              OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+        == "versatushpc-4");
 }
 
 // Installs and enable/disable RPM repositories
@@ -2524,6 +2547,26 @@ RepoManager::defaultRepositoriesFor(const OS& osinfo,
     const std::optional<std::vector<std::string>>& enabledRepositories,
     const std::optional<std::vector<std::string>>& enabledOpenHPCBundles)
 {
+    if (osinfo.getDistro() == OS::Distro::Ubuntu) {
+        static_cast<void>(ofedVersion);
+        static_cast<void>(enabledRepositories);
+        static_cast<void>(enabledOpenHPCBundles);
+        return {
+            { .id = "ubuntu-main",
+                .name = "Ubuntu 24.04 main, restricted, universe, multiverse",
+                .enabled = true },
+            { .id = "ubuntu-updates",
+                .name = "Ubuntu 24.04 updates",
+                .enabled = true },
+            { .id = "ubuntu-security",
+                .name = "Ubuntu 24.04 security",
+                .enabled = true },
+            { .id = "OpenHPC",
+                .name = "VersatusHPC OpenHPC 4.x for Ubuntu 24.04",
+                .enabled = true },
+        };
+    }
+
     struct NoVaultLookup final {
         static bool shouldUseVault(const OS& osinfo)
         {
@@ -2630,6 +2673,22 @@ TEST_CASE("defaultRepositoriesFor enables oneAPI when the Intel OpenHPC "
     CHECK(it->enabled);
 }
 
+TEST_CASE("defaultRepositoriesFor exposes Ubuntu 24.04 mandatory repositories")
+{
+    opencattus::services::initializeSingletonsOptions(
+        std::make_unique<const Options>(Options {}));
+    const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24,
+        4, OS::Arch::x86_64);
+    const auto selections = RepoManager::defaultRepositoriesFor(
+        osinfo, "latest", std::nullopt, std::nullopt);
+
+    CHECK(selections.size() == 4);
+    CHECK(std::ranges::all_of(
+        selections, [](const auto& selection) { return selection.enabled; }));
+    CHECK(std::ranges::any_of(selections,
+        [](const auto& selection) { return selection.id == "OpenHPC"; }));
+}
+
 inline void RPMRepository::valid() const
 {
     auto isValid = (!id().empty() && !name().empty()
@@ -2663,7 +2722,21 @@ void RepoManager::initializeDefaultRepositories()
     }
     LOG_INFO("RepoManager initialization");
     auto cluster = opencattus::Singleton<models::Cluster>::get();
-    const auto& osinfo = cluster->getComputeNodeOS();
+    const auto& computeOS = cluster->getComputeNodeOS();
+    const auto& headnodeOS = cluster->getHeadnode().getOS();
+    const auto& osinfo = computeOS.getPackageType() == OS::PackageType::DEB
+            && headnodeOS.getPackageType() == OS::PackageType::RPM
+        ? headnodeOS
+        : computeOS;
+
+    if (computeOS.getPackageType() == OS::PackageType::DEB
+        && headnodeOS.getPackageType() == OS::PackageType::RPM) {
+        LOG_WARN("Compute nodes use DEB repositories, but the head node uses "
+                 "RPM. Initializing RPM repositories for head-node packages; "
+                 "xCAT will attach Ubuntu APT repositories directly to the "
+                 "compute image.");
+    }
+
     const auto ofedVersion = cluster->getOFED().has_value()
         ? cluster->getOFED()->getVersion()
         : std::string("latest");
@@ -2700,7 +2773,9 @@ void RepoManager::initializeDefaultRepositories()
                                "config-manager --save --setopt=keepcache=True");
         } break;
         case OS::PackageType::DEB:
-            throw std::logic_error("DEB packages not implemented");
+            throw std::logic_error(
+                "Ubuntu head-node repository initialization is not supported "
+                "yet");
             break;
     }
 }

@@ -68,8 +68,58 @@ std::string getOSImageDistroVersion(const OS& nodeOS)
             osimage += "alma";
             osimage += nodeOS.getVersion();
             break;
+        case OS::Distro::Ubuntu:
+            osimage += "ubuntu";
+            osimage += nodeOS.getVersion();
+            break;
     }
     return osimage;
+}
+
+bool isUbuntu24ComputeImage(const OS& nodeOS)
+{
+    return nodeOS.getPlatform() == OS::Platform::ubuntu24;
+}
+
+std::vector<std::string> ubuntu24XcatPkgdirEntries()
+{
+    return {
+        "http://archive.ubuntu.com/ubuntu noble main restricted universe "
+        "multiverse",
+        "http://archive.ubuntu.com/ubuntu noble-updates main restricted "
+        "universe multiverse",
+        "http://security.ubuntu.com/ubuntu noble-security main restricted "
+        "universe multiverse",
+    };
+}
+
+std::string ubuntu24OpenHpcOtherpkgdirEntry()
+{
+    return "[trusted=yes] "
+           "https://repos.versatushpc.com.br/openhpc/versatushpc-4/"
+           "Ubuntu_24.04/ ./";
+}
+
+std::string buildUbuntu24OSImageDefinitionCommand(
+    const opencattus::services::XCAT::Image& image)
+{
+    return fmt::format(
+        "mkdef -f -t osimage {image} "
+        "imagetype=linux "
+        "osname=Linux "
+        "osvers=ubuntu24.04 "
+        "osarch=x86_64 "
+        "osdistroname=ubuntu24.04-x86_64 "
+        "profile=compute "
+        "provmethod=netboot "
+        "rootimgdir={rootimg} "
+        "pkglist=/opt/xcat/share/xcat/netboot/ubuntu/"
+        "compute.ubuntu24.04.x86_64.pkglist "
+        "otherpkglist=/install/custom/netboot/compute.otherpkglist "
+        "postinstall=/install/custom/netboot/compute.postinstall "
+        "synclists=/install/custom/netboot/compute.synclists",
+        fmt::arg("image", image.osimage),
+        fmt::arg("rootimg", image.chroot.string()));
 }
 
 std::string getEnterpriseLinuxTemplateVersion(const OS& nodeOS)
@@ -214,6 +264,18 @@ XcatInfinibandPlan buildXcatInfinibandPlan(const OFED& ofed, const OS& nodeOS,
     std::string_view runningKernel)
 {
     switch (nodeOS.getPlatform()) {
+        case OS::Platform::ubuntu24:
+            if (ofed.getKind() != OFED::Kind::Inbox) {
+                throw std::invalid_argument(
+                    "xCAT Ubuntu 24.04 compute-node OFED staging only "
+                    "supports inbox RDMA packages today");
+            }
+            return XcatInfinibandPlan {
+                .otherPackages = { "rdma-core", "ibverbs-utils",
+                    "ibverbs-providers", "infiniband-diags" },
+                .kernelVersion = std::nullopt,
+                .localRepoName = std::nullopt,
+            };
         case OS::Platform::el8:
         case OS::Platform::el9:
             break;
@@ -794,6 +856,7 @@ XCAT::Image XCAT::getImage() const { return m_stateless; }
 void XCAT::installPackages()
 {
     auto runner = opencattus::utils::singleton::runner();
+    const auto& computeOS = cluster()->getComputeNodeOS();
     runner->checkCommand("dnf -y install xCAT");
     // xCAT's embedded Perl IPMI stack does not interoperate cleanly with
     // VirtualBMC on EL9, so keep ipmitool available as a fallback path.
@@ -801,6 +864,9 @@ void XCAT::installPackages()
     // xCAT always prepends a local file:// otherpkgdir for osimages; ensure we
     // can publish metadata there even when we do not ship custom RPMs.
     runner->checkCommand("dnf -y install createrepo_c");
+    if (computeOS.getPackageType() == OS::PackageType::DEB) {
+        runner->checkCommand("dnf -y install debootstrap");
+    }
 }
 
 void XCAT::patchInstall()
@@ -977,6 +1043,12 @@ void XCAT::genimage() const
                 ? std::optional<std::string_view>(configuredKernel.value())
                 : std::nullopt,
             runningKernel);
+    if (osinfo.getPackageType() == OS::PackageType::DEB
+        && kernelVersionOpt.has_value()) {
+        throw std::invalid_argument(
+            "Custom xCAT kernels are not supported for Ubuntu 24.04 images "
+            "yet");
+    }
 
     if (!kernelVersionOpt) {
         shell::fmt("genimage {} ", m_stateless.osimage);
@@ -1038,6 +1110,11 @@ void XCAT::createDirectoryTree()
 
 void XCAT::configureSELinux()
 {
+    if (cluster()->getNodes().front().getOS().getPackageType()
+        == OS::PackageType::DEB) {
+        return;
+    }
+
     m_stateless.postinstall.emplace_back(
         fmt::format("echo \"SELINUX=disabled\nSELINUXTYPE=targeted\" > "
                     "$IMG_ROOTIMGDIR/etc/selinux/config\n\n"));
@@ -1045,7 +1122,11 @@ void XCAT::configureSELinux()
 
 void XCAT::configureOpenHPC()
 {
-    const auto packages = { "ohpc-base-compute", "lmod-ohpc", "lua" };
+    const auto nodeOS = cluster()->getNodes().front().getOS();
+    const auto packages = nodeOS.getPackageType() == OS::PackageType::DEB
+        ? std::vector<std::string_view> { "ohpc-base-compute", "lmod-ohpc" }
+        : std::vector<std::string_view> { "ohpc-base-compute", "lmod-ohpc",
+              "lua" };
 
     m_stateless.otherpkgs.reserve(packages.size());
     for (const auto& package : std::as_const(packages)) {
@@ -1175,18 +1256,28 @@ void XCAT::configureInfiniband()
 void XCAT::configureSLURM()
 {
     // NOTE: hwloc-libs required to fix slurmd
+    const auto nodeOS = cluster()->getNodes().front().getOS();
     m_stateless.otherpkgs.emplace_back("ohpc-slurm-client");
-    m_stateless.otherpkgs.emplace_back("hwloc-libs");
+    m_stateless.otherpkgs.emplace_back(
+        nodeOS.getPackageType() == OS::PackageType::DEB ? "hwloc-ohpc"
+                                                        : "hwloc-libs");
 
     // TODO: Deprecate this for SRV entries on DNS: _slurmctld._tcp 0 100 6817
+    const auto slurmdOptionsPath
+        = nodeOS.getPackageType() == OS::PackageType::DEB
+        ? "/etc/default/slurmd"
+        : "/etc/sysconfig/slurmd";
     m_stateless.postinstall.emplace_back(
-        fmt::format("echo SLURMD_OPTIONS=\\\"--conf-server {}\\\" > "
-                    "$IMG_ROOTIMGDIR/etc/sysconfig/slurmd\n\n",
+        fmt::format("install -d $IMG_ROOTIMGDIR/{}\n"
+                    "echo SLURMD_OPTIONS=\\\"--conf-server {}\\\" > "
+                    "$IMG_ROOTIMGDIR{}\n\n",
+            std::filesystem::path(slurmdOptionsPath).parent_path().string(),
             cluster()
                 ->getHeadnode()
                 .getConnection(Network::Profile::Management)
                 .getAddress()
-                .to_string()));
+                .to_string(),
+            slurmdOptionsPath));
 
     // Diskless nodes need SSH reachable before they have joined SLURM. A
     // blanket pam_slurm gate locks xCAT and root out during first boot and
@@ -1255,8 +1346,14 @@ void XCAT::generatePostinstallFile()
         "$IMG_ROOTIMGDIR/etc/security/limits.conf\n"
         "\n");
 
-    m_stateless.postinstall.emplace_back(
-        "chroot $IMG_ROOTIMGDIR systemctl disable firewalld\n");
+    const auto nodeOS = cluster()->getNodes().front().getOS();
+    if (nodeOS.getPackageType() == OS::PackageType::RPM) {
+        m_stateless.postinstall.emplace_back(
+            "chroot $IMG_ROOTIMGDIR systemctl disable firewalld\n");
+    } else {
+        m_stateless.postinstall.emplace_back(
+            "chroot $IMG_ROOTIMGDIR systemctl disable ufw 2>/dev/null || :\n");
+    }
 
     for (const auto& entries : std::as_const(m_stateless.postinstall)) {
         functions::addStringToFile(filename, entries);
@@ -1291,12 +1388,14 @@ void XCAT::configureOSImageDefinition() const
 {
     auto opts = opencattus::utils::singleton::options();
     auto runner = opencattus::utils::singleton::runner();
-    const auto localOtherPkgDir
-        = getLocalOtherPkgRepoPath(cluster()->getNodes().front().getOS());
-    opencattus::services::runner::shell::cmd(
-        fmt::format("mkdir -p {} && createrepo_c --update {}",
-            shellSingleQuote(localOtherPkgDir.string()),
-            shellSingleQuote(localOtherPkgDir.string())));
+    const auto nodeOS = cluster()->getNodes().front().getOS();
+    if (nodeOS.getPackageType() == OS::PackageType::RPM) {
+        const auto localOtherPkgDir = getLocalOtherPkgRepoPath(nodeOS);
+        opencattus::services::runner::shell::cmd(
+            fmt::format("mkdir -p {} && createrepo_c --update {}",
+                shellSingleQuote(localOtherPkgDir.string()),
+                shellSingleQuote(localOtherPkgDir.string())));
+    }
 
     runner->executeCommand(
         fmt::format("chdef -t osimage {} --plus otherpkglist="
@@ -1315,10 +1414,18 @@ void XCAT::configureOSImageDefinition() const
 
     /* Add external repositories to otherpkgdir */
     if (!opts->dryRun) {
-        std::vector<std::string> repos = getxCATOSImageRepos();
-        runner->executeCommand(
-            fmt::format("chdef -t osimage {} --plus otherpkgdir={}",
-                m_stateless.osimage, fmt::join(repos, ",")));
+        if (nodeOS.getPackageType() == OS::PackageType::DEB) {
+            const auto pkgdirEntries = ubuntu24XcatPkgdirEntries();
+            const auto pkgdir
+                = fmt::format("{}", fmt::join(pkgdirEntries, ","));
+            runner->executeCommand(fmt::format("chdef -t osimage {} pkgdir={}",
+                m_stateless.osimage, shellSingleQuote(pkgdir)));
+        }
+
+        const std::vector<std::string> repos = getxCATOSImageRepos();
+        runner->executeCommand(fmt::format(
+            "chdef -t osimage {} --plus otherpkgdir={}", m_stateless.osimage,
+            shellSingleQuote(fmt::format("{}", fmt::join(repos, ",")))));
     }
 }
 
@@ -1377,6 +1484,41 @@ void XCAT::configureEL9()
     }
 }
 
+void XCAT::configureUbuntu24()
+{
+    auto runner = opencattus::utils::singleton::runner();
+    runner->executeCommand("install -d /opt/xcat/share/xcat/netboot/ubuntu");
+    runner->executeCommand(
+        R"(bash -c "cat > /opt/xcat/share/xcat/netboot/ubuntu/compute.ubuntu24.04.x86_64.pkglist <<'EOF'
+bash
+nfs-common
+openssl
+isc-dhcp-client
+libc-bin
+linux-image-generic
+openssh-server
+openssh-client
+wget
+rsync
+busybox-static
+gawk
+dnsutils
+tar
+gzip
+xz-utils
+cpio
+chrony
+EOF
+for suffix in exlist postinstall; do
+  target=/opt/xcat/share/xcat/netboot/ubuntu/compute.ubuntu24.04.x86_64.${suffix}
+  if [ -e /opt/xcat/share/xcat/netboot/ubuntu/compute.ubuntu20.04.x86_64.${suffix} ]; then
+    ln -sf /opt/xcat/share/xcat/netboot/ubuntu/compute.ubuntu20.04.x86_64.${suffix} \"$target\"
+  elif [ -e /opt/xcat/share/xcat/netboot/ubuntu/compute.${suffix} ]; then
+    ln -sf /opt/xcat/share/xcat/netboot/ubuntu/compute.${suffix} \"$target\"
+  fi
+done")");
+}
+
 opencattus::services::XCAT::ImageInstallArgs XCAT::getImageInstallArgs(
     ImageType imageType, NodeType nodeType)
 {
@@ -1396,6 +1538,9 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
     const std::vector<ScriptBuilder>& customizations)
 {
     switch (cluster()->getNodes().front().getOS().getPlatform()) {
+        case OS::Platform::ubuntu24:
+            configureUbuntu24();
+            break;
         case OS::Platform::el8:
             configureEL8();
             break;
@@ -1424,10 +1569,18 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
                     m_stateless.chroot,
                     "/install/custom/netboot/compute.otherpkglist",
                     "/install/custom/netboot/compute.postinstall"));
+        } else if (isUbuntu24ComputeImage(
+                       cluster()->getNodes().front().getOS())) {
+            LOG_INFO("Skipping copycds for Ubuntu 24.04; xCAT will bootstrap "
+                     "the stateless image from Ubuntu archive repositories");
         } else {
             copycds(cluster()->getDiskImage().getPath());
         }
         generateOSImagePath(imageType, nodeType);
+        if (isUbuntu24ComputeImage(cluster()->getNodes().front().getOS())) {
+            runner->executeCommand(
+                buildUbuntu24OSImageDefinitionCommand(m_stateless));
+        }
 
         createDirectoryTree();
         configureSELinux();
@@ -1605,6 +1758,10 @@ void XCAT::generateOSImagePath(ImageType imageType, NodeType nodeType)
 std::vector<std::string> XCAT::getxCATOSImageRepos()
 {
     const auto& osinfo = cluster()->getComputeNodeOS();
+    if (osinfo.getPackageType() == OS::PackageType::DEB) {
+        return { ubuntu24OpenHpcOtherpkgdirEntry() };
+    }
+
     const auto repoManager = opencattus::utils::singleton::repos();
     std::vector<std::string> repos;
     const auto addReposFromFile = [&](const std::string& filename) {
@@ -1630,6 +1787,8 @@ std::vector<std::string> XCAT::getxCATOSImageRepos()
         case OS::Distro::AlmaLinux:
             addReposFromFile("almalinux.repo");
             break;
+        case OS::Distro::Ubuntu:
+            std::unreachable();
     }
 
     addReposFromFile("epel.repo");
@@ -1644,7 +1803,7 @@ void XCAT::install()
     LOG_INFO("Setting up compute node images... This may take a while");
     constexpr auto provisionerName = "xCAT";
     const auto opts = singleton::options();
-    const auto osinfo = singleton::os();
+    const auto computeOS = cluster()->getComputeNodeOS();
     auto repos = singleton::repos();
     repos->enable("xcat-core");
     repos->enable("xcat-dep");
@@ -1677,7 +1836,7 @@ void XCAT::install()
 
     // Customizations to the image
     const auto nfsImageInstallScript
-        = networkFileSystem.imageInstallScript(osinfo, imageInstallArgs);
+        = networkFileSystem.imageInstallScript(computeOS, imageInstallArgs);
 
     // Image role
     LOG_INFO("[{}] Creating node images", provisionerName);
@@ -1719,6 +1878,50 @@ TEST_CASE("getOSImageDistroVersion uses node OS metadata")
         == "rhels9.7.0");
     CHECK(getOSImageDistroVersion(OS(OS::Distro::OL, OS::Platform::el9, 7))
         == "ol9.7.0");
+    CHECK(getOSImageDistroVersion(
+              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+        == "ubuntu24.04");
+}
+
+TEST_CASE("ubuntu24XcatPkgdirEntries uses Noble archive repositories")
+{
+    const auto entries = ubuntu24XcatPkgdirEntries();
+
+    CHECK(entries.size() == 3);
+    CHECK(entries[0]
+        == "http://archive.ubuntu.com/ubuntu noble main restricted universe "
+           "multiverse");
+    CHECK(entries[1]
+        == "http://archive.ubuntu.com/ubuntu noble-updates main restricted "
+           "universe multiverse");
+    CHECK(entries[2]
+        == "http://security.ubuntu.com/ubuntu noble-security main restricted "
+           "universe multiverse");
+}
+
+TEST_CASE("ubuntu24OpenHpcOtherpkgdirEntry uses VersatusHPC OpenHPC")
+{
+    CHECK(ubuntu24OpenHpcOtherpkgdirEntry()
+        == "[trusted=yes] "
+           "https://repos.versatushpc.com.br/openhpc/versatushpc-4/"
+           "Ubuntu_24.04/ ./");
+}
+
+TEST_CASE("buildUbuntu24OSImageDefinitionCommand defines the xCAT image")
+{
+    const auto command = buildUbuntu24OSImageDefinitionCommand(
+        opencattus::services::XCAT::Image {
+            .osimage = "ubuntu24.04-x86_64-netboot-compute",
+            .chroot = "/install/netboot/ubuntu24.04/x86_64/compute/rootimg" });
+
+    CHECK(command.contains(
+        "mkdef -f -t osimage ubuntu24.04-x86_64-netboot-compute"));
+    CHECK(command.contains("osvers=ubuntu24.04"));
+    CHECK(command.contains("osdistroname=ubuntu24.04-x86_64"));
+    CHECK(command.contains("pkglist=/opt/xcat/share/xcat/netboot/ubuntu/"
+                           "compute.ubuntu24.04.x86_64.pkglist"));
+    CHECK(command.contains(
+        "rootimgdir=/install/netboot/ubuntu24.04/x86_64/compute/rootimg"));
 }
 
 TEST_CASE("buildEnterpriseLinuxTemplateAliasCommands uses explicit EL releases")
