@@ -16,6 +16,7 @@ The harness currently targets:
 * EL9 cloud image as the headnode base image.
 * EL9 DVD ISO for compute image creation.
 * The xCAT and Confluent provisioner paths.
+* The EL9 service-network and DOCA 3.2 LTS Confluent recovery lanes.
 * One or more network-booted compute nodes.
 
 This is intentionally narrower than the full product matrix. The current recovery priority is to make one EL9 path trustworthy before attempting EL10 porting work.
@@ -27,10 +28,15 @@ The harness lives in ``testing/libvirt``:
 
 * ``testing/libvirt/opencattus-el9-lab.sh`` orchestrates the full libvirt lifecycle.
 * ``testing/libvirt/config/rocky9-xcat.env.example`` and ``testing/libvirt/config/rocky9-confluent.env.example`` are the reference configurations.
+* ``testing/libvirt/config/rocky9-confluent-service.env.example`` and
+  ``testing/libvirt/config/rocky9-confluent-doca-32lts.env.example`` extend the
+  EL9 Confluent matrix for service-network and DOCA validation.
 * ``testing/libvirt/templates/rocky9-xcat.answerfile.ini`` and ``testing/libvirt/templates/rocky9-confluent.answerfile.ini`` are the answerfile templates.
 * ``testing/libvirt/scripts/check-headnode.sh`` validates the headnode services after installation.
 * ``testing/libvirt/scripts/check-cluster.sh`` waits for the compute nodes to join the cluster.
 * ``testing/libvirt/scripts/check-mpi.sh`` compiles and runs the OpenHPC MPI hello-world smoke test through Slurm.
+* ``testing/libvirt/run-el9-regression.sh`` runs multiple prepared EL9 env
+  files through the shared harness and prints a consolidated pass/fail summary.
 
 Host requirements
 -----------------
@@ -74,6 +80,11 @@ Quick start
    Set ``BASE_IMAGE``, ``CLUSTER_ISO``, and either ``OPENCATTUS_BINARY`` or
    ``OPENCATTUS_SOURCE_DIR``.
 
+   If you already have a TUI-generated answerfile that matches the lab topology,
+   set ``ANSWERFILE_SOURCE_PATH`` as well. The harness will copy that file into
+   the lab working directory and rewrite ``[system] disk_image`` to the staged
+   ISO path before running the unattended install.
+
    For the validated two-node MPI path, also set:
 
    .. code-block:: bash
@@ -105,6 +116,19 @@ Quick start
    The reference address plan also assumes one active lab at a time. If you
    want concurrent labs on the same host, change the subnet-related variables
    in addition to ``LAB_NAME``.
+
+For the validated parallel EL9 release sweep, run:
+
+.. code-block:: bash
+
+   testing/libvirt/run-el9-regression.sh -j 3 \
+     /root/rocky9-confluent.env \
+     /root/rocky9-confluent-service.env \
+     /root/rocky9-confluent-doca-32lts.env
+
+The wrapper stores per-lane console logs under
+``/var/tmp/opencattus-el9-regression/<timestamp>/`` and prints a final summary
+when every lane finishes.
 
 Lifecycle commands
 ------------------
@@ -140,6 +164,10 @@ Cluster verification:
 * The harness restarts compute VMs with ``virsh`` so PXE reboots stay deterministic during unattended runs.
 * The default compute VM topology is kept consistent with the answerfile values that feed ``slurm.conf``: ``2`` vCPUs exposed as ``1`` socket, ``2`` cores, ``1`` thread.
 * The validated EL9 xCAT and Confluent runs can execute an OpenHPC MPI hello-world smoke test across one or two compute nodes.
+* The validated EL9 recovery sweep now includes four real lanes on the same
+  staged binary: Rocky Linux 9.7 + xCAT, Rocky Linux 9.7 + Confluent, Rocky
+  Linux 9.7 + Confluent + service network, and Rocky Linux 9.7 + Confluent +
+  DOCA 3.2 LTS.
 
 Why this replaces the older Vagrant path
 ----------------------------------------
@@ -159,3 +187,6 @@ Known limits
 * EL10 is out of scope for this harness. Get the EL9 path stable first.
 * The currently validated multi-node EL9 topology is two compute nodes on external plus management networks.
 * Nested-virtualization CI is not realistic in the current GitHub workflow; this lab is meant for a real EL9 KVM host.
+* The DOCA lane is materially slower than the plain EL9 Confluent lanes because
+  it builds the Mellanox DKMS modules inside the image path. Treat that longer
+  runtime as expected unless the log stops advancing.

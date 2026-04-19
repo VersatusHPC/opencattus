@@ -42,7 +42,8 @@ private:
                 = "Enter the directory containing installation ISO images";
             static constexpr const auto help
                 = "Provide a readable directory path. The next screen lists "
-                  "matching ISO files for the selected distribution.";
+                  "matching ISO files for the selected distribution. Pick a "
+                  "directory you can read as root when the installer runs.";
             static constexpr const auto field = "Path to ISOs directory:";
 
             static constexpr const auto nonExistent
@@ -86,7 +87,8 @@ private:
             static constexpr const auto help
                 = "Select the installation DVD ISO to import into the "
                   "provisioner. Boot, minimal, and live images are not "
-                  "suitable.";
+                  "suitable. If no matching ISO is found you can return to "
+                  "the directory prompt or switch to the download path.";
             static constexpr const auto noneFound
                 = "No ISO matching the selected distribution was found in the "
                   "provided directory";

@@ -74,7 +74,8 @@ View::FieldEntries Newt::fieldMenuImpl(const char* title, const char* message,
         returnValue = newtWinEntries(const_cast<char*>(title),
             const_cast<char*>(message), dialogWidth, m_flexDown, m_flexUp,
             m_dataWidth, field.get(), const_cast<char*>(TUIText::Buttons::ok),
-            const_cast<char*>(TUIText::Buttons::cancel),
+            const_cast<char*>(TUIText::Buttons::back),
+            const_cast<char*>(TUIText::Buttons::quit),
             const_cast<char*>(TUIText::Buttons::help), nullptr);
         stay = false;
 
@@ -97,9 +98,12 @@ View::FieldEntries Newt::fieldMenuImpl(const char* title, const char* message,
                 return result;
             }
             case 2:
-                abort();
+                goBack();
                 break;
             case 3:
+                abort();
+                break;
+            case 4:
                 this->helpMessage(helpMessage);
                 stay = true;
                 break;

@@ -251,6 +251,19 @@ void Cluster::setEnabledRepositories(std::vector<std::string> repositories)
 
 void Cluster::clearEnabledRepositories() { m_enabledRepositories.reset(); }
 
+const std::optional<std::vector<std::string>>&
+Cluster::getEnabledOpenHPCBundles() const
+{
+    return m_enabledOpenHPCBundles;
+}
+
+void Cluster::setEnabledOpenHPCBundles(std::vector<std::string> bundles)
+{
+    m_enabledOpenHPCBundles = std::move(bundles);
+}
+
+void Cluster::clearEnabledOpenHPCBundles() { m_enabledOpenHPCBundles.reset(); }
+
 const std::optional<std::unique_ptr<QueueSystem>>&
 Cluster::getQueueSystem() const
 {
@@ -611,6 +624,10 @@ void Cluster::dumpData(const std::filesystem::path& answerfilePath)
         enabledRepositories.has_value()) {
         answerfil.repositories.enabled = enabledRepositories.value();
     }
+    if (const auto& enabledOpenHPCBundles = getEnabledOpenHPCBundles();
+        enabledOpenHPCBundles.has_value()) {
+        answerfil.ohpc.enabled = enabledOpenHPCBundles.value();
+    }
     if (const auto& queueSystem = getQueueSystem()) {
         switch (queueSystem.value()->getKind()) {
             case QueueSystem::Kind::None:
@@ -844,6 +861,11 @@ void Cluster::fillData(const AnswerFile& answerfil)
         setEnabledRepositories(answerfil.repositories.enabled.value());
     } else {
         clearEnabledRepositories();
+    }
+    if (answerfil.ohpc.enabled.has_value()) {
+        setEnabledOpenHPCBundles(answerfil.ohpc.enabled.value());
+    } else {
+        clearEnabledOpenHPCBundles();
     }
 
     if (answerfil.pbs.enabled) {

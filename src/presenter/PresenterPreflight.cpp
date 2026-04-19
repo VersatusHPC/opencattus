@@ -14,6 +14,7 @@
 #include <optional>
 #include <ranges>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -150,19 +151,52 @@ void appendNetworkDetails(std::vector<std::string>& rows, Cluster& model)
 
 auto repositorySummary(const Cluster& model) -> std::string
 {
-    const auto& enabledRepositories = model.getEnabledRepositories();
-    if (!enabledRepositories.has_value() || enabledRepositories->empty()) {
+    auto repositories
+        = model.getEnabledRepositories().value_or(std::vector<std::string> {});
+    auto impliedOneApi = false;
+    if (const auto& bundles = model.getEnabledOpenHPCBundles();
+        bundles.has_value()
+        && std::ranges::find(bundles.value(), "intel-oneapi") != bundles->end()
+        && std::ranges::find(repositories, "oneAPI") == repositories.end()) {
+        repositories.emplace_back("oneAPI");
+        impliedOneApi = true;
+    }
+
+    if (repositories.empty()) {
         return "Mandatory repositories only";
     }
 
-    auto repositories = enabledRepositories.value();
     auto summary = fmt::format("Optional: {}", fmt::join(repositories, ", "));
 
     if (std::ranges::find(repositories, "beegfs") != repositories.end()) {
         summary += "; BeeGFS implies grafana and influxdata";
     }
+    if (impliedOneApi) {
+        summary += "; Intel OpenHPC bundle implies oneAPI";
+    }
 
     return summary;
+}
+
+auto openHpcSummary(const Cluster& model) -> std::string
+{
+    auto bundles = model.getEnabledOpenHPCBundles().value_or(
+        std::vector<std::string> { "serial-libs", "parallel-libs" });
+    std::vector<std::string> features {
+        "base GNU compilers and MPI stacks",
+    };
+
+    if (std::ranges::find(bundles, "serial-libs") != bundles.end()) {
+        features.emplace_back("serial scientific libs");
+    }
+    if (std::ranges::find(bundles, "parallel-libs") != bundles.end()) {
+        features.emplace_back("parallel scientific libs");
+    }
+    if (std::ranges::find(bundles, "intel-oneapi") != bundles.end()) {
+        features.emplace_back("Intel oneAPI and Intel MPI");
+    }
+
+    return fmt::format("{}", fmt::join(features, ", "));
 }
 
 auto isoSummary(const Cluster& model) -> std::string
@@ -238,19 +272,23 @@ auto bmcAddressSummary(const opencattus::models::Node& node) -> std::string
     return node.getBMC()->getAddress();
 }
 
-auto fitColumn(std::string value, std::size_t width) -> std::string
+auto fitColumn(std::string_view value, std::size_t width) -> std::string
 {
-    if (value.size() <= width) {
-        return value;
-    }
-
     if (width == 0) {
-        return "";
+        return {};
     }
 
-    value.resize(width);
-    value.back() = '~';
-    return value;
+    if (value.size() <= width) {
+        return std::string(value);
+    }
+
+    if (width == 1) {
+        return "~";
+    }
+
+    std::string clipped(value.substr(0, width - 1));
+    clipped.push_back('~');
+    return clipped;
 }
 
 void appendNodeTable(std::vector<std::string>& rows, const Cluster& model)
@@ -293,6 +331,9 @@ auto buildPreflightText(Cluster& model) -> std::string
     rows.emplace_back("");
     rows.emplace_back(
         fmt::format("{:<14} {}", "Repositories", repositorySummary(model)));
+    rows.emplace_back("");
+    rows.emplace_back(
+        fmt::format("{:<14} {}", "OpenHPC", openHpcSummary(model)));
     rows.emplace_back("");
     appendQueueDetails(rows, model);
 

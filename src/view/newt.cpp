@@ -208,6 +208,12 @@ void Newt::abort()
     throw ViewAbortRequested(TUIText::abort);
 }
 
+void Newt::goBack()
+{
+    LOG_INFO("Returning to the previous questionnaire step")
+    throw ViewBackRequested("Questionnaire moved back to the previous step");
+}
+
 bool Newt::allowsEmptyField(const struct newtWinEntry& entry)
 {
     if (entry.text == nullptr) {
@@ -288,7 +294,7 @@ bool Newt::progressMenu(const char* title, const char* message,
     newtGrid grid = newtCreateGrid(1, 3);
     newtComponent b1;
     newtGrid buttonGrid
-        = newtButtonBar(const_cast<char*>(TUIText::Buttons::cancel), &b1, NULL);
+        = newtButtonBar(const_cast<char*>(TUIText::Buttons::stop), &b1, NULL);
     newtGridSetField(grid, 0, 0, NEWT_GRID_COMPONENT, progress, 1, 1, 0, 0, 0,
         NEWT_GRID_FLAG_GROWX);
     newtGridSetField(grid, 0, 1, NEWT_GRID_COMPONENT, label, 1, 1, 0, 0, 0,

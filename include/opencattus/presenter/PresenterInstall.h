@@ -13,14 +13,16 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace opencattus::presenter {
 class PresenterInstall : public Presenter {
 public:
-    using StepCompletionCallback = std::function<void(std::string_view)>;
+    using StepStateCallback
+        = std::function<void(const std::vector<std::string>&)>;
 
     PresenterInstall(std::unique_ptr<Cluster>& model,
-        std::unique_ptr<View>& view, StepCompletionCallback onStepComplete = {},
+        std::unique_ptr<View>& view, StepStateCallback onStepComplete = {},
         std::set<std::string> completedSteps = {});
 };
 }

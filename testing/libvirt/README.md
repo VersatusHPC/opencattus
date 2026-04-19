@@ -15,10 +15,14 @@ Scope:
 The currently validated targets are `Rocky Linux 8.10 + xCAT`,
 `Rocky Linux 8.10 + Confluent`,
 `Rocky Linux 9.7 + xCAT`, `Rocky Linux 9.7 + Confluent`,
+`Rocky Linux 9.7 + Confluent + service network`,
+`Rocky Linux 9.7 + Confluent + DOCA 3.2 LTS`,
 `AlmaLinux 9.7 + xCAT`, `AlmaLinux 9.7 + Confluent`,
 `Oracle Linux 9.7 + xCAT`, `Oracle Linux 9.7 + Confluent`,
 `RHEL 9.6 + xCAT`, `RHEL 9.6 + Confluent`,
-`Rocky Linux 10.1 + Confluent`, `AlmaLinux 10.1 + Confluent`,
+`Rocky Linux 10.1 + Confluent`,
+`Rocky Linux 10.1 + Confluent + service network`,
+`AlmaLinux 10.1 + Confluent`,
 `RHEL 10.1 + Confluent`, and `Oracle Linux 10.1 + Confluent`.
 The current EL10 baseline is still narrower than the full EL9 recovery scope,
 and the EL8 baseline is narrower than EL9, but both now have real unattended
@@ -64,7 +68,7 @@ Keep the cloud image and ISO under `/var/lib/libvirt/images`, ideally in a dedic
 1. Copy one of these environment templates, then set `BASE_IMAGE`,
    `CLUSTER_ISO`, and either `OPENCATTUS_BINARY` or `OPENCATTUS_SOURCE_DIR`:
 
-   - Rocky baselines: `testing/libvirt/config/rocky8-xcat.env.example`, `testing/libvirt/config/rocky8-confluent.env.example`, `testing/libvirt/config/rocky9-xcat.env.example`, `testing/libvirt/config/rocky9-confluent.env.example`, `testing/libvirt/config/rocky9-confluent-service.env.example`, `testing/libvirt/config/rocky9-confluent-doca32.env.example`, `testing/libvirt/config/rocky10-confluent.env.example`, `testing/libvirt/config/rocky10-confluent-service.env.example`
+   - Rocky baselines: `testing/libvirt/config/rocky8-xcat.env.example`, `testing/libvirt/config/rocky8-confluent.env.example`, `testing/libvirt/config/rocky9-xcat.env.example`, `testing/libvirt/config/rocky9-confluent.env.example`, `testing/libvirt/config/rocky9-confluent-service.env.example`, `testing/libvirt/config/rocky9-confluent-doca-32lts.env.example`, `testing/libvirt/config/rocky10-confluent.env.example`, `testing/libvirt/config/rocky10-confluent-service.env.example`
    - Validated EL10 Confluent lanes: `testing/libvirt/config/alma10-confluent.env.example`, `testing/libvirt/config/ol10-confluent.env.example`, `testing/libvirt/config/rhel10-confluent.env.example`
    - Validated EL9 expansion lanes: `testing/libvirt/config/{alma,ol,rhel}9-{xcat,confluent}.env.example`
    - Candidate EL8 expansion lanes: `testing/libvirt/config/{alma,ol,rhel}8-{xcat,confluent}.env.example`
@@ -87,6 +91,17 @@ That makes the harness dump a fresh answerfile from the rendered lab input,
 copy it back out for inspection, and then rerun the unattended install from
 the dumped file instead of the original template.
 
+If you already have a TUI-generated or hand-authored answerfile, also set:
+
+```bash
+ANSWERFILE_SOURCE_PATH=/absolute/path/to/opencattus.ini
+```
+
+The harness copies that file into `ANSWERFILE_PATH`, rewrites `[system] disk_image`
+to the staged guest ISO path, and then runs the unattended install from that
+copied answerfile. The libvirt env file still defines the VM topology, so keep
+the answerfile aligned with the lab networks, provisioner, and node layout.
+
 3. Run the full lab:
 
 ```bash
@@ -102,6 +117,35 @@ testing/libvirt/opencattus-el10-lab.sh -c /path/to/rocky10-confluent.env run
 ```
 
 4. Inspect logs under `/var/tmp/opencattus-lab/<lab-name>/logs`.
+
+For the validated EL9 release sweep, you can also run multiple prepared env
+files through the shared wrapper:
+
+```bash
+testing/libvirt/run-el9-regression.sh -j 3 \
+  /path/to/rocky9-confluent.env \
+  /path/to/rocky9-confluent-service.env \
+  /path/to/rocky9-confluent-doca-32lts.env
+```
+
+That wrapper stores per-lane console logs under
+`/var/tmp/opencattus-el9-regression/<timestamp>/` and prints a final pass/fail
+summary when every lane finishes.
+
+For the validated EL10 Confluent sweep, use:
+
+```bash
+testing/libvirt/run-el10-regression.sh -j 3 \
+  /path/to/rocky10-confluent.env \
+  /path/to/rocky10-confluent-service.env \
+  /path/to/alma10-confluent.env \
+  /path/to/ol10-confluent.env \
+  /path/to/rhel10-confluent.env
+```
+
+That wrapper stores per-lane console logs under
+`/var/tmp/opencattus-el10-regression/<timestamp>/` and prints a final pass/fail
+summary when every lane finishes.
 
 The harness also stores libvirt-owned disk artifacts under `/var/lib/libvirt/images/opencattus-lab/<lab-name>`.
 The `run` command collects logs even when install or verification fails so the failed lab is still debuggable.
@@ -196,7 +240,7 @@ point the matching `rhel*.env` file at it.
 | AlmaLinux 8.10 | Planned | Planned | Candidate lab configs now exist; first unattended runs still pending. |
 | Oracle Linux 8.10 | Planned | Planned | Candidate lab configs now exist; expect media-specific tuning during first runs. |
 | RHEL 8.10 | Planned | Planned | Candidate lab configs now exist; requires entitled media and repo access. |
-| Rocky Linux 9.7 | Validated | Validated | Current EL9 baseline. |
+| Rocky Linux 9.7 | Validated | Validated | Current EL9 baseline. The validated Confluent matrix now also includes the service-network lane and the DOCA 3.2 LTS lane. |
 | AlmaLinux 9.7 | Validated | Validated | Verified in the unattended EL9 libvirt/KVM lab with headnode verification and MPI smoke. |
 | Oracle Linux 9.7 | Validated | Validated | Verified in the unattended EL9 libvirt/KVM lab; the xCAT lane repairs incomplete initial credentials with `xcatconfig -c` before the first `lsdef` probe. |
 | RHEL 9.6 | Validated | Validated | Verified against local entitled media plus repo access with the same headnode verification and MPI smoke flow as Rocky Linux 9.7. |
@@ -279,6 +323,9 @@ reconstructing ad hoc lab steps.
    the local mirror, especially for `RHEL` lanes.
 4. Run `testing/libvirt/opencattus-el8-lab.sh`, `testing/libvirt/opencattus-el9-lab.sh`,
    or `testing/libvirt/opencattus-el10-lab.sh` with the `run` action.
+   For the parallel EL9 and EL10 sweeps, prefer
+   `testing/libvirt/run-el9-regression.sh` or
+   `testing/libvirt/run-el10-regression.sh`.
 5. On success, keep the collected lab directory under
    `/var/tmp/opencattus-lab/<lab-name>/` as the validation record for that
    lane.
@@ -406,8 +453,10 @@ testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env destroy
 
 ## Current limits
 
-- This harness now claims an initial Rocky 10.1 + Confluent baseline, not
-  broad EL10 readiness.
+- The current EL10 validated matrix covers Rocky Linux 10.1, AlmaLinux 10.1,
+  Oracle Linux 10.1, and RHEL 10.1 on the plain Confluent path, plus the
+  Rocky Linux 10.1 dedicated service-network lane. The EL10 application
+  network / OFED path is still outside the validated baseline.
 - The `testing/libvirt/opencattus-el10-lab.sh` wrapper exists so the EL10
   branch can reuse the same host-side lab orchestration while the product port
   is still underway.

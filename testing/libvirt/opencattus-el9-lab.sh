@@ -29,6 +29,12 @@ Options:
   -c FILE   Source configuration values from FILE before applying defaults.
   -h        Show this help text.
 
+Environment:
+  ANSWERFILE_SOURCE_PATH  Use an existing answerfile instead of rendering from
+                          a template. The harness copies it into
+                          ANSWERFILE_PATH and rewrites [system] disk_image to
+                          the staged guest ISO path.
+
 The harness currently serves three purposes:
   * the validated EL8 recovery paths for xCAT and Confluent
   * the validated EL9 recovery paths for xCAT and Confluent
@@ -312,6 +318,7 @@ load_defaults() {
 
     ANSWERFILE_ROUNDTRIP=${ANSWERFILE_ROUNDTRIP:-0}
     ANSWERFILE_PATH=${ANSWERFILE_PATH:-${LAB_DIR}/answerfile.ini}
+    ANSWERFILE_SOURCE_PATH=${ANSWERFILE_SOURCE_PATH:-}
     ROUNDTRIP_ANSWERFILE_PATH=${ROUNDTRIP_ANSWERFILE_PATH:-${LAB_DIR}/answerfile.roundtrip.ini}
     REMOTE_BINARY_PATH=${REMOTE_BINARY_PATH:-${HEADNODE_DATA_DIR}/opencattus}
     REMOTE_BUILD_PRESET=${REMOTE_BUILD_PRESET:-$(default_remote_build_preset)}
@@ -803,6 +810,10 @@ check_config() {
     [[ -n "${CLUSTER_ISO}" ]] || die "CLUSTER_ISO is required"
     [[ -f "${BASE_IMAGE}" ]] || die "Base image not found: ${BASE_IMAGE}"
     [[ -f "${CLUSTER_ISO}" ]] || die "Cluster ISO not found: ${CLUSTER_ISO}"
+    if [[ -n "${ANSWERFILE_SOURCE_PATH}" ]]; then
+        [[ -f "${ANSWERFILE_SOURCE_PATH}" ]] || die \
+            "Custom answerfile not found: ${ANSWERFILE_SOURCE_PATH}"
+    fi
 
     if [[ -n "${OPENCATTUS_BINARY}" ]]; then
         [[ -f "${OPENCATTUS_BINARY}" ]] || die "OpenCATTUS binary not found: ${OPENCATTUS_BINARY}"
@@ -1376,6 +1387,81 @@ EOF
     done
 }
 
+rewrite_answerfile_disk_image() {
+    local answerfile=$1
+    local tempfile
+    local awk_status=0
+
+    tempfile=$(mktemp "${LAB_DIR}/answerfile.rewrite.XXXXXX")
+    awk -v disk_image="${REMOTE_ISO_PATH}" '
+        BEGIN {
+            in_system = 0
+            saw_system = 0
+            wrote_disk_image = 0
+        }
+        /^\[system\][[:space:]]*$/ {
+            if (in_system && !wrote_disk_image) {
+                print "disk_image=" disk_image
+            }
+            in_system = 1
+            saw_system = 1
+            wrote_disk_image = 0
+            print
+            next
+        }
+        /^\[[^]]+\][[:space:]]*$/ {
+            if (in_system && !wrote_disk_image) {
+                print "disk_image=" disk_image
+            }
+            in_system = 0
+            print
+            next
+        }
+        {
+            if (in_system && $0 ~ /^disk_image[[:space:]]*=/) {
+                print "disk_image=" disk_image
+                wrote_disk_image = 1
+                next
+            }
+            print
+        }
+        END {
+            if (!saw_system) {
+                exit 7
+            }
+            if (in_system && !wrote_disk_image) {
+                print "disk_image=" disk_image
+            }
+        }
+    ' "${answerfile}" >"${tempfile}" || awk_status=$?
+
+    if [[ "${awk_status}" -eq 7 ]]; then
+        rm -f "${tempfile}"
+        die "Custom answerfile is missing the [system] section: ${answerfile}"
+    fi
+    if [[ "${awk_status}" -ne 0 ]]; then
+        rm -f "${tempfile}"
+        die "Failed to rewrite disk_image in custom answerfile: ${answerfile}"
+    fi
+
+    mv "${tempfile}" "${answerfile}"
+}
+
+prepare_answerfile() {
+    mkdir -p "${LAB_DIR}"
+
+    if [[ -n "${ANSWERFILE_SOURCE_PATH}" ]]; then
+        log "Using pre-rendered answerfile ${ANSWERFILE_SOURCE_PATH}"
+        if [[ "${ANSWERFILE_SOURCE_PATH}" != "${ANSWERFILE_PATH}" ]]; then
+            cp "${ANSWERFILE_SOURCE_PATH}" "${ANSWERFILE_PATH}"
+        fi
+        rewrite_answerfile_disk_image "${ANSWERFILE_PATH}"
+        return 0
+    fi
+
+    render_answerfile
+}
+
 ssh_remote() {
     ssh "${SSH_OPTIONS[@]}" "$(remote_host)" "$@"
 }
@@ -1794,7 +1880,7 @@ install_lab() {
     check_config
     prepare_headnode
     prepare_opencattus_binary
-    render_answerfile
+    prepare_answerfile
     copy_lab_assets
     prepare_roundtrip_answerfile
     run_installer

@@ -2521,7 +2521,8 @@ std::vector<std::string> expandSelectedRepositoryIds(
 std::vector<RepoManager::RepositorySelection>
 RepoManager::defaultRepositoriesFor(const OS& osinfo,
     std::string_view ofedVersion,
-    const std::optional<std::vector<std::string>>& enabledRepositories)
+    const std::optional<std::vector<std::string>>& enabledRepositories,
+    const std::optional<std::vector<std::string>>& enabledOpenHPCBundles)
 {
     struct NoVaultLookup final {
         static bool shouldUseVault(const OS& osinfo)
@@ -2541,6 +2542,11 @@ RepoManager::defaultRepositoriesFor(const OS& osinfo,
         enabledRepoIds.insert(enabledRepoIds.end(),
             expandedSelectedRepositories.begin(),
             expandedSelectedRepositories.end());
+    }
+    if (enabledOpenHPCBundles.has_value()
+        && std::ranges::find(enabledOpenHPCBundles.value(), "intel-oneapi")
+            != enabledOpenHPCBundles->end()) {
+        enabledRepoIds.emplace_back("oneAPI");
     }
     const auto enabledSet = std::unordered_set<std::string>(
         enabledRepoIds.begin(), enabledRepoIds.end());
@@ -2608,6 +2614,22 @@ TEST_CASE("defaultRepositoriesFor keeps mandatory repositories enabled when "
     CHECK(enabled("influxdata"));
 }
 
+TEST_CASE("defaultRepositoriesFor enables oneAPI when the Intel OpenHPC "
+          "bundle is selected")
+{
+    opencattus::services::initializeSingletonsOptions(
+        std::make_unique<const Options>(Options {}));
+    const auto osinfo = OS(
+        models::OS::Distro::Rocky, OS::Platform::el10, 1, OS::Arch::x86_64);
+    const auto selections = RepoManager::defaultRepositoriesFor(osinfo,
+        "latest", std::nullopt, std::vector<std::string> { "intel-oneapi" });
+
+    const auto it = std::ranges::find_if(selections,
+        [](const auto& selection) { return selection.id == "oneAPI"; });
+    REQUIRE(it != selections.end());
+    CHECK(it->enabled);
+}
+
 inline void RPMRepository::valid() const
 {
     auto isValid = (!id().empty() && !name().empty()
@@ -2646,8 +2668,8 @@ void RepoManager::initializeDefaultRepositories()
         ? cluster->getOFED()->getVersion()
         : std::string("latest");
     const auto vars = buildRepoConfigVars(osinfo, ofedVersion);
-    const auto repositories = defaultRepositoriesFor(
-        osinfo, ofedVersion, cluster->getEnabledRepositories());
+    const auto repositories = defaultRepositoriesFor(osinfo, ofedVersion,
+        cluster->getEnabledRepositories(), cluster->getEnabledOpenHPCBundles());
 
     std::vector<std::string> managedRepoIds;
     managedRepoIds.reserve(repositories.size());
