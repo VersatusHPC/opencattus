@@ -30,10 +30,16 @@ ScriptBuilder installScript(
         .addPackage("aide")
         .addNewLine()
         .addCommand("# Skip if aide database exists")
-        .addCommand("test -f /var/lib/aide/aide.db.gz && exit 0")
+        .addCommand(
+            "test -f /var/lib/aide/aide.db.gz -o -f /var/lib/aide/aide.db && "
+            "exit 0")
         .addCommand("# Initialize AIDE database")
-        .addCommand("aide --init")
-        .addCommand("mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz");
+        .addCommand("aide --init || aideinit")
+        .addCommand(R"(if test -f /var/lib/aide/aide.db.new.gz; then
+    mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+elif test -f /var/lib/aide/aide.db.new; then
+    mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db
+fi)");
 
     return builder;
 }

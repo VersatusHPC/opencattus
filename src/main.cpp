@@ -65,8 +65,14 @@ int runTestCommand(const std::string& testCommand,
         runner->checkCommand(testCommandArgs[0]);
     } else if (testCommand == "initialize-repos") {
         repoManager->initializeDefaultRepositories();
-        runner->checkCommand(
-            R"(bash -c "dnf config-manager --set-enabled '*' && dnf makecache -y" )");
+        if (cluster->getHeadnode().getOS().getPackageType()
+            == opencattus::models::OS::PackageType::DEB) {
+            runner->checkCommand(
+                "DEBIAN_FRONTEND=noninteractive apt-get update");
+        } else {
+            runner->checkCommand(
+                R"(bash -c "dnf config-manager --set-enabled '*' && dnf makecache -y" )");
+        }
     } else if (testCommand == "create-http-repo") {
         assert(testCommandArgs.size() > 0);
         opencattus::functions::createHTTPRepo(testCommandArgs[0]);

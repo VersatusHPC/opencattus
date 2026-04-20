@@ -47,15 +47,27 @@ warn_check() {
     done
 }
 
-common_services=(
-    chronyd
-    mariadb
-    munge
-    nfs-server
-    rpcbind
-    slurmctld
-    slurmdbd
-)
+if command -v apt-get >/dev/null 2>&1; then
+    common_services=(
+        chrony
+        mariadb
+        munge
+        nfs-server
+        rpcbind
+        slurmctld
+        slurmdbd
+    )
+else
+    common_services=(
+        chronyd
+        mariadb
+        munge
+        nfs-server
+        rpcbind
+        slurmctld
+        slurmdbd
+    )
+fi
 
 case "${provisioner}" in
     xcat)
@@ -66,11 +78,19 @@ case "${provisioner}" in
         )
         ;;
     confluent)
-        provisioner_services=(
-            confluent
-            dnsmasq
-            httpd
-        )
+        if command -v apt-get >/dev/null 2>&1; then
+            provisioner_services=(
+                confluent
+                dnsmasq
+                apache2
+            )
+        else
+            provisioner_services=(
+                confluent
+                dnsmasq
+                httpd
+            )
+        fi
         ;;
     *)
         echo "Unsupported provisioner: ${provisioner}" >&2

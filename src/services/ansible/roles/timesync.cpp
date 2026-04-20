@@ -32,7 +32,10 @@ ScriptBuilder installScript(
                                   ->getHeadnode()
                                   .getConnections();
 
-    std::string_view filename = CHROOT "/etc/chrony.conf";
+    const auto filename
+        = osinfo.getPackageType() == opencattus::models::OS::PackageType::DEB
+        ? std::string_view(CHROOT "/etc/chrony/chrony.conf")
+        : std::string_view(CHROOT "/etc/chrony.conf");
     for (const auto& connection : connections) {
         if ((connection.getNetwork()->getProfile()
                 == Network::Profile::Management)
@@ -49,7 +52,10 @@ ScriptBuilder installScript(
         }
     }
 
-    builder.enableService("chronyd");
+    builder.enableService(
+        osinfo.getPackageType() == opencattus::models::OS::PackageType::DEB
+            ? std::string_view("chrony")
+            : std::string_view("chronyd"));
 
     return builder;
 }

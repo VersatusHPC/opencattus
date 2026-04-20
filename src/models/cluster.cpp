@@ -563,11 +563,6 @@ void validateProvisionerSupport(const OS& os, Cluster::Provisioner provisioner)
         case OS::Platform::el9:
             return;
         case OS::Platform::ubuntu24:
-            if (provisioner == Cluster::Provisioner::Confluent) {
-                throw std::runtime_error(
-                    "Confluent is not supported for Ubuntu 24.04 compute "
-                    "nodes yet; use xCAT instead");
-            }
             return;
         default:
             std::unreachable();

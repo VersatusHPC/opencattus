@@ -2713,6 +2713,52 @@ struct RPMRepositoryGenerator {
     }
 };
 
+std::string ubuntuOpenHpcRepositoryUrl(const OS& osinfo)
+{
+    switch (osinfo.getPlatform()) {
+        case OS::Platform::ubuntu24:
+            return "https://repos.versatushpc.com.br/openhpc/"
+                   "versatushpc-4/Ubuntu_24.04/";
+        default:
+            throw std::runtime_error(fmt::format(
+                "Unsupported Ubuntu OpenHPC repository baseline for {}",
+                osinfo.getVersion()));
+    }
+}
+
+TEST_CASE("ubuntuOpenHpcRepositoryUrl uses the VersatusHPC Noble fork")
+{
+    const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24,
+        4, OS::Arch::x86_64);
+
+    CHECK(ubuntuOpenHpcRepositoryUrl(osinfo)
+        == "https://repos.versatushpc.com.br/openhpc/versatushpc-4/"
+           "Ubuntu_24.04/");
+}
+
+void initializeDebianHeadnodeRepositories(const OS& osinfo)
+{
+    if (osinfo.getDistro() != OS::Distro::Ubuntu) {
+        throw std::logic_error(
+            "Debian repository initialization is only implemented for Ubuntu");
+    }
+
+    // The VersatusHPC Ubuntu OpenHPC fork publishes a signed Release file, but
+    // the public key is not published next to the repository yet. Keep this
+    // explicit so apt can consume the repo while the repository signing path is
+    // finished.
+    runner::shell::fmt(R"(
+DEBIAN_FRONTEND=noninteractive apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
+install -d /etc/apt/sources.list.d
+cat > /etc/apt/sources.list.d/opencattus-openhpc.list <<'EOF'
+deb [trusted=yes] {openhpcUrl} ./
+EOF
+DEBIAN_FRONTEND=noninteractive apt-get update
+)",
+        fmt::arg("openhpcUrl", ubuntuOpenHpcRepositoryUrl(osinfo)));
+}
+
 void RepoManager::initializeDefaultRepositories()
 {
     auto opts = opencattus::utils::singleton::options();
@@ -2773,9 +2819,7 @@ void RepoManager::initializeDefaultRepositories()
                                "config-manager --save --setopt=keepcache=True");
         } break;
         case OS::PackageType::DEB:
-            throw std::logic_error(
-                "Ubuntu head-node repository initialization is not supported "
-                "yet");
+            initializeDebianHeadnodeRepositories(osinfo);
             break;
     }
 }

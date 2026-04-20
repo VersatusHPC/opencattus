@@ -11,6 +11,7 @@
 #include <opencattus/services/options.h>
 #include <opencattus/services/osservice.h>
 #include <opencattus/services/repos.h>
+#include <opencattus/services/runner.h>
 #include <opencattus/utils/enums.h>
 #include <opencattus/utils/singleton.h>
 #include <stdexcept>
@@ -156,6 +157,34 @@ auto buildDocaHostInstallCommand() -> std::string
            "--exclude=kernel-devel\\* "
            "--exclude=kernel-headers\\* "
            "doca-ofed mlnx-fw-updater";
+}
+
+auto buildInboxOFEDInstalledCommand(const opencattus::models::OS& osinfo)
+    -> std::string
+{
+    switch (osinfo.getPackageType()) {
+        case opencattus::models::OS::PackageType::RPM:
+            return "dnf group info \"Infiniband Support\"";
+        case opencattus::models::OS::PackageType::DEB:
+            return "dpkg-query -W rdma-core ibverbs-providers "
+                   "infiniband-diags";
+    }
+
+    std::unreachable();
+}
+
+auto buildInboxOFEDInstallCommand(const opencattus::models::OS& osinfo)
+    -> std::string
+{
+    switch (osinfo.getPackageType()) {
+        case opencattus::models::OS::PackageType::RPM:
+            return "Infiniband Support";
+        case opencattus::models::OS::PackageType::DEB:
+            return "DEBIAN_FRONTEND=noninteractive apt-get install -y "
+                   "rdma-core ibverbs-providers infiniband-diags perftest";
+    }
+
+    std::unreachable();
 }
 
 auto rockyKernelPackageRepositoryComponent(const opencattus::models::OS& osinfo,
@@ -336,12 +365,19 @@ bool OFED::installed() const
     }
 
     auto runner = opencattus::Singleton<IRunner>::get();
+    const auto osinfo = opencattus::utils::singleton::os();
     switch (m_kind) {
         case OFED::Kind::Doca:
+            if (osinfo.getPackageType()
+                == opencattus::models::OS::PackageType::DEB) {
+                throw std::runtime_error(
+                    "DOCA OFED is only implemented for Enterprise Linux head "
+                    "nodes");
+            }
             return runner->executeCommand("rpm -q doca-ofed") == 0;
         case OFED::Kind::Inbox:
             return runner->executeCommand(
-                       "dnf group info \"Infiniband Support\"")
+                       buildInboxOFEDInstalledCommand(osinfo))
                 == 0;
         case OFED::Kind::Oracle:
             throw std::logic_error("Not implemented");
@@ -367,10 +403,18 @@ void OFED::install() const
     }
 
     switch (m_kind) {
-        case OFED::Kind::Inbox:
-            opencattus::utils::singleton::osservice()->groupInstall(
-                "Infiniband Support");
+        case OFED::Kind::Inbox: {
+            const auto osinfo = opencattus::utils::singleton::os();
+            const auto installCommand = buildInboxOFEDInstallCommand(osinfo);
+            if (osinfo.getPackageType()
+                == opencattus::models::OS::PackageType::DEB) {
+                opencattus::services::runner::shell::cmd(installCommand);
+            } else {
+                opencattus::utils::singleton::osservice()->groupInstall(
+                    installCommand);
+            }
             break;
+        }
 
         case OFED::Kind::Doca: {
             auto runner
@@ -634,6 +678,23 @@ TEST_CASE("buildDocaHostInstallCommand excludes kernel package upgrades")
            "--exclude=kernel-devel\\* "
            "--exclude=kernel-headers\\* "
            "doca-ofed mlnx-fw-updater");
+}
+
+TEST_CASE("buildInboxOFEDInstalledCommand uses APT package probes on Ubuntu")
+{
+    CHECK(buildInboxOFEDInstalledCommand(
+              opencattus::models::OS(opencattus::models::OS::Distro::Ubuntu,
+                  opencattus::models::OS::Platform::ubuntu24, 4))
+        == "dpkg-query -W rdma-core ibverbs-providers infiniband-diags");
+}
+
+TEST_CASE("buildInboxOFEDInstallCommand installs Ubuntu RDMA packages")
+{
+    CHECK(buildInboxOFEDInstallCommand(
+              opencattus::models::OS(opencattus::models::OS::Distro::Ubuntu,
+                  opencattus::models::OS::Platform::ubuntu24, 4))
+        == "DEBIAN_FRONTEND=noninteractive apt-get install -y "
+           "rdma-core ibverbs-providers infiniband-diags perftest");
 }
 
 TEST_CASE("DOCA DKMS priming runs when a newer kernel is installed")

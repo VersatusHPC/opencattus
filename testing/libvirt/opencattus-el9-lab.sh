@@ -121,18 +121,28 @@ is_distro_major_el10() {
     [[ "${DISTRO_MAJOR}" == "10" ]]
 }
 
+is_distro_major_ubuntu24() {
+    [[ "${DISTRO_ID}" == "ubuntu" && "${DISTRO_MAJOR}" == "24" ]]
+}
+
 require_supported_distro_major() {
+    if is_distro_major_ubuntu24; then
+        return 0
+    fi
+
     case "${DISTRO_MAJOR}" in
         8|9|10)
             ;;
         *)
-            die "Unsupported DISTRO_MAJOR ${DISTRO_MAJOR}; the shared lab supports explicit EL8, EL9, and EL10 paths only"
+            die "Unsupported DISTRO_MAJOR ${DISTRO_MAJOR}; the shared lab supports explicit EL8, EL9, EL10, and Ubuntu 24 paths only"
             ;;
     esac
 }
 
 default_remote_build_preset() {
-    if is_distro_major_el10; then
+    if is_distro_major_ubuntu24; then
+        printf 'ubuntu24-gcc-release'
+    elif is_distro_major_el10; then
         printf 'el10-gcc-release'
     elif is_distro_major_el8; then
         printf 'rhel8-gcc-toolset-14-release'
@@ -144,7 +154,9 @@ default_remote_build_preset() {
 }
 
 default_remote_build_preset_build() {
-    if is_distro_major_el10; then
+    if is_distro_major_ubuntu24; then
+        printf 'ubuntu24-gcc-release-build'
+    elif is_distro_major_el10; then
         printf 'el10-gcc-release-build'
     elif is_distro_major_el8; then
         printf 'rhel8-gcc-toolset-14-release-build'
@@ -156,7 +168,9 @@ default_remote_build_preset_build() {
 }
 
 headnode_glibmm_package() {
-    if is_distro_major_el10; then
+    if is_distro_major_ubuntu24; then
+        printf 'libglibmm-2.68-1t64'
+    elif is_distro_major_el10; then
         printf 'glibmm2.68'
     elif is_distro_major_el8; then
         printf 'glibmm24'
@@ -168,7 +182,9 @@ headnode_glibmm_package() {
 }
 
 virt_install_osinfo_name() {
-    if is_distro_major_el10; then
+    if is_distro_major_ubuntu24; then
+        printf 'ubuntu24.04'
+    elif is_distro_major_el10; then
         printf 'generic'
     elif is_distro_major_el8; then
         printf 'rocky8'
@@ -192,7 +208,9 @@ load_defaults() {
     require_supported_distro_major
 
     if [[ -z "${PROVISIONER+x}" ]]; then
-        if is_distro_major_el8; then
+        if is_distro_major_ubuntu24; then
+            PROVISIONER=confluent
+        elif is_distro_major_el8; then
             PROVISIONER=confluent
         elif is_distro_major_el9; then
             PROVISIONER=xcat
@@ -603,6 +621,94 @@ render_headnode_cloud_init() {
     local pubkey
     pubkey=$(<"${SSH_PUBLIC_KEY}")
 
+    if is_distro_major_ubuntu24; then
+        cat >"$(headnode_user_data_path)" <<EOF
+#cloud-config
+hostname: ${HEADNODE_NAME}
+fqdn: ${HEADNODE_NAME}.${CLUSTER_DOMAIN}
+manage_etc_hosts: true
+package_update: true
+packages:
+  - ca-certificates
+  - cloud-guest-utils
+  - $(headnode_glibmm_package)
+  - lvm2
+  - network-manager
+  - openssh-server
+  - qemu-guest-agent
+  - rsync
+  - sudo
+  - tar
+  - wget
+write_files:
+  - path: /usr/local/sbin/opencattus-grow-rootfs.sh
+    owner: root:root
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euxo pipefail
+
+      root_source=\$(findmnt -n -o SOURCE /)
+      root_fstype=\$(findmnt -n -o FSTYPE /)
+
+      if [[ "\${root_source}" == /dev/mapper/* || "\${root_source}" == /dev/*/* ]]; then
+          vg_name=\$(lvs --noheadings -o vg_name "\${root_source}" 2>/dev/null | awk 'NF { print \$1; exit }' || true)
+          if [[ -n "\${vg_name}" ]]; then
+              pv_name=\$(pvs --noheadings -o pv_name -S "vg_name=\${vg_name}" 2>/dev/null | awk 'NF { print \$1; exit }' || true)
+              if [[ -n "\${pv_name}" ]]; then
+                  pv_basename=\$(basename "\${pv_name}")
+                  parent_disk=\$(lsblk -no PKNAME "\${pv_name}" 2>/dev/null | awk 'NF { print \$1; exit }' || true)
+                  if [[ -r "/sys/class/block/\${pv_basename}/partition" ]]; then
+                      part_number=\$(tr -d '[:space:]' < "/sys/class/block/\${pv_basename}/partition" || true)
+                  else
+                      part_number=\$(lsblk -no PARTN "\${pv_name}" 2>/dev/null | awk 'NF { print \$1; exit }' || true)
+                  fi
+                  if [[ -n "\${parent_disk}" && -n "\${part_number}" ]]; then
+                      growpart "/dev/\${parent_disk}" "\${part_number}" || true
+                  fi
+                  pvresize "\${pv_name}" || true
+              fi
+              lvextend -l +100%FREE -r "\${root_source}" || true
+          fi
+      elif [[ "\${root_source}" == /dev/* ]]; then
+          root_basename=\$(basename "\${root_source}")
+          parent_disk=\$(lsblk -no PKNAME "\${root_source}" 2>/dev/null | awk 'NF { print \$1; exit }' || true)
+          if [[ -r "/sys/class/block/\${root_basename}/partition" ]]; then
+              part_number=\$(tr -d '[:space:]' < "/sys/class/block/\${root_basename}/partition" || true)
+          else
+              part_number=\$(lsblk -no PARTN "\${root_source}" 2>/dev/null | awk 'NF { print \$1; exit }' || true)
+          fi
+          if [[ -n "\${parent_disk}" && -n "\${part_number}" ]]; then
+              growpart "/dev/\${parent_disk}" "\${part_number}" || true
+          fi
+          case "\${root_fstype}" in
+              xfs)
+                  xfs_growfs / || true
+                  ;;
+              ext2|ext3|ext4)
+                  resize2fs "\${root_source}" || true
+                  ;;
+          esac
+      fi
+
+      lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT
+      df -h /
+users:
+  - default
+  - name: ${SSH_USER}
+    gecos: OpenCATTUS Lab
+    groups: [adm, sudo]
+    lock_passwd: true
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${pubkey}
+runcmd:
+  - [bash, -lc, /usr/local/sbin/opencattus-grow-rootfs.sh]
+  - [systemctl, enable, --now, ssh]
+  - [systemctl, enable, --now, qemu-guest-agent]
+EOF
+    else
     cat >"$(headnode_user_data_path)" <<EOF
 #cloud-config
 hostname: ${HEADNODE_NAME}
@@ -688,6 +794,7 @@ runcmd:
   - [systemctl, enable, --now, sshd]
   - [systemctl, enable, --now, qemu-guest-agent]
 EOF
+    fi
 
     cat >"$(headnode_meta_data_path)" <<EOF
 instance-id: ${HEADNODE_NAME}
@@ -796,12 +903,16 @@ check_config() {
             "OFED_ENABLED=1 requires APPLICATION_NETWORK_ENABLED=1"
     fi
     case "${DISTRO_ID}" in
-        rocky|alma|ol|rhel)
+        rocky|alma|ol|rhel|ubuntu)
             ;;
         *)
-            die "Unsupported DISTRO_ID ${DISTRO_ID}; expected rocky, alma, ol, or rhel"
+            die "Unsupported DISTRO_ID ${DISTRO_ID}; expected rocky, alma, ol, rhel, or ubuntu"
             ;;
     esac
+    if [[ "${DISTRO_ID}" == "ubuntu" ]]; then
+        [[ "${DISTRO_MAJOR}" == "24" ]] || die \
+            "Ubuntu lab support is currently limited to Ubuntu 24.04"
+    fi
     if is_distro_major_el10; then
         [[ "${PROVISIONER}" == "confluent" ]] || die \
             "EL10 bootstrap is Confluent-only; xCAT remains out of scope for this lab"
@@ -1236,6 +1347,47 @@ prepare_headnode() {
     local available_kernel
 
     wait_for_headnode_ssh
+
+    if is_distro_major_ubuntu24; then
+        log "Ensuring Ubuntu headnode runtime and build prerequisites are installed"
+        wait_for_ubuntu_apt
+        ssh_remote "sudo systemctl stop packagekit packagekit-offline-update >/dev/null 2>&1 || true;
+            for attempt in 1 2 3; do
+                if sudo DEBIAN_FRONTEND=noninteractive apt-get update &&
+                    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+                        build-essential \
+                        ca-certificates \
+                        ccache \
+                        cmake \
+                        cppcheck \
+                        g++-14 \
+                        gcc-14 \
+                        git \
+                        libglibmm-2.68-dev \
+                        libnewt-dev \
+                        network-manager \
+                        ninja-build \
+                        pkg-config \
+                        python3-pip \
+                        qemu-guest-agent \
+                        rsync \
+                        tar \
+                        wget; then
+                    break;
+                fi;
+                if [[ \$attempt -eq 3 ]]; then
+                    exit 1;
+                fi;
+                sleep 5;
+            done"
+        ssh_remote "if [[ -e /dev/virtio-ports/org.qemu.guest_agent.0 ]]; then
+                sudo systemctl enable --now qemu-guest-agent
+            else
+                sudo systemctl enable qemu-guest-agent >/dev/null 2>&1 || true
+            fi" >/dev/null 2>&1 || true
+        return
+    fi
+
     seed_rhel_local_mirror_repo
 
     log "Checking headnode repository state"
@@ -1466,6 +1618,36 @@ ssh_remote() {
     ssh "${SSH_OPTIONS[@]}" "$(remote_host)" "$@"
 }
 
+wait_for_ubuntu_apt() {
+    ssh_remote "set -euo pipefail
+        if command -v cloud-init >/dev/null 2>&1; then
+            sudo cloud-init status --wait >/dev/null 2>&1 || true
+        fi
+        sudo systemctl stop \
+            apt-daily.service \
+            apt-daily.timer \
+            apt-daily-upgrade.service \
+            apt-daily-upgrade.timer \
+            packagekit \
+            packagekit-offline-update >/dev/null 2>&1 || true
+        for attempt in \$(seq 1 120); do
+            if sudo fuser \
+                /var/lib/dpkg/lock-frontend \
+                /var/lib/dpkg/lock \
+                /var/lib/apt/lists/lock \
+                /var/cache/apt/archives/lock >/dev/null 2>&1; then
+                sleep 5
+            else
+                break
+            fi
+            if [[ \${attempt} -eq 120 ]]; then
+                echo 'Timed out waiting for apt/dpkg locks' >&2
+                exit 1
+            fi
+        done
+        sudo dpkg --configure -a"
+}
+
 scp_to_remote() {
     scp "${SSH_OPTIONS[@]}" "$1" "$(remote_host):$2"
 }
@@ -1507,6 +1689,8 @@ build_binary_in_guest() {
     local build_log="${LOG_DIR}/build.log"
     local compiler_setup_cmd
     local local_mirror_setup_cmd=
+    local cmake_compiler_args
+    local cmake_extra_args=
     local remote_build_dir="${REMOTE_SOURCE_DIR}/out/build/${REMOTE_BUILD_PRESET}"
     local remote_build_type="Release"
     local remote_cmd
@@ -1519,12 +1703,34 @@ build_binary_in_guest() {
 
     sync_repo_to_remote
 
-    if is_distro_major_el10; then
+    if is_distro_major_ubuntu24; then
+        wait_for_ubuntu_apt
+        compiler_setup_cmd=$(cat <<'EOF'
+sudo DEBIAN_FRONTEND=noninteractive apt-get update &&
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    build-essential \
+    ccache \
+    cmake \
+    g++-14 \
+    gcc-14 \
+    git \
+    libglibmm-2.68-dev \
+    libnewt-dev \
+    ninja-build \
+    pkg-config \
+    python3-pip &&
+python3 -m pip install --user --break-system-packages --upgrade pip conan &&
+EOF
+)
+        cmake_compiler_args="-DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14"
+        cmake_extra_args="-Dopencattus_ENABLE_CPPCHECK=OFF"
+    elif is_distro_major_el10; then
         compiler_setup_cmd=$(cat <<'EOF'
 chmod +x setupDevEnvironment.sh &&
 ./setupDevEnvironment.sh &&
 EOF
 )
+        cmake_compiler_args="-DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++"
     else
         compiler_setup_cmd=$(cat <<'EOF'
 chmod +x setupDevEnvironment.sh rhel-gcc-toolset-14.sh &&
@@ -1534,6 +1740,7 @@ source ./rhel-gcc-toolset-14.sh &&
 set -u &&
 EOF
 )
+        cmake_compiler_args="-DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++"
     fi
 
     if [[ -n "${OPENCATTUS_MIRROR_URL}" && "${DISTRO_ID}" == "rocky" ]]; then
@@ -1596,8 +1803,8 @@ ${compiler_setup_cmd}
 conan profile detect --force &&
 cmake -S . -B '${remote_build_dir}' \
     -DCMAKE_BUILD_TYPE='${remote_build_type}' \
-    -DCMAKE_C_COMPILER=gcc \
-    -DCMAKE_CXX_COMPILER=g++ &&
+    ${cmake_compiler_args} \
+    ${cmake_extra_args} &&
 cmake --build '${remote_build_dir}' --target opencattus -j '${REMOTE_BUILD_JOBS}' &&
 install -m 0755 '${REMOTE_BUILD_BINARY}' '${REMOTE_BINARY_PATH}'
 EOF

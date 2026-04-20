@@ -948,7 +948,7 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(diskImagePath);
     }
 
-    TEST_CASE("fillData rejects confluent for Ubuntu 24.04 compute nodes")
+    TEST_CASE("fillData accepts Ubuntu 24.04 compute nodes with confluent")
     {
         initializeOptionsSingleton();
 
@@ -967,15 +967,19 @@ TEST_SUITE("opencattus::models::answerfile")
         try {
             AnswerFile answerfile(answerfilePath);
             Cluster cluster;
+            cluster.fillData(answerfile);
 
-            CHECK_THROWS_WITH(cluster.fillData(answerfile),
-                doctest::Contains("Confluent is not supported for Ubuntu "
-                                  "24.04 compute nodes yet"));
+            CHECK(cluster.getProvisioner() == Cluster::Provisioner::Confluent);
+            CHECK(cluster.getComputeNodeOS().getDistro()
+                == opencattus::models::OS::Distro::Ubuntu);
+            CHECK(cluster.getComputeNodeOS().getPlatform()
+                == opencattus::models::OS::Platform::ubuntu24);
+            CHECK(cluster.getComputeNodeOS().getVersion() == "24.04");
         } catch (const std::exception& e) {
             FAIL(std::string(e.what()));
         } catch (...) {
-            FAIL("non-std exception while validating Ubuntu Confluent "
-                 "rejection");
+            FAIL("non-std exception while filling cluster for Ubuntu 24.04 "
+                 "Confluent");
         }
 
         std::filesystem::remove(answerfilePath);
