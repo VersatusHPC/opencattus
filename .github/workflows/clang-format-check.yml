@@ -36,11 +36,40 @@ jobs:
           set -euo pipefail
           REQUIRED_CLANG_FORMAT_VERSION="$(tr -d '[:space:]' < .clang-format-version)"
 
-          CLANG_FORMAT_BIN=""
-          if [[ -n "${REQUIRED_CLANG_FORMAT_VERSION}" ]] && command -v "clang-format-${REQUIRED_CLANG_FORMAT_VERSION}" >/dev/null 2>&1; then
-            CLANG_FORMAT_BIN="$(command -v "clang-format-${REQUIRED_CLANG_FORMAT_VERSION}")"
-          elif command -v clang-format >/dev/null 2>&1; then
-            CLANG_FORMAT_BIN="$(command -v clang-format)"
+          resolve_clang_format_bin() {
+            CLANG_FORMAT_BIN=""
+            if [[ -n "${REQUIRED_CLANG_FORMAT_VERSION}" ]] && command -v "clang-format-${REQUIRED_CLANG_FORMAT_VERSION}" >/dev/null 2>&1; then
+              CLANG_FORMAT_BIN="$(command -v "clang-format-${REQUIRED_CLANG_FORMAT_VERSION}")"
+            elif command -v clang-format >/dev/null 2>&1; then
+              CLANG_FORMAT_BIN="$(command -v clang-format)"
+            fi
+          }
+
+          clang_format_major_version() {
+            "${CLANG_FORMAT_BIN}" --version | sed -nE 's/.* ([0-9]+)(\.[0-9]+)+.*/\1/p' | head -n 1
+          }
+
+          resolve_clang_format_bin
+
+          if [[ -n "${REQUIRED_CLANG_FORMAT_VERSION}" ]]; then
+            current_major=""
+            if [[ -n "${CLANG_FORMAT_BIN}" ]]; then
+              current_major="$(clang_format_major_version)"
+            fi
+
+            if [[ "${current_major}" != "${REQUIRED_CLANG_FORMAT_VERSION}" ]]; then
+              command -v python3 >/dev/null 2>&1 || {
+                echo "python3 is required to install clang-format ${REQUIRED_CLANG_FORMAT_VERSION}" >&2
+                exit 1
+              }
+
+              next_version="$((REQUIRED_CLANG_FORMAT_VERSION + 1))"
+              python3 -m pip install --user --upgrade \
+                "clang-format>=${REQUIRED_CLANG_FORMAT_VERSION}.0,<${next_version}.0"
+
+              export PATH="$(python3 -m site --user-base)/bin:${PATH}"
+              resolve_clang_format_bin
+            fi
           fi
 
           [[ -n "${CLANG_FORMAT_BIN}" ]] || {
