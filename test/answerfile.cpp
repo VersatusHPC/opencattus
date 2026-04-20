@@ -948,6 +948,43 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(diskImagePath);
     }
 
+    TEST_CASE("fillData rejects xcat on Ubuntu 24.04 headnodes")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath = tempAnswerfilePath(
+            "opencattus-cluster-provisioner-ubuntu24-headnode-xcat");
+        const auto diskImagePath = tempIsoPath(
+            "opencattus-cluster-provisioner-ubuntu24-headnode-xcat");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "xcat", std::nullopt,
+            "rocky", "9.6");
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            Cluster cluster;
+            cluster.getHeadnode().setOS(
+                opencattus::models::OS(opencattus::models::OS::Distro::Ubuntu,
+                    opencattus::models::OS::Platform::ubuntu24, 4));
+
+            CHECK_THROWS_WITH(cluster.fillData(answerfile),
+                doctest::Contains(
+                    "xCAT is not supported on DEB head nodes"));
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while validating Ubuntu 24.04 headnode "
+                 "xCAT rejection");
+        }
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
     TEST_CASE("fillData accepts Ubuntu 24.04 compute nodes with confluent")
     {
         initializeOptionsSingleton();

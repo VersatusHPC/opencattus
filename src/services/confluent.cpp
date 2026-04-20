@@ -247,7 +247,7 @@ std::string buildConfluentDnsmasqCommands(const models::OS& os,
     std::string_view domain)
 {
     if (os.getPackageType() != models::OS::PackageType::DEB) {
-        return {};
+        return { };
     }
 
     return fmt::format(R"(
@@ -272,7 +272,7 @@ systemctl is-active --quiet dnsmasq
 std::string buildConfluentHttpPublishCommands(const models::OS& os)
 {
     if (os.getPackageType() != models::OS::PackageType::DEB) {
-        return {};
+        return { };
     }
 
     return R"(
@@ -515,6 +515,7 @@ std::string buildNodeImageChronyCommands(
         return fmt::format(R"(
 # Install and configure chrony
 imgutil exec $scratchdir <<EOF
+DEBIAN_FRONTEND=noninteractive apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y chrony
 sed -e '/^pool /d' -e '/^server .* iburst$/d' -i /etc/chrony/chrony.conf
 echo "server {hnIp} iburst" >> /etc/chrony/chrony.conf
@@ -543,7 +544,8 @@ std::string buildNodeImageAutofsCommands(
 {
     const auto installCommand
         = os.getPackageType() == models::OS::PackageType::DEB
-        ? "DEBIAN_FRONTEND=noninteractive apt-get install -y autofs nfs-common"
+        ? "DEBIAN_FRONTEND=noninteractive apt-get update && "
+          "DEBIAN_FRONTEND=noninteractive apt-get install -y autofs nfs-common"
         : "dnf install -y autofs";
 
     return fmt::format(R"(
@@ -1194,7 +1196,7 @@ TEST_CASE("buildConfluentRepoRpmUrl uses upstream by default")
     using opencattus::services::Options;
 
     opencattus::Singleton<const Options>::init(
-        std::make_unique<const Options>(Options {}));
+        std::make_unique<const Options>(Options { }));
 
     CHECK(buildConfluentRepoRpmUrl(OS(OS::Distro::Rocky, OS::Platform::el9, 7))
         == "https://hpc.lenovo.com/yum/latest/el9/x86_64/"
@@ -1446,6 +1448,30 @@ TEST_CASE("buildNodeImageInstallCommand keeps EL8, EL9, and EL10 explicit")
            "ca-certificates && DEBIAN_FRONTEND=noninteractive apt-get update "
            "&& DEBIAN_FRONTEND=noninteractive apt-get install -y "
            "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-ohpc");
+}
+
+TEST_CASE("buildNodeImageChronyCommands refreshes APT metadata on Ubuntu")
+{
+    using opencattus::models::OS;
+
+    const auto script = buildNodeImageChronyCommands(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4), "172.31.38.254");
+
+    CHECK(script.contains("DEBIAN_FRONTEND=noninteractive apt-get update\n"
+                          "DEBIAN_FRONTEND=noninteractive apt-get install -y "
+                          "chrony"));
+}
+
+TEST_CASE("buildNodeImageAutofsCommands refreshes APT metadata on Ubuntu")
+{
+    using opencattus::models::OS;
+
+    const auto script = buildNodeImageAutofsCommands(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4), "172.31.38.254");
+
+    CHECK(script.contains("DEBIAN_FRONTEND=noninteractive apt-get update && "
+                          "DEBIAN_FRONTEND=noninteractive apt-get install -y "
+                          "autofs nfs-common"));
 }
 
 TEST_CASE("buildNodeImageRepositorySyncCommands copies APT sources on Ubuntu")

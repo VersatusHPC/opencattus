@@ -32,7 +32,7 @@ namespace opencattus::services {
 class XCAT : public Provisioner<XCAT> {
 public:
     struct Image {
-        std::vector<std::string_view> otherpkgs = {};
+        std::vector<std::string_view> otherpkgs = { };
         // @TODO: We need to support more than one osimage (:
         //   this can be a default osimage though
         std::string osimage;
@@ -280,7 +280,7 @@ public:
      */
     void createImage(ImageType = ImageType::Netboot,
         NodeType = NodeType::Compute,
-        const std::vector<ScriptBuilder>& customizations = {});
+        const std::vector<ScriptBuilder>& customizations = { });
 
     /**
      * @brief Adds nodes to the provisioning system.

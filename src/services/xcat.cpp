@@ -299,7 +299,7 @@ XcatInfinibandPlan buildXcatInfinibandPlan(const OFED& ofed, const OS& nodeOS,
                 ? std::string(configuredKernel.value())
                 : std::string(runningKernel);
             return XcatInfinibandPlan {
-                .otherPackages = {},
+                .otherPackages = { },
                 .kernelVersion = kernelVersion,
                 .localRepoName = fmt::format("doca-kernel-{}", kernelVersion),
             };
@@ -351,7 +351,7 @@ std::vector<std::string_view> buildXcatKernelPackageNames(const OS& nodeOS)
 std::string buildXcatKernelPackages(
     const OS& nodeOS, std::string_view kernelVersion)
 {
-    auto output = std::string {};
+    auto output = std::string { };
     for (const auto packageName : buildXcatKernelPackageNames(nodeOS)) {
         if (!output.empty()) {
             output += " ";
@@ -409,7 +409,7 @@ std::optional<std::string> buildRockyXcatKernelDownloadFallbackCommand(
         return std::nullopt;
     }
 
-    auto fallbackDownloads = std::string {};
+    auto fallbackDownloads = std::string { };
     for (const auto packageName : buildXcatKernelPackageNames(nodeOS)) {
         const auto packageUrl
             = buildRockyKernelPackageUrl(nodeOS, packageName, kernelVersion);
@@ -2106,7 +2106,7 @@ TEST_CASE("buildXcatInfinibandPlan stages DOCA packages for EL8 compute nodes")
         = buildXcatInfinibandPlan(OFED(OFED::Kind::Doca, "latest-3.2-LTS"),
             OS(OS::Distro::Rocky, OS::Platform::el8, 10, OS::Arch::x86_64),
             std::nullopt, "4.18.0-553.75.1.el8_10.x86_64");
-    const std::vector<std::string_view> expectedPackages {};
+    const std::vector<std::string_view> expectedPackages { };
 
     CHECK(plan.otherPackages == expectedPackages);
     REQUIRE(plan.kernelVersion.has_value());

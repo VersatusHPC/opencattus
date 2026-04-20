@@ -578,7 +578,7 @@ struct RepoAssembler final {
         const UpstreamRepo<UChecker>& upstream, const bool enabled = false,
         const bool forceUpstream = false)
     {
-        auto repo = RPMRepository {};
+        auto repo = RPMRepository { };
         repo.group(static_cast<std::string>(repoid.id));
         repo.id(static_cast<std::string>(repoid.id));
         repo.name(static_cast<std::string>(repoid.name));
@@ -666,7 +666,7 @@ public:
     void insert(const std::string& filename, RepoConfig& value)
     {
         if (!m_files.contains(filename)) {
-            m_files.emplace(filename, std::vector<RepoConfig> {});
+            m_files.emplace(filename, std::vector<RepoConfig> { });
         }
         m_files.at(filename).emplace_back(value);
     }
@@ -1808,7 +1808,7 @@ public:
     void enable(const std::vector<std::string>& repos, bool value)
     {
         auto byIdPtr = [](const std::shared_ptr<RPMRepositoryFile>& rptr) {
-            return std::hash<std::string> {}(rptr->path());
+            return std::hash<std::string> { }(rptr->path());
         };
         std::unordered_set<std::shared_ptr<RPMRepositoryFile>,
             decltype(byIdPtr)>
@@ -1837,7 +1837,7 @@ public:
     {
         // Function to iterate over map by id
         constexpr auto byId
-            = [](auto& repo) { return std::hash<std::string> {}(repo.id()); };
+            = [](auto& repo) { return std::hash<std::string> { }(repo.id()); };
 
         std::unordered_set<RPMRepository, decltype(byId)> output;
         for (auto& [_id1, repoFile] : m_filesIdx) {
@@ -2100,7 +2100,7 @@ TEST_CASE("RepoNames")
     struct ShouldUseVaultService final {
         static bool shouldUseVault(const OS& osinfo) { return false; }
     };
-    const auto enabler = RepoNames<ShouldUseVaultService> {};
+    const auto enabler = RepoNames<ShouldUseVaultService> { };
     const RepoConfigVars& vars = RepoConfigVars {
         .arch = "x86_64",
         .beegfsVersion = "beegfs_7.3.3",
@@ -2405,7 +2405,7 @@ TEST_SUITE("opencattus::services::repos [slow]")
 #ifdef BUILD_TESTING
         using namespace opencattus::services;
         opencattus::services::initializeSingletonsOptions(
-            std::make_unique<const Options>(Options {}));
+            std::make_unique<const Options>(Options { }));
         const auto repos = std::filesystem::path("./repos");
         REQUIRE(opencattus::functions::exists(repos / "repos.conf"));
         const auto confs
@@ -2517,7 +2517,7 @@ std::vector<std::string> expandSelectedRepositoryIds(
 
     std::vector<std::string> expanded;
     expanded.reserve(repositoryIds.size() + 2);
-    auto seen = std::unordered_set<std::string> {};
+    auto seen = std::unordered_set<std::string> { };
 
     const auto append
         = [&](const std::string& repoId, auto&& appendSelf) -> void {
@@ -2632,7 +2632,7 @@ TEST_CASE("defaultRepositoriesFor keeps mandatory repositories enabled when "
           "optional repositories are selected")
 {
     opencattus::services::initializeSingletonsOptions(
-        std::make_unique<const Options>(Options {}));
+        std::make_unique<const Options>(Options { }));
     const auto osinfo
         = OS(models::OS::Distro::Rocky, OS::Platform::el9, 6, OS::Arch::x86_64);
     const auto selections = RepoManager::defaultRepositoriesFor(
@@ -2661,7 +2661,7 @@ TEST_CASE("defaultRepositoriesFor enables oneAPI when the Intel OpenHPC "
           "bundle is selected")
 {
     opencattus::services::initializeSingletonsOptions(
-        std::make_unique<const Options>(Options {}));
+        std::make_unique<const Options>(Options { }));
     const auto osinfo = OS(
         models::OS::Distro::Rocky, OS::Platform::el10, 1, OS::Arch::x86_64);
     const auto selections = RepoManager::defaultRepositoriesFor(osinfo,
@@ -2676,7 +2676,7 @@ TEST_CASE("defaultRepositoriesFor enables oneAPI when the Intel OpenHPC "
 TEST_CASE("defaultRepositoriesFor exposes Ubuntu 24.04 mandatory repositories")
 {
     opencattus::services::initializeSingletonsOptions(
-        std::make_unique<const Options>(Options {}));
+        std::make_unique<const Options>(Options { }));
     const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24,
         4, OS::Arch::x86_64);
     const auto selections = RepoManager::defaultRepositoriesFor(

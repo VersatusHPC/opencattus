@@ -510,14 +510,15 @@ void Cluster::fillTestData()
 
     // TODO: Pass network connection as object
     std::list<Connection> connections1 {
-        { &getNetwork(Network::Profile::Management), {}, "00:0c:29:9b:0c:75",
+        { &getNetwork(Network::Profile::Management), { }, "00:0c:29:9b:0c:75",
             "172.26.0.1" },
-        { &getNetwork(Network::Profile::Application), "eno1", {}, "172.27.0.1" }
+        { &getNetwork(Network::Profile::Application), "eno1", { },
+            "172.27.0.1" }
     };
 
     std::list<Connection> connections2 { { &getNetwork(
                                                Network::Profile::Management),
-        {}, "de:ad:be:ff:00:00", "172.26.0.2" } };
+        { }, "de:ad:be:ff:00:00", "172.26.0.2" } };
 
     BMC bmc { "172.25.0.2", "ADMIN", "ADMIN", 0, 115200, BMC::kind::IPMI };
 
@@ -548,14 +549,21 @@ auto& getNetworkField(AnswerFile& answerfile, Network::Profile profile)
     }
 }
 
-void validateProvisionerSupport(const OS& os, Cluster::Provisioner provisioner)
+void validateProvisionerSupport(
+    const OS& headnodeOS, const OS& nodeOS, Cluster::Provisioner provisioner)
 {
-    switch (os.getPlatform()) {
+    if (provisioner == Cluster::Provisioner::xCAT
+        && headnodeOS.getPackageType() == OS::PackageType::DEB) {
+        throw std::runtime_error(
+            "xCAT is not supported on DEB head nodes; use confluent instead");
+    }
+
+    switch (nodeOS.getPlatform()) {
         case OS::Platform::el10:
             if (provisioner == Cluster::Provisioner::xCAT) {
                 throw std::runtime_error(fmt::format(
                     "xCAT is not supported on EL{}; use confluent instead",
-                    os.getMajorVersion()));
+                    nodeOS.getMajorVersion()));
             }
             return;
         case OS::Platform::el8:
@@ -1052,7 +1060,8 @@ void Cluster::fillData(const AnswerFile& answerfil)
         opencattus::functions::abort("Invalid provisioner {}", provisioner);
     }();
 
-    validateProvisionerSupport(nodeOS, selectedProvisioner);
+    validateProvisionerSupport(
+        getHeadnode().getOS(), nodeOS, selectedProvisioner);
     setProvisioner(selectedProvisioner);
     setComputeNodeOS(nodeOS);
 

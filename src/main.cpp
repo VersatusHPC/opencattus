@@ -329,9 +329,9 @@ int runApplication(int argc, const char** argv)
     auto model = std::make_unique<opencattus::models::Cluster>();
     LOG_INFO("Model initialized");
     std::unique_ptr<models::AnswerFile> answerfile;
-    auto tuiDraftState = services::tui::DraftState {};
-    auto tuiDraftPath = std::filesystem::path {};
-    auto tuiView = std::unique_ptr<View> {};
+    auto tuiDraftState = services::tui::DraftState { };
+    auto tuiDraftPath = std::filesystem::path { };
+    auto tuiView = std::unique_ptr<View> { };
     if (opts->enableTUI) {
         tuiView = std::make_unique<Newt>();
     }

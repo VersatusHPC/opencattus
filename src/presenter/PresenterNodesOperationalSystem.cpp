@@ -182,7 +182,7 @@ auto isoSearchToken(const OS::Distro distro) -> std::string_view
             return "ubuntu-";
     }
 
-    return {};
+    return { };
 }
 
 auto exampleIsoName(const OS::Distro distro,
@@ -211,7 +211,7 @@ auto exampleIsoName(const OS::Distro distro,
                 "ubuntu-{}.04.4-live-server-{}.iso", major, architecture);
     }
 
-    return {};
+    return { };
 }
 
 auto formatNoMatchingIsoMessage(const fs::path& directory,

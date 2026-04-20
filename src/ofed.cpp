@@ -284,7 +284,7 @@ auto latestInstalledKernelCore(IRunner& runner) -> std::string
         "bash -lc \"rpm -q kernel-core --qf '%{INSTALLTIME} "
         "%{VERSION}-%{RELEASE}.%{ARCH}\\n'\"");
 
-    auto newestKernel = std::string {};
+    auto newestKernel = std::string { };
     long long newestInstallTime = 0;
     auto foundKernel = false;
 
@@ -723,7 +723,7 @@ TEST_CASE("latestInstalledKernelCore uses install time instead of version sort")
         opencattus::services::CommandProxy executeCommandIter(
             const std::string&, opencattus::services::Stream) override
         {
-            return {};
+            return { };
         }
         void checkCommand(const std::string&) override { }
         std::vector<std::string> checkOutput(
@@ -745,7 +745,7 @@ TEST_CASE("latestInstalledKernelCore uses install time instead of version sort")
         }
     };
 
-    auto runner = KernelQueryRunner {};
+    auto runner = KernelQueryRunner { };
     CHECK(
         latestInstalledKernelCore(runner) == "4.18.0-553.111.1.el8_10.x86_64");
     CHECK(runner.queriedCommand

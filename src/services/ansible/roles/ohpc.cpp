@@ -73,10 +73,10 @@ namespace {
             return { "ohpc-gnu12-parallel-libs" };
         }
         if (bundleId == bundleIntelOneAPI) {
-            return {};
+            return { };
         }
 
-        return {};
+        return { };
     }
 
     std::set<std::string> bundlePackagesForEl9(std::string_view bundleId)
@@ -93,7 +93,7 @@ namespace {
                 "ohpc-intel-serial-libs", "ohpc-intel-impi-parallel-libs" };
         }
 
-        return {};
+        return { };
     }
 
     std::set<std::string> bundlePackagesForEl10(std::string_view bundleId)
@@ -110,7 +110,7 @@ namespace {
                 "ohpc-intel-serial-libs", "ohpc-intel-impi-parallel-libs" };
         }
 
-        return {};
+        return { };
     }
 
     std::set<std::string> bundlePackagesForUbuntu24(std::string_view bundleId)
@@ -127,7 +127,7 @@ namespace {
                 "ohpc-intel-serial-libs", "ohpc-intel-impi-parallel-libs" };
         }
 
-        return {};
+        return { };
     }
 
     std::set<std::string> defaultPackagesFor(const models::OS& os)
@@ -238,7 +238,7 @@ TEST_CASE("resolvePackages keeps the current EL8 defaults explicit")
 {
     const auto packages = resolvePackages(
         models::OS(models::OS::Distro::Rocky, models::OS::Platform::el8, 10),
-        std::nullopt, {});
+        std::nullopt, { });
 
     CHECK(packages.contains("gnu12-compilers-ohpc"));
     CHECK(packages.contains("openmpi4-gnu12-ohpc"));
@@ -262,7 +262,7 @@ TEST_CASE("resolvePackages keeps the current EL9 defaults explicit")
 {
     const auto packages = resolvePackages(
         models::OS(models::OS::Distro::Rocky, models::OS::Platform::el9, 7),
-        std::nullopt, {});
+        std::nullopt, { });
 
     CHECK(packages.contains("gnu15-compilers-ohpc"));
     CHECK(packages.contains("openmpi5-pmix-gnu15-ohpc"));
@@ -285,7 +285,7 @@ TEST_CASE("resolvePackages switches EL10 defaults to OpenHPC 4 toolchains")
 {
     const auto packages = resolvePackages(
         models::OS(models::OS::Distro::Rocky, models::OS::Platform::el10, 1),
-        std::nullopt, {});
+        std::nullopt, { });
 
     CHECK(packages.contains("gnu15-compilers-ohpc"));
     CHECK(packages.contains("openmpi5-pmix-gnu15-ohpc"));
@@ -310,7 +310,7 @@ TEST_CASE("resolvePackages keeps Ubuntu 24.04 OpenHPC fork defaults explicit")
     const auto packages
         = resolvePackages(models::OS(models::OS::Distro::Ubuntu,
                               models::OS::Platform::ubuntu24, 4),
-            std::nullopt, {});
+            std::nullopt, { });
 
     CHECK(packages.contains("gnu15-compilers-ohpc"));
     CHECK(packages.contains("openmpi5-gnu15-ohpc"));
@@ -357,7 +357,7 @@ TEST_CASE("resolvePackages adds Intel oneAPI and Intel MPI when requested")
         std::vector<std::string> { std::string(bundleSerialLibraries),
             std::string(bundleParallelLibraries),
             std::string(bundleIntelOneAPI) },
-        {});
+        { });
 
     CHECK(packages.contains("ohpc-gnu15-serial-libs"));
     CHECK(packages.contains("ohpc-gnu15-parallel-libs"));

@@ -52,7 +52,6 @@ resolve_clang_format_bin() {
         candidates+=("/opt/homebrew/opt/llvm@${required_version}/bin/clang-format")
     fi
 
-    candidates+=("clang-format-19")
     candidates+=("clang-format")
 
     for candidate in "${candidates[@]}"; do
