@@ -4,6 +4,7 @@
 #include <opencattus/services/log.h>
 #include <opencattus/services/options.h>
 #include <opencattus/services/runner.h>
+#include <opencattus/utils/ranges.h>
 #include <opencattus/utils/singleton.h>
 
 #include <boost/process/v2.hpp>
@@ -66,7 +67,7 @@ CommandProxy runCommandIter(
         }
     }
 
-    return CommandProxy {};
+    return CommandProxy { };
 }
 
 int runCommand(const std::string& command, std::list<std::string>& output,
@@ -202,7 +203,7 @@ std::optional<std::string> CommandProxy::getline()
               }
 
               valid = false;
-              return std::string {};
+              return std::string { };
           });
 
     valid = new_valid;
@@ -222,7 +223,7 @@ std::optional<std::string> CommandProxy::getUntil(char chr)
             }
 
             valid = false;
-            return std::string {};
+            return std::string { };
         });
 
     valid = new_valid;
@@ -283,7 +284,7 @@ std::vector<std::string> Runner::checkOutput(const std::string& cmd)
         throw std::runtime_error(
             fmt::format("ERROR: Command failed '{}'", cmd));
     }
-    return output | std::ranges::to<std::vector>();
+    return output | opencattus::utils::ranges::to<std::vector>();
 }
 
 int DryRunner::executeCommand(const std::string& cmd)
@@ -313,14 +314,14 @@ std::vector<std::string> DryRunner::checkOutput(const std::string& cmd)
         throw std::runtime_error(
             fmt::format("ERROR: Command failed '{}'", cmd));
     }
-    return output | std::ranges::to<std::vector>();
+    return output | opencattus::utils::ranges::to<std::vector>();
 }
 
 CommandProxy DryRunner::executeCommandIter(
     const std::string& cmd, Stream /*out*/)
 {
     LOG_WARN("Dry Run: Would execute iterative command: {}", cmd);
-    return CommandProxy {}; // Return an invalid CommandProxy
+    return CommandProxy { }; // Return an invalid CommandProxy
 }
 
 int DryRunner::downloadFile(const std::string& url, const std::string& file)
@@ -346,7 +347,7 @@ void MockRunner::checkCommand(const std::string& cmd) { }
 
 std::vector<std::string> MockRunner::checkOutput(const std::string& /*cmd*/)
 {
-    return {};
+    return { };
 }
 
 const std::vector<std::string>& MockRunner::listCommands() const
@@ -358,7 +359,7 @@ CommandProxy MockRunner::executeCommandIter(
     const std::string& cmd, Stream /*out*/)
 {
     m_cmds.push_back(cmd);
-    return CommandProxy {}; // Return an invalid CommandProxy
+    return CommandProxy { }; // Return an invalid CommandProxy
 }
 
 int MockRunner::downloadFile(const std::string& url, const std::string& file)

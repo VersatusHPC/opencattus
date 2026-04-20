@@ -972,8 +972,8 @@ TEST_SUITE("opencattus::models::answerfile")
                     opencattus::models::OS::Platform::ubuntu24, 4));
 
             CHECK_THROWS_WITH(cluster.fillData(answerfile),
-                doctest::Contains(
-                    "xCAT is not supported on DEB head nodes"));
+                doctest::Contains("xCAT on DEB head nodes is not implemented "
+                                  "yet"));
         } catch (const std::exception& e) {
             FAIL(std::string(e.what()));
         } catch (...) {

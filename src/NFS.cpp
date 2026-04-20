@@ -230,7 +230,7 @@ TEST_CASE("installScript uses Debian NFS server package names on Ubuntu")
     const auto scriptStr = builder.toString();
     const auto script = std::string_view(scriptStr);
 
-    CHECK(script.contains("DEBIAN_FRONTEND=noninteractive apt-get install -y "
+    CHECK(script.contains("DEBIAN_FRONTEND=noninteractive apt install -y "
                           "nfs-kernel-server"));
     CHECK(script.contains("systemctl enable --now rpcbind nfs-kernel-server"));
 }

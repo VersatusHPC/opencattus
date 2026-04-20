@@ -34,7 +34,7 @@ void run(const Role& role)
 
     if (singleton::os().getPackageType()
         == opencattus::models::OS::PackageType::DEB) {
-        runner::shell::cmd("DEBIAN_FRONTEND=noninteractive apt-get update");
+        runner::shell::cmd("DEBIAN_FRONTEND=noninteractive apt update");
         LOG_WARN("Skipping kernel freshness check on Ubuntu; the existing "
                  "check is RPM-specific");
         return;

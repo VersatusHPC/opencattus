@@ -34,7 +34,7 @@ ScriptBuilder installScript(
         .addCommand("# Install audit packages")
         .addPackage(auditPackage)
         .addCommand(
-            "DEBIAN_FRONTEND=noninteractive apt-get install -y "
+            "DEBIAN_FRONTEND=noninteractive apt install -y "
             "audispd-plugins 2>/dev/null || dnf install -y audispd-plugins "
             "2>/dev/null || :")
         .addCommand("# Configure auditd")

@@ -14,6 +14,7 @@
 #include <opencattus/services/files.h>
 #include <opencattus/services/log.h>
 #include <opencattus/utils/formatters.h>
+#include <opencattus/utils/ranges.h>
 
 namespace opencattus::services::files {
 
@@ -91,7 +92,7 @@ namespace {
     {
         return input | std::views::transform([](const auto& group) {
             return group.raw();
-        }) | std::ranges::to<std::vector<std::string>>();
+        }) | opencattus::utils::ranges::to<std::vector<std::string>>();
     }
 }
 
@@ -102,7 +103,7 @@ std::vector<std::string> KeyFile::listAllPrefixedEntries(
 
     return groups | std::views::filter([&](const auto& group) {
         return group.starts_with(prefix);
-    }) | std::ranges::to<std::vector>();
+    }) | opencattus::utils::ranges::to<std::vector>();
 }
 
 std::vector<std::string> KeyFile::getGroups() const

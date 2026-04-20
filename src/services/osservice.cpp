@@ -196,15 +196,14 @@ public:
     [[nodiscard]] bool install(std::string_view package) const override
     {
         return Singleton<IRunner>::get()->executeCommand(fmt::format(
-                   "DEBIAN_FRONTEND=noninteractive apt-get install -y {}",
-                   package))
+                   "DEBIAN_FRONTEND=noninteractive apt install -y {}", package))
             != 0;
     }
 
     [[nodiscard]] bool reinstall(std::string_view package) const override
     {
         return Singleton<IRunner>::get()->executeCommand(fmt::format(
-                   "DEBIAN_FRONTEND=noninteractive apt-get install --reinstall "
+                   "DEBIAN_FRONTEND=noninteractive apt install --reinstall "
                    "-y {}",
                    package))
             != 0;
@@ -218,15 +217,14 @@ public:
     [[nodiscard]] bool remove(std::string_view package) const override
     {
         return Singleton<IRunner>::get()->executeCommand(fmt::format(
-                   "DEBIAN_FRONTEND=noninteractive apt-get remove -y {}",
-                   package))
+                   "DEBIAN_FRONTEND=noninteractive apt remove -y {}", package))
             != 0;
     }
 
     [[nodiscard]] bool update(std::string_view package) const override
     {
         return Singleton<IRunner>::get()->executeCommand(
-                   fmt::format("DEBIAN_FRONTEND=noninteractive apt-get install "
+                   fmt::format("DEBIAN_FRONTEND=noninteractive apt install "
                                "--only-upgrade -y {}",
                        package))
             != 0;
@@ -235,21 +233,21 @@ public:
     [[nodiscard]] bool update() const override
     {
         return Singleton<IRunner>::get()->executeCommand(
-                   "DEBIAN_FRONTEND=noninteractive apt-get update && "
-                   "DEBIAN_FRONTEND=noninteractive apt-get upgrade -y")
+                   "DEBIAN_FRONTEND=noninteractive apt update && "
+                   "DEBIAN_FRONTEND=noninteractive apt upgrade -y")
             != 0;
     }
 
     void check() const override
     {
-        Singleton<IRunner>::get()->executeCommand("apt-get check");
+        Singleton<IRunner>::get()->executeCommand("apt check");
     }
 
     void pinOSVersion() const override { static_cast<void>(m_osinfo); }
 
     void clean() const override
     {
-        Singleton<IRunner>::get()->executeCommand("apt-get clean");
+        Singleton<IRunner>::get()->executeCommand("apt clean");
     }
 
     [[nodiscard]] std::vector<std::string> repolist() const override

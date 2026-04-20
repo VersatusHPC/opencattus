@@ -180,7 +180,7 @@ auto buildInboxOFEDInstallCommand(const opencattus::models::OS& osinfo)
         case opencattus::models::OS::PackageType::RPM:
             return "Infiniband Support";
         case opencattus::models::OS::PackageType::DEB:
-            return "DEBIAN_FRONTEND=noninteractive apt-get install -y "
+            return "DEBIAN_FRONTEND=noninteractive apt install -y "
                    "rdma-core ibverbs-providers infiniband-diags perftest";
     }
 
@@ -693,7 +693,7 @@ TEST_CASE("buildInboxOFEDInstallCommand installs Ubuntu RDMA packages")
     CHECK(buildInboxOFEDInstallCommand(
               opencattus::models::OS(opencattus::models::OS::Distro::Ubuntu,
                   opencattus::models::OS::Platform::ubuntu24, 4))
-        == "DEBIAN_FRONTEND=noninteractive apt-get install -y "
+        == "DEBIAN_FRONTEND=noninteractive apt install -y "
            "rdma-core ibverbs-providers infiniband-diags perftest");
 }
 

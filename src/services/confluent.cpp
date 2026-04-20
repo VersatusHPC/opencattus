@@ -139,8 +139,8 @@ std::string buildConfluentBootstrapCommands(const models::OS& os)
     if (os.getPackageType() == models::OS::PackageType::DEB) {
         return R"(
 # Add the Confluent repository
-DEBIAN_FRONTEND=noninteractive apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates wget
+DEBIAN_FRONTEND=noninteractive apt update
+DEBIAN_FRONTEND=noninteractive apt install -y ca-certificates wget
 wget -q -O /etc/apt/trusted.gpg.d/confluent.gpg https://hpc.lenovo.com/apt/latest/lenovo-hpc.key
 cat > /etc/apt/sources.list.d/confluent.sources <<'EOF'
 Types: deb
@@ -151,8 +151,8 @@ Signed-By: /etc/apt/trusted.gpg.d/confluent.gpg
 EOF
 
 # Install required packages
-DEBIAN_FRONTEND=noninteractive apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y lenovo-confluent tftpd-hpa dnsmasq
+DEBIAN_FRONTEND=noninteractive apt update
+DEBIAN_FRONTEND=noninteractive apt install -y lenovo-confluent tftpd-hpa dnsmasq
 systemctl enable confluent --now
 systemctl enable apache2 --now
 systemctl enable tftpd-hpa --now
@@ -464,11 +464,11 @@ std::string buildNodeImageInstallCommand(const models::OS& os)
             return "dnf install -y --nogpg "
                    "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs";
         case models::OS::Platform::ubuntu24:
-            return "DEBIAN_FRONTEND=noninteractive apt-get update && "
-                   "DEBIAN_FRONTEND=noninteractive apt-get install -y "
+            return "DEBIAN_FRONTEND=noninteractive apt update && "
+                   "DEBIAN_FRONTEND=noninteractive apt install -y "
                    "ca-certificates && "
-                   "DEBIAN_FRONTEND=noninteractive apt-get update && "
-                   "DEBIAN_FRONTEND=noninteractive apt-get install -y "
+                   "DEBIAN_FRONTEND=noninteractive apt update && "
+                   "DEBIAN_FRONTEND=noninteractive apt install -y "
                    "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-ohpc";
         default:
             std::unreachable();
@@ -515,8 +515,8 @@ std::string buildNodeImageChronyCommands(
         return fmt::format(R"(
 # Install and configure chrony
 imgutil exec $scratchdir <<EOF
-DEBIAN_FRONTEND=noninteractive apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y chrony
+DEBIAN_FRONTEND=noninteractive apt update
+DEBIAN_FRONTEND=noninteractive apt install -y chrony
 sed -e '/^pool /d' -e '/^server .* iburst$/d' -i /etc/chrony/chrony.conf
 echo "server {hnIp} iburst" >> /etc/chrony/chrony.conf
 grep -HE '^server' /etc/chrony/chrony.conf
@@ -544,8 +544,8 @@ std::string buildNodeImageAutofsCommands(
 {
     const auto installCommand
         = os.getPackageType() == models::OS::PackageType::DEB
-        ? "DEBIAN_FRONTEND=noninteractive apt-get update && "
-          "DEBIAN_FRONTEND=noninteractive apt-get install -y autofs nfs-common"
+        ? "DEBIAN_FRONTEND=noninteractive apt update && "
+          "DEBIAN_FRONTEND=noninteractive apt install -y autofs nfs-common"
         : "dnf install -y autofs";
 
     return fmt::format(R"(
@@ -732,7 +732,7 @@ std::string buildNodeImageOFEDCommands(const models::OS& os,
             if (os.getPackageType() == models::OS::PackageType::DEB) {
                 return R"(
 imgutil exec $scratchdir <<EOF
-DEBIAN_FRONTEND=noninteractive apt-get install -y rdma-core ibverbs-providers perftest
+DEBIAN_FRONTEND=noninteractive apt install -y rdma-core ibverbs-providers perftest
 EOF
 )";
             }
@@ -1258,7 +1258,7 @@ TEST_CASE("buildConfluentBootstrapCommands uses Lenovo APT on Ubuntu")
 
     CHECK(script.contains("https://hpc.lenovo.com/apt/latest/noble"));
     CHECK(script.contains(
-        "DEBIAN_FRONTEND=noninteractive apt-get install -y lenovo-confluent "
+        "DEBIAN_FRONTEND=noninteractive apt install -y lenovo-confluent "
         "tftpd-hpa dnsmasq"));
     CHECK(script.contains("systemctl enable apache2 --now"));
     CHECK(script.contains("systemctl enable dnsmasq"));
@@ -1443,10 +1443,10 @@ TEST_CASE("buildNodeImageInstallCommand keeps EL8, EL9, and EL10 explicit")
 
     CHECK(buildNodeImageInstallCommand(
               OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
-        == "DEBIAN_FRONTEND=noninteractive apt-get update && "
-           "DEBIAN_FRONTEND=noninteractive apt-get install -y "
-           "ca-certificates && DEBIAN_FRONTEND=noninteractive apt-get update "
-           "&& DEBIAN_FRONTEND=noninteractive apt-get install -y "
+        == "DEBIAN_FRONTEND=noninteractive apt update && "
+           "DEBIAN_FRONTEND=noninteractive apt install -y "
+           "ca-certificates && DEBIAN_FRONTEND=noninteractive apt update "
+           "&& DEBIAN_FRONTEND=noninteractive apt install -y "
            "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-ohpc");
 }
 
@@ -1457,8 +1457,8 @@ TEST_CASE("buildNodeImageChronyCommands refreshes APT metadata on Ubuntu")
     const auto script = buildNodeImageChronyCommands(
         OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4), "172.31.38.254");
 
-    CHECK(script.contains("DEBIAN_FRONTEND=noninteractive apt-get update\n"
-                          "DEBIAN_FRONTEND=noninteractive apt-get install -y "
+    CHECK(script.contains("DEBIAN_FRONTEND=noninteractive apt update\n"
+                          "DEBIAN_FRONTEND=noninteractive apt install -y "
                           "chrony"));
 }
 
@@ -1469,8 +1469,8 @@ TEST_CASE("buildNodeImageAutofsCommands refreshes APT metadata on Ubuntu")
     const auto script = buildNodeImageAutofsCommands(
         OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4), "172.31.38.254");
 
-    CHECK(script.contains("DEBIAN_FRONTEND=noninteractive apt-get update && "
-                          "DEBIAN_FRONTEND=noninteractive apt-get install -y "
+    CHECK(script.contains("DEBIAN_FRONTEND=noninteractive apt update && "
+                          "DEBIAN_FRONTEND=noninteractive apt install -y "
                           "autofs nfs-common"));
 }
 
@@ -1524,7 +1524,7 @@ TEST_CASE("buildNodeImageOFEDCommands uses Ubuntu inbox RDMA packages")
         OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4), true,
         std::optional<OFED>(OFED(OFED::Kind::Inbox, "")), std::nullopt);
 
-    CHECK(script.contains("apt-get install -y rdma-core ibverbs-providers "
+    CHECK(script.contains("apt install -y rdma-core ibverbs-providers "
                           "perftest"));
     CHECK_FALSE(script.contains("dnf group install"));
 }

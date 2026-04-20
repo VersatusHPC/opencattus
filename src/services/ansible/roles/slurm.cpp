@@ -85,7 +85,7 @@ std::string buildSlurmServerInstallCommand(const opencattus::models::OS& osinfo)
         case opencattus::models::OS::PackageType::RPM:
             return "dnf -y install ohpc-slurm-server mariadb-server mariadb";
         case opencattus::models::OS::PackageType::DEB:
-            return "DEBIAN_FRONTEND=noninteractive apt-get install -y "
+            return "DEBIAN_FRONTEND=noninteractive apt install -y "
                    "ohpc-slurm-server mariadb-server mariadb-client";
     }
 

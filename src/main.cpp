@@ -67,8 +67,7 @@ int runTestCommand(const std::string& testCommand,
         repoManager->initializeDefaultRepositories();
         if (cluster->getHeadnode().getOS().getPackageType()
             == opencattus::models::OS::PackageType::DEB) {
-            runner->checkCommand(
-                "DEBIAN_FRONTEND=noninteractive apt-get update");
+            runner->checkCommand("DEBIAN_FRONTEND=noninteractive apt update");
         } else {
             runner->checkCommand(
                 R"(bash -c "dnf config-manager --set-enabled '*' && dnf makecache -y" )");

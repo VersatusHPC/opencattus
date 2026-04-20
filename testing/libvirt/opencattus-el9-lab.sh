@@ -1353,8 +1353,8 @@ prepare_headnode() {
         wait_for_ubuntu_apt
         ssh_remote "sudo systemctl stop packagekit packagekit-offline-update >/dev/null 2>&1 || true;
             for attempt in 1 2 3; do
-                if sudo DEBIAN_FRONTEND=noninteractive apt-get update &&
-                    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+                if sudo DEBIAN_FRONTEND=noninteractive apt update &&
+                    sudo DEBIAN_FRONTEND=noninteractive apt install -y \
                         build-essential \
                         ca-certificates \
                         ccache \
@@ -1706,8 +1706,8 @@ build_binary_in_guest() {
     if is_distro_major_ubuntu24; then
         wait_for_ubuntu_apt
         compiler_setup_cmd=$(cat <<'EOF'
-sudo DEBIAN_FRONTEND=noninteractive apt-get update &&
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+sudo DEBIAN_FRONTEND=noninteractive apt update &&
+sudo DEBIAN_FRONTEND=noninteractive apt install -y \
     build-essential \
     ccache \
     cmake \

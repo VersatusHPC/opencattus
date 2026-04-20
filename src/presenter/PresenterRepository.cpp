@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <opencattus/functions.h>
 #include <opencattus/presenter/PresenterRepository.h>
+#include <opencattus/utils/ranges.h>
 #include <ranges>
 
 namespace {
@@ -77,7 +78,7 @@ PresenterRepository::PresenterRepository(
         | std::views::transform([](const auto& entry) {
               return std::make_tuple(entry.id, entry.name, entry.enabled);
           })
-        | std::ranges::to<UISelectionAdapterTy>();
+        | opencattus::utils::ranges::to<UISelectionAdapterTy>();
 
     const auto& [ret, toEnable] = m_view->checkboxSelectionMenu(Messages::title,
         Messages::General::question, Messages::General::help,

@@ -47,7 +47,7 @@ warn_check() {
     done
 }
 
-if command -v apt-get >/dev/null 2>&1; then
+if command -v apt >/dev/null 2>&1; then
     common_services=(
         chrony
         mariadb
@@ -78,7 +78,7 @@ case "${provisioner}" in
         )
         ;;
     confluent)
-        if command -v apt-get >/dev/null 2>&1; then
+        if command -v apt >/dev/null 2>&1; then
             provisioner_services=(
                 confluent
                 dnsmasq

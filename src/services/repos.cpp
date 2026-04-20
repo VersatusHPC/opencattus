@@ -34,6 +34,7 @@
 #include <opencattus/services/osservice.h>
 #include <opencattus/services/repos.h>
 #include <opencattus/services/runner.h>
+#include <opencattus/utils/ranges.h>
 #include <opencattus/utils/singleton.h>
 #include <opencattus/utils/string.h>
 
@@ -684,7 +685,7 @@ public:
     {
         return m_files
             | std::views::transform([](const auto& pair) { return pair.first; })
-            | std::ranges::to<std::vector>();
+            | opencattus::utils::ranges::to<std::vector>();
     }
 
     // Find a RepoConfig by repository id, if it exists
@@ -1769,13 +1770,13 @@ public:
         try {
             auto path = fmt::format("{}/{}", basedir, repoFileName);
             auto repos = RPMRepositoryFile(path).repos()
-                // We copy to cons unique to express that these values cannot
-                // be changed through this API
+                // We copy to const unique to express that these values cannot
+                // be changed through this API.
                 | std::views::transform([](auto&& pair) {
                       return std::make_unique<const RPMRepository>(
                           *pair.second);
                   })
-                | std::ranges::to<
+                | opencattus::utils::ranges::to<
                     std::vector<std::unique_ptr<const IRepository>>>();
             return repos;
         } catch (const std::out_of_range& e) {
@@ -1848,7 +1849,9 @@ public:
 
         return output | std::views::transform([](auto&& repo) {
             return std::make_unique<const RPMRepository>(repo);
-        }) | std::ranges::to<std::vector<std::unique_ptr<const IRepository>>>();
+        })
+            | opencattus::utils::ranges::to<
+                std::vector<std::unique_ptr<const IRepository>>>();
     }
 };
 
@@ -2748,13 +2751,13 @@ void initializeDebianHeadnodeRepositories(const OS& osinfo)
     // explicit so apt can consume the repo while the repository signing path is
     // finished.
     runner::shell::fmt(R"(
-DEBIAN_FRONTEND=noninteractive apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
+DEBIAN_FRONTEND=noninteractive apt update
+DEBIAN_FRONTEND=noninteractive apt install -y ca-certificates
 install -d /etc/apt/sources.list.d
 cat > /etc/apt/sources.list.d/opencattus-openhpc.list <<'EOF'
 deb [trusted=yes] {openhpcUrl} ./
 EOF
-DEBIAN_FRONTEND=noninteractive apt-get update
+DEBIAN_FRONTEND=noninteractive apt update
 )",
         fmt::arg("openhpcUrl", ubuntuOpenHpcRepositoryUrl(osinfo)));
 }

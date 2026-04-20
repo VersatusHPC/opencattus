@@ -554,8 +554,8 @@ void validateProvisionerSupport(
 {
     if (provisioner == Cluster::Provisioner::xCAT
         && headnodeOS.getPackageType() == OS::PackageType::DEB) {
-        throw std::runtime_error(
-            "xCAT is not supported on DEB head nodes; use confluent instead");
+        throw std::runtime_error("xCAT on DEB head nodes is not implemented "
+                                 "yet; use confluent instead");
     }
 
     switch (nodeOS.getPlatform()) {

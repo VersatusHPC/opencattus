@@ -206,7 +206,7 @@ namespace {
                 return packageList;
             case models::OS::PackageType::DEB:
                 return fmt::format(
-                    "DEBIAN_FRONTEND=noninteractive apt-get install -y {}",
+                    "DEBIAN_FRONTEND=noninteractive apt install -y {}",
                     packageList);
         }
 
@@ -338,7 +338,7 @@ TEST_CASE("resolvePackages preserves explicit package overrides")
     CHECK(packages == explicitPackages);
 }
 
-TEST_CASE("buildPackageInstallCommand uses apt-get on Ubuntu")
+TEST_CASE("buildPackageInstallCommand uses apt on Ubuntu")
 {
     const auto command
         = buildPackageInstallCommand(models::OS(models::OS::Distro::Ubuntu,
@@ -346,7 +346,7 @@ TEST_CASE("buildPackageInstallCommand uses apt-get on Ubuntu")
             { "gnu15-compilers-ohpc", "openmpi5-gnu15-ohpc" });
 
     CHECK(command
-        == "DEBIAN_FRONTEND=noninteractive apt-get install -y "
+        == "DEBIAN_FRONTEND=noninteractive apt install -y "
            "gnu15-compilers-ohpc openmpi5-gnu15-ohpc");
 }
 

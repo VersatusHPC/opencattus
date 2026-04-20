@@ -58,7 +58,7 @@ ScriptBuilder& ScriptBuilder::addPackage(const std::string_view pkg)
             return addCommand("dnf install -y {}", pkg);
         case OS::PackageType::DEB:
             return addCommand(
-                "DEBIAN_FRONTEND=noninteractive apt-get install -y {}", pkg);
+                "DEBIAN_FRONTEND=noninteractive apt install -y {}", pkg);
     }
 
     std::unreachable();
@@ -71,7 +71,7 @@ ScriptBuilder& ScriptBuilder::addPackages(const std::set<std::string>& pkgs)
             return addCommand("dnf install -y {}", fmt::join(pkgs, " "));
         case OS::PackageType::DEB:
             return addCommand(
-                "DEBIAN_FRONTEND=noninteractive apt-get install -y {}",
+                "DEBIAN_FRONTEND=noninteractive apt install -y {}",
                 fmt::join(pkgs, " "));
     }
 
@@ -85,7 +85,7 @@ ScriptBuilder& ScriptBuilder::removePackage(const std::string_view pkg)
             return addCommand("dnf remove -y {}", pkg);
         case OS::PackageType::DEB:
             return addCommand(
-                "DEBIAN_FRONTEND=noninteractive apt-get remove -y {}", pkg);
+                "DEBIAN_FRONTEND=noninteractive apt remove -y {}", pkg);
     }
 
     std::unreachable();
