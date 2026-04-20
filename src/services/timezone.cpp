@@ -4,6 +4,9 @@
  */
 
 #include <fmt/format.h>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <opencattus/functions.h>
 #include <opencattus/services/log.h>
@@ -17,8 +20,8 @@
 using namespace opencattus;
 
 namespace {
-constexpr std::string_view zone1970TabCommand
-    = R"(bash -c "test -r /usr/share/zoneinfo/zone1970.tab && cat /usr/share/zoneinfo/zone1970.tab || true")";
+constexpr std::string_view zone1970TabEnv = "OPENCATTUS_ZONE1970_TAB";
+constexpr std::string_view zone1970TabPath = "/usr/share/zoneinfo/zone1970.tab";
 constexpr std::string_view timedatectlTimezoneCommand
     = "timedatectl list-timezones --no-pager";
 
@@ -64,6 +67,40 @@ void insertTimezone(
 
     timezones.insert({ tz.substr(0, slash), tz.substr(slash + 1) });
 }
+
+std::filesystem::path systemZone1970TabPath()
+{
+    if (const auto* overridePath = std::getenv(zone1970TabEnv.data());
+        overridePath != nullptr && std::string_view(overridePath).size() > 0) {
+        return overridePath;
+    }
+
+    return zone1970TabPath;
+}
+
+std::vector<std::string> readZone1970Tab()
+{
+    const auto path = systemZone1970TabPath();
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        LOG_DEBUG("Unable to read {}, falling back to timedatectl",
+            path.string());
+        return {};
+    }
+
+    std::vector<std::string> lines;
+    for (std::string line; std::getline(file, line);) {
+        lines.emplace_back(std::move(line));
+    }
+
+    if (file.bad()) {
+        LOG_WARN("Error while reading {}, falling back to timedatectl",
+            path.string());
+        return {};
+    }
+
+    return parseZone1970Tab(lines);
+}
 }
 
 Timezone::Timezone()
@@ -99,8 +136,7 @@ std::multimap<std::string, std::string> Timezone::fetchAvailableTimezones()
 
     LOG_DEBUG("Fetching available system timezones")
     auto runner = opencattus::Singleton<functions::IRunner>::get();
-    auto output = parseZone1970Tab(
-        runner->checkOutput(std::string(zone1970TabCommand)));
+    auto output = readZone1970Tab();
     if (output.empty()) {
         output = runner->checkOutput(std::string(timedatectlTimezoneCommand));
     }

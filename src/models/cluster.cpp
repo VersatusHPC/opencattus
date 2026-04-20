@@ -824,7 +824,8 @@ void Cluster::fillData(const AnswerFile& answerfil)
 
     LOG_INFO("Distro: {}",
         opencattus::utils::enums::toString(answerfil.system.distro));
-    LOG_INFO("Kernel: {}", answerfil.system.kernel.value_or(""));
+    LOG_INFO("Compute kernel: {}",
+        answerfil.system.kernel.value_or("auto-detected by provisioner"));
     LOG_INFO("Version: {}", answerfil.system.version);
 
     // FIXME: This information should be deduced from the ISO file

@@ -32,7 +32,27 @@
 
 namespace opencattus::models {
 
-OS::OS()
+namespace {
+
+struct HostOSProbe {
+    std::string architecture;
+    std::string family;
+    std::string kernel;
+    std::optional<std::string> platform;
+    std::string distro;
+    std::string version;
+};
+
+std::string valueFromOsReleaseLine(const std::string& line)
+{
+    std::string value;
+    const std::size_t pos = line.find_first_of('=');
+    value = line.substr(pos + 1);
+    value.erase(std::remove(value.begin(), value.end(), '"'), value.end());
+    return value;
+}
+
+HostOSProbe probeHostOS()
 {
     LOG_INFO("Initializing OS (ctr 1)");
     struct utsname system { };
@@ -45,14 +65,16 @@ OS::OS()
     const bool isTest = !opts->testCommand.empty();
     uname(&system);
 
-    setArch(system.machine);
-    setFamily(system.sysname);
-    setKernel(system.release);
+    HostOSProbe probe {
+        .architecture = system.machine,
+        .family = system.sysname,
+        .kernel = system.release,
+    };
 
 #ifdef __APPLE__
     if (true) {
 #else
-    if (getFamily() == OS::Family::Linux) {
+    if (probe.family == "Linux") {
 #endif
         std::string filename = CHROOT "/etc/os-release";
         LOG_INFO("Opening {}", filename);
@@ -71,28 +93,33 @@ OS::OS()
         while (std::getline(file, line)) {
             if (line.starts_with("PLATFORM_ID=")) {
                 if (isTest) {
-                    setPlatform("el9");
+                    probe.platform = "el9";
                 } else {
-                    LOG_DEBUG("Found platform (PLATFORM_ID=)");
-                    auto value = getValueFromKey(line);
+                    auto value = valueFromOsReleaseLine(line);
+                    LOG_DEBUG("Found platform (PLATFORM_ID={})", value);
                     if (value.starts_with("platform:")) {
                         // Skip the 'platform:' prefix
                         constexpr auto platform = std::string_view("platform:");
-                        setPlatform(value.substr(platform.size()));
+                        probe.platform = value.substr(platform.size());
                     } else {
-                        setPlatform(value);
+                        probe.platform = value;
                     }
                 }
             }
 
             if (line.starts_with("ID=")) {
-                LOG_DEBUG("Found distro (ID=)");
-                setDistro(!isTest ? getValueFromKey(line) : "rocky");
+                probe.distro = !isTest ? valueFromOsReleaseLine(line) : "rocky";
+                LOG_DEBUG("Found distro (ID={})", probe.distro);
             }
 
-            if (line.starts_with("VERSION=")) {
-                LOG_DEBUG("Found version (VERSION=)");
-                setVersion(!isTest ? getValueFromKey(line) : "9.5");
+            if (line.starts_with("VERSION_ID=")) {
+                probe.version
+                    = !isTest ? valueFromOsReleaseLine(line) : "9.5";
+                LOG_DEBUG("Found version (VERSION_ID={})", probe.version);
+            } else if (probe.version.empty() && line.starts_with("VERSION=")) {
+                probe.version
+                    = !isTest ? valueFromOsReleaseLine(line) : "9.5";
+                LOG_DEBUG("Found version (VERSION={})", probe.version);
             }
         }
 
@@ -101,6 +128,25 @@ OS::OS()
                 fmt::format("Error while reading file: {}", filename));
         }
     }
+
+    return probe;
+}
+
+}
+
+OS::OS()
+{
+    static const auto host = probeHostOS();
+
+    setArch(host.architecture);
+    setFamily(host.family);
+    setKernel(host.kernel);
+
+    if (host.platform) {
+        setPlatform(*host.platform);
+    }
+    setDistro(host.distro);
+    setVersion(host.version);
 }
 
 OS::OS(const Distro& distro, const Platform& platform,

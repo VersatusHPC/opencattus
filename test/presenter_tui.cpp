@@ -6,6 +6,7 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <deque>
 #include <filesystem>
 #include <fmt/core.h>
@@ -506,13 +507,33 @@ auto hasUsableInfinibandInterface() -> bool
 
 constexpr std::string_view zone1970TabCommand
     = R"(bash -c "test -r /usr/share/zoneinfo/zone1970.tab && cat /usr/share/zoneinfo/zone1970.tab || true")";
+constexpr std::string_view zone1970TabEnv = "OPENCATTUS_ZONE1970_TAB";
 constexpr std::string_view localeMetadataCommand = "locale -av";
 constexpr std::string_view advancedLocaleChoice = "Advanced / legacy locales";
+
+void configureZone1970Fixture(const ScriptedRunner::Outputs& outputs)
+{
+    const auto path = std::filesystem::temp_directory_path()
+        / "opencattus-test-zone1970.tab";
+
+    std::ofstream file(path, std::ios::trunc);
+    const auto output = outputs.find(std::string(zone1970TabCommand));
+    if (output != outputs.end()) {
+        for (const auto& line : output->second) {
+            file << line << '\n';
+        }
+    }
+    file.close();
+
+    setenv(zone1970TabEnv.data(), path.c_str(), 1);
+}
 
 void initializePresenterTestEnvironment(
     ScriptedRunner::Outputs outputs = ScriptedRunner::Outputs {},
     bool dryRun = false)
 {
+    configureZone1970Fixture(outputs);
+
     opencattus::Singleton<const Options>::init(
         std::make_unique<const Options>(Options {
             .dryRun = dryRun,

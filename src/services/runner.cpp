@@ -247,9 +247,20 @@ int Runner::run(const ScriptBuilder& script)
     std::string&& content = script.toString();
     const auto hash = opencattus::services::files::checksum(content);
     const std::filesystem::path path = fmt::format("/tmp/{}.sh", hash);
+    const auto commandCount = script.commands().empty()
+        ? std::size_t { 0 }
+        : script.commands().size() - 1;
+
+    LOG_INFO("Running generated script {} ({} commands)", path.string(),
+        commandCount);
+    for (const auto& command : script.commands()) {
+        if (command.starts_with("# ") && command != "#!/bin/bash -xeu") {
+            LOG_INFO("Script step: {}", command.substr(2));
+        }
+    }
+
     functions::installFile(path, std::move(content));
-    executeCommand(fmt::format("chmod +x {}", path));
-    const auto exitCode = executeCommand(path);
+    const auto exitCode = executeCommand(fmt::format("bash {}", path));
     if (exitCode != 0) {
         opencattus::functions::abort(
             "Script {} failed with exit code {}", path, exitCode);
@@ -304,7 +315,13 @@ void DryRunner::checkCommand(const std::string& cmd)
     LOG_WARN("Dry Run: Would execute command: {}", cmd);
 }
 
-int DryRunner::run(const ScriptBuilder& script) { return 0; }
+int DryRunner::run(const ScriptBuilder& script)
+{
+    LOG_WARN("Dry Run: Would run generated script with {} commands",
+        script.commands().empty() ? std::size_t { 0 }
+                                  : script.commands().size() - 1);
+    return 0;
+}
 
 std::vector<std::string> DryRunner::checkOutput(const std::string& cmd)
 {

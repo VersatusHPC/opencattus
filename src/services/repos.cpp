@@ -2729,6 +2729,12 @@ std::string ubuntuOpenHpcRepositoryUrl(const OS& osinfo)
     }
 }
 
+std::string ubuntuOpenHpcRepositoryContents(const OS& osinfo)
+{
+    return fmt::format(
+        "deb [trusted=yes] {} ./\n", ubuntuOpenHpcRepositoryUrl(osinfo));
+}
+
 TEST_CASE("ubuntuOpenHpcRepositoryUrl uses the VersatusHPC Noble fork")
 {
     const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24,
@@ -2737,6 +2743,24 @@ TEST_CASE("ubuntuOpenHpcRepositoryUrl uses the VersatusHPC Noble fork")
     CHECK(ubuntuOpenHpcRepositoryUrl(osinfo)
         == "https://repos.versatushpc.com.br/openhpc/versatushpc-4/"
            "Ubuntu_24.04/");
+}
+
+TEST_CASE("ubuntuOpenHpcRepositoryContents generates an apt source entry")
+{
+    const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24,
+        4, OS::Arch::x86_64);
+
+    CHECK(ubuntuOpenHpcRepositoryContents(osinfo)
+        == "deb [trusted=yes] https://repos.versatushpc.com.br/openhpc/"
+           "versatushpc-4/Ubuntu_24.04/ ./\n");
+}
+
+void writeUbuntuOpenHpcRepositoryFile(
+    const OS& osinfo, const std::filesystem::path& path)
+{
+    LOG_INFO("Writing Ubuntu OpenHPC repository file {}", path.string());
+    opencattus::services::files::write(
+        path, ubuntuOpenHpcRepositoryContents(osinfo));
 }
 
 void initializeDebianHeadnodeRepositories(const OS& osinfo)
@@ -2750,16 +2774,12 @@ void initializeDebianHeadnodeRepositories(const OS& osinfo)
     // the public key is not published next to the repository yet. Keep this
     // explicit so apt can consume the repo while the repository signing path is
     // finished.
-    runner::shell::fmt(R"(
-DEBIAN_FRONTEND=noninteractive apt update
-DEBIAN_FRONTEND=noninteractive apt install -y ca-certificates
-install -d /etc/apt/sources.list.d
-cat > /etc/apt/sources.list.d/opencattus-openhpc.list <<'EOF'
-deb [trusted=yes] {openhpcUrl} ./
-EOF
-DEBIAN_FRONTEND=noninteractive apt update
-)",
-        fmt::arg("openhpcUrl", ubuntuOpenHpcRepositoryUrl(osinfo)));
+    runner::shell::cmd("DEBIAN_FRONTEND=noninteractive apt update");
+    runner::shell::cmd(
+        "DEBIAN_FRONTEND=noninteractive apt install -y ca-certificates");
+    writeUbuntuOpenHpcRepositoryFile(
+        osinfo, "/etc/apt/sources.list.d/opencattus-openhpc.list");
+    runner::shell::cmd("DEBIAN_FRONTEND=noninteractive apt update");
 }
 
 void RepoManager::initializeDefaultRepositories()
