@@ -16,7 +16,7 @@ STAGING_DIR="${STAGING_DIR:-${TMPDIR:-/tmp}/opencattus-rpm-repo}"
 REMOTE_USER="${REMOTE_USER:-reposync}"
 REMOTE_HOST="${REMOTE_HOST:-172.21.1.40}"
 REMOTE_PATH="${REMOTE_PATH:-/mnt/pool1/repos/opencattus}"
-SSH_KEY="${SSH_KEY:-${HOME}/.ssh/id_ed25519_openhpc}"
+SSH_KEY="${SSH_KEY:-}"
 DRY_RUN=""
 LFTP_DRY_RUN=""
 SKIP_SYNC=""
@@ -64,6 +64,30 @@ require_command() {
     }
 }
 
+resolve_ssh_key() {
+    if [[ -n "${SSH_KEY}" ]]; then
+        [[ -f "${SSH_KEY}" ]] && return 0
+        echo "SSH key not found: ${SSH_KEY}" >&2
+        echo "Set SSH_KEY=/path/to/reposync_key before publishing." >&2
+        exit 1
+    fi
+
+    local candidate
+    for candidate in \
+        "${HOME}/.ssh/id_ed25519_openhpc" \
+        "${HOME}/.ssh/id_ed25519" \
+        "${HOME}/.ssh/id_rsa"; do
+        if [[ -f "${candidate}" ]]; then
+            SSH_KEY="${candidate}"
+            return 0
+        fi
+    done
+
+    echo "No SSH key found under ${HOME}/.ssh." >&2
+    echo "Set SSH_KEY=/path/to/reposync_key before publishing." >&2
+    exit 1
+}
+
 stage_el_rpms() {
     local el_number="$1"
     local repo_dir="el${el_number}"
@@ -98,11 +122,7 @@ stage_el_rpms() {
 require_command createrepo_c
 if [[ -z "${SKIP_SYNC}" ]]; then
     require_command lftp
-    if [[ ! -f "${SSH_KEY}" ]]; then
-        echo "SSH key not found: ${SSH_KEY}" >&2
-        echo "Set SSH_KEY=/path/to/reposync_key before publishing." >&2
-        exit 1
-    fi
+    resolve_ssh_key
 fi
 
 if [[ -n "${DRY_RUN}" ]]; then

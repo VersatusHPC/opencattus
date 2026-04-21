@@ -268,7 +268,6 @@ jobs:
             -e REMOTE_HOST="${REMOTE_HOST}" \
             -e REMOTE_USER="${REMOTE_USER}" \
             -e REMOTE_PATH="${REMOTE_PATH}" \
-            -e SSH_KEY="/root/.ssh/id_ed25519_openhpc" \
             docker.io/library/rockylinux:9 \
             bash -lc '
               set -euo pipefail
