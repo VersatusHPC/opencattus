@@ -140,15 +140,27 @@ if (CMAKE_SKIP_INSTALL_RULES)
     return()
 endif ()
 
-include(cmake/PackageProject.cmake)
+install(
+        TARGETS ${opencattus_BINARY_NAME}
+        RUNTIME DESTINATION usr/bin
+        COMPONENT runtime)
 
-# Add other targets that you want installed here, by default we just package the one executable
-# we know we want to ship
-opencattus_package_project(
-        TARGETS
-        ${opencattus_BINARY_NAME}
-        opencattus_options
-        opencattus_warnings
-        # FIXME: this does not work! CK
-        # PRIVATE_DEPENDENCIES_CONFIGURED project_options project_warnings
-)
+set(opencattus_REPOSITORY_CONFIGS
+        repos/repos.conf
+        repos/alma.conf
+        repos/rhel.conf
+        repos/oracle.conf
+        repos/rocky-upstream.conf
+        repos/rocky-vault.conf)
+
+install(
+        FILES ${opencattus_REPOSITORY_CONFIGS}
+        DESTINATION opt/opencattus/conf/repos
+        COMPONENT runtime)
+
+configure_file(
+        cmake/CPackProjectConfig.cmake.in
+        "${CMAKE_BINARY_DIR}/CPackProjectConfig.cmake"
+        @ONLY)
+
+include(cmake/CPackProperties.cmake)

@@ -1,0 +1,13 @@
+set(OPENCATTUS_CONFIGURED_BUILD_TYPE "@CMAKE_BUILD_TYPE@")
+
+if(DEFINED CPACK_BUILD_CONFIG AND NOT CPACK_BUILD_CONFIG STREQUAL "")
+    set(OPENCATTUS_EFFECTIVE_BUILD_TYPE "${CPACK_BUILD_CONFIG}")
+else()
+    set(OPENCATTUS_EFFECTIVE_BUILD_TYPE "${OPENCATTUS_CONFIGURED_BUILD_TYPE}")
+endif()
+
+if(NOT OPENCATTUS_EFFECTIVE_BUILD_TYPE STREQUAL "Release")
+    message(FATAL_ERROR
+            "OpenCATTUS packages must be built from a Release configuration. "
+            "Reconfigure with -DCMAKE_BUILD_TYPE=Release before running CPack.")
+endif()

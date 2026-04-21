@@ -1,6 +1,6 @@
-Name: opencattus-installer-debug
+Name: opencattus-installer
 Version: 1.0
-Release: 6
+Release: 1
 Summary: OpenCATTUS Installer
 License: Apache 2.0
 URL: https://versatushpc.com.br/opencattus/
@@ -26,6 +26,8 @@ BuildRequires: glibmm2.4-devel
 %endif
 
 Requires: newt
+Provides: opencattus-installer
+Obsoletes: opencattus-installer-debug <= 1.0-6
 
 # Disable debug package for now
 %global _enable_debug_package 0
@@ -43,10 +45,10 @@ echo "PREP: $PWD"
 %if 0%{?el8} || 0%{?el9}
 bash -c '
 	source /opt/rh/gcc-toolset-14/enable
-	cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -G Ninja
+	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -G Ninja
 '
 %else
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -G Ninja
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -G Ninja
 %endif
 
 %build
@@ -82,6 +84,8 @@ install -m 644 repos/rocky-vault.conf %{buildroot}/opt/opencattus/conf/repos/roc
 /opt/opencattus/conf/repos/rocky-vault.conf
 
 %changelog
+* Tue Apr 21 2026  OpenCATTUS Maintainers <vinicius@ferrao.net.br> - 1.0-1
+- Switch packaged RPMs to Release builds and non-debug package name
 * Tue Sep 16 2025  Daniel Hilst <daniel@versatushpc.com.br> - 1.0-6 - xCAT bugfixes
 - Fix xCAT installation after adding Confluent
 * Tue Sep 16 2025  Daniel Hilst <daniel@versatushpc.com.br> - 1.0-5 - Support Confluent

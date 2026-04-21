@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 build_dir=${1:-build-host}
 output_dir=${2:-out/deb}
-package_name=${OPENCATTUS_DEB_PACKAGE_NAME:-opencattus-installer-debug}
+package_name=${OPENCATTUS_DEB_PACKAGE_NAME:-opencattus-installer}
 
 version=$(awk '/^Version:/ {print $2; exit}' rpmspecs/opencattus.spec)
 release=$(awk '/^Release:/ {print $2; exit}' rpmspecs/opencattus.spec)
@@ -52,6 +52,8 @@ Priority: optional
 Architecture: ${architecture}
 Maintainer: VersatusHPC <vinicius@ferrao.net.br>
 Depends: ${depends}
+Breaks: opencattus-installer-debug
+Replaces: opencattus-installer-debug
 Installed-Size: ${installed_size}
 Homepage: https://github.com/versatushpc/opencattus
 Description: OpenCATTUS Installer

@@ -201,14 +201,79 @@ jobs:
               fi
               conan profile detect --force
               git config --global --add safe.directory "${{ github.workspace }}"
-              VERSION=$(awk "/Version:/ {print \$2}" rpmspecs/opencattus.spec)
-              rpmdev-setuptree
-              cp rpmspecs/opencattus.spec ~/rpmbuild/SPECS/
-              git archive -o ~/rpmbuild/SOURCES/opencattus-${VERSION}.tar.gz \
-                --format tgz HEAD --prefix opencattus-${VERSION}/
+              cmake -S . -B "build-rpm-${{ matrix.el }}" -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DBUILD_TESTING=OFF
+              cmake --build "build-rpm-${{ matrix.el }}" \
+                --target opencattus -j"$(nproc)"
+
+              mkdir -p "out/rpm/${{ matrix.el }}"
               export QA_RPATHS=$((0x0002|0x0010))
-              rpmbuild -ba ~/rpmbuild/SPECS/opencattus.spec
-              ls -l ~/rpmbuild/RPMS/*/opencattus-installer*.rpm
+              cpack -G RPM \
+                --config "build-rpm-${{ matrix.el }}/CPackConfig.cmake" \
+                -B "out/rpm/${{ matrix.el }}"
+              ls -l "out/rpm/${{ matrix.el }}"/opencattus-installer*.rpm
+            '
+
+      - name: Upload RPM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencattus-rpm-${{ matrix.el }}
+          path: out/rpm/${{ matrix.el }}/*.rpm
+          if-no-files-found: error
+
+  publish-rpm-repo:
+    name: Publish RPM Repository
+    needs: rpm-build
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download RPM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: opencattus-rpm-*
+          path: out/rpm-publish-input
+          merge-multiple: true
+
+      - name: Verify Podman runner state
+        run: |
+          set -euo pipefail
+          command -v podman >/dev/null || {
+            echo "Missing required command on self-hosted runner: podman" >&2
+            exit 1
+          }
+
+          podman system migrate || true
+          podman info >/dev/null
+
+      - name: Publish RPM repository
+        env:
+          REMOTE_HOST: 172.21.1.40
+          REMOTE_USER: reposync
+          REMOTE_PATH: /mnt/pool1/repos/opencattus
+        run: |
+          set -euo pipefail
+          podman run --rm \
+            -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:z" \
+            -v "${HOME}/.ssh:/root/.ssh:ro,z" \
+            -w "${GITHUB_WORKSPACE}" \
+            -e REMOTE_HOST="${REMOTE_HOST}" \
+            -e REMOTE_USER="${REMOTE_USER}" \
+            -e REMOTE_PATH="${REMOTE_PATH}" \
+            -e SSH_KEY="/root/.ssh/id_ed25519_openhpc" \
+            docker.io/library/rockylinux:9 \
+            bash -lc '
+              set -euo pipefail
+              dnf install -y createrepo_c lftp openssh-clients findutils
+              scripts/publish-rpms.sh --source-dir out/rpm-publish-input
             '
 
   deb-build:
@@ -301,8 +366,15 @@ jobs:
               export PATH="/tmp/conan-venv/bin:${PATH}"
               conan profile detect --force
               git config --global --add safe.directory "$(pwd)"
-              cmake -S . -B build-deb -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=OFF
+              cmake -S . -B build-deb -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
               cmake --build build-deb --target opencattus -j"$(nproc)"
               scripts/build-deb.sh build-deb out/deb
               ls -l out/deb/opencattus-installer*.deb
             '
+
+      - name: Upload DEB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencattus-deb-ubuntu24
+          path: out/deb/opencattus-installer*.deb
+          if-no-files-found: error
