@@ -99,6 +99,15 @@ private:
     void packimage() const;
 
     /**
+     * @brief Applies final root image changes after xCAT genimage completes.
+     *
+     * xCAT's distro-specific postinstall hooks do not always leave the final
+     * stateless root image with OpenCATTUS credentials, so this runs after
+     * genimage and before packimage.
+     */
+    void finalizeStatelessRootImage() const;
+
+    /**
      * @brief Sets the nodes for a specific image.
      *
      * @param nodes The nodes to set for the image.

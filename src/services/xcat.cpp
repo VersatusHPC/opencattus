@@ -946,6 +946,48 @@ std::string getStatelessNodeRootPassword()
     return firstPassword.value();
 }
 
+std::string buildSetRootPasswordPostinstallSnippet(std::string_view password)
+{
+    const auto quotedPassword = shellSingleQuote(password);
+
+    return fmt::format(
+        "if [ -x \"$IMG_ROOTIMGDIR/usr/sbin/chpasswd\" ]; then\n"
+        "  printf 'root:%s\\n' {} | chroot \"$IMG_ROOTIMGDIR\" "
+        "/usr/sbin/chpasswd || exit 1\n"
+        "elif [ -x \"$IMG_ROOTIMGDIR/sbin/chpasswd\" ]; then\n"
+        "  printf 'root:%s\\n' {} | chroot \"$IMG_ROOTIMGDIR\" "
+        "/sbin/chpasswd || exit 1\n"
+        "else\n"
+        "  echo \"Unable to set root password: chpasswd not found in xCAT "
+        "image\" >&2\n"
+        "  exit 1\n"
+        "fi\n",
+        quotedPassword, quotedPassword);
+}
+
+opencattus::services::ScriptBuilder buildFinalizeStatelessRootImageScript(
+    const OS& os, const std::filesystem::path& rootImage,
+    std::string_view password)
+{
+    opencattus::services::ScriptBuilder builder(os);
+    builder.addCommand("# Set xCAT system root password")
+        .addCommand("password={}", shellSingleQuote(password))
+        .addCommand("chtab key=system passwd.username=root "
+                    "passwd.password=\"$password\" passwd.cryptmethod=sha512")
+        .addCommand("# Set xCAT root image root password")
+        .addCommand("rootimg={}", shellSingleQuote(rootImage.string()))
+        .addCommand(R"(if [ -x "$rootimg/usr/sbin/chpasswd" ]; then
+  printf 'root:%s\n' "$password" | chroot "$rootimg" /usr/sbin/chpasswd
+elif [ -x "$rootimg/sbin/chpasswd" ]; then
+  printf 'root:%s\n' "$password" | chroot "$rootimg" /sbin/chpasswd
+else
+  echo "Unable to set root password: chpasswd not found in xCAT image" >&2
+  exit 1
+fi)");
+
+    return builder;
+}
+
 std::string buildIpmitoolCommand(std::string_view address,
     std::string_view username, std::string_view password,
     std::string_view subcommand)
@@ -1293,6 +1335,18 @@ void XCAT::packimage() const
         fmt::format("packimage {}", m_stateless.osimage));
 }
 
+void XCAT::finalizeStatelessRootImage() const
+{
+    LOG_ASSERT(
+        !m_stateless.chroot.empty(), "xCAT stateless root image path is empty");
+
+    const auto rootImage = m_stateless.chroot / "rootimg";
+    const auto script = buildFinalizeStatelessRootImageScript(
+        cluster()->getHeadnode().getOS(), rootImage,
+        getStatelessNodeRootPassword());
+    opencattus::utils::singleton::runner()->run(script);
+}
+
 void XCAT::nodeset(std::string_view nodes) const
 {
     opencattus::utils::singleton::runner()->checkCommand(
@@ -1352,16 +1406,13 @@ void XCAT::configureTimeService()
 
 void XCAT::configureRemoteAccess()
 {
-    const auto nodeRootPassword
-        = shellSingleQuote(getStatelessNodeRootPassword());
+    const auto nodeRootPassword = getStatelessNodeRootPassword();
 
     // EL9 diskless nodes can reach `multi-user.target` before xCAT's
     // postbootscripts populate SSH material. Seed the authorized key and host
     // keys into the image so sshd can come up on the first boot.
     m_stateless.postinstall.emplace_back(
-        fmt::format(
-            "printf 'root:%s\\n' {} | chroot $IMG_ROOTIMGDIR chpasswd\n",
-            nodeRootPassword)
+        buildSetRootPasswordPostinstallSnippet(nodeRootPassword)
         + "install -d -m 0700 $IMG_ROOTIMGDIR/root/.ssh\n"
           "if [ -f /install/postscripts/_ssh/authorized_keys ]; then\n"
           "  install -m 0600 /install/postscripts/_ssh/authorized_keys "
@@ -1755,6 +1806,7 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
     }
 
     generateOSImageName(imageType, nodeType);
+    generateOSImagePath(imageType, nodeType);
 
     const auto opts = opencattus::utils::singleton::options();
     const auto imageExists_ = imageExists(m_stateless.osimage);
@@ -1776,7 +1828,6 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
                     buildUbuntu24CopycdsCompatibilityCommand());
             }
         }
-        generateOSImagePath(imageType, nodeType);
         cleanStatelessRootImage(m_stateless.chroot);
         if (isUbuntu24ComputeImage(cluster()->getNodes().front().getOS())) {
             runner->executeCommand(
@@ -1805,6 +1856,7 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
             m_stateless.osimage);
     }
 
+    finalizeStatelessRootImage();
     packimage();
 }
 
@@ -2578,4 +2630,34 @@ TEST_CASE("shellSingleQuote escapes single quotes")
 {
     CHECK(shellSingleQuote("labroot") == "'labroot'");
     CHECK(shellSingleQuote("O'Hara") == "'O'\"'\"'Hara'");
+}
+
+TEST_CASE("buildSetRootPasswordPostinstallSnippet uses absolute chpasswd paths")
+{
+    const auto script = buildSetRootPasswordPostinstallSnippet("pa'ss");
+
+    CHECK(script.contains("$IMG_ROOTIMGDIR/usr/sbin/chpasswd"));
+    CHECK(script.contains("chroot \"$IMG_ROOTIMGDIR\" /usr/sbin/chpasswd"));
+    CHECK(script.contains("chroot \"$IMG_ROOTIMGDIR\" /sbin/chpasswd"));
+    CHECK(script.contains("'pa'\"'\"'ss'"));
+    CHECK(script.contains("|| exit 1"));
+}
+
+TEST_CASE("buildFinalizeStatelessRootImageScript fixes the final root image")
+{
+    const OS osinfo(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+    const auto script = buildFinalizeStatelessRootImageScript(osinfo,
+        "/install/netboot/ubuntu24.04/x86_64/compute/rootimg/rootimg",
+        "labroot");
+    const auto content = script.toString();
+
+    CHECK(content.contains("/install/netboot/ubuntu24.04/x86_64/compute/"
+                           "rootimg/rootimg"));
+    CHECK(content.contains("password='labroot'"));
+    CHECK(content.contains("chtab key=system passwd.username=root "
+                           "passwd.password=\"$password\" "
+                           "passwd.cryptmethod=sha512"));
+    CHECK(content.contains("chroot \"$rootimg\" /usr/sbin/chpasswd"));
+    CHECK(content.contains("chroot \"$rootimg\" /sbin/chpasswd"));
+    CHECK(content.contains("printf 'root:%s\\n' \"$password\""));
 }
