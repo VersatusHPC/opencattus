@@ -103,7 +103,7 @@ public:
         const std::string& cmd, opencattus::services::Stream /*out*/) override
     {
         m_commands.push_back(cmd);
-        return CommandProxy {};
+        return CommandProxy { };
     }
 
     void checkCommand(const std::string& cmd) override
@@ -450,9 +450,9 @@ auto multi(int status, std::initializer_list<std::string> values) -> Response
     return MultiSelectionReply { status, std::vector<std::string>(values) };
 }
 
-auto abortSelection() -> Response { return AbortReply {}; }
+auto abortSelection() -> Response { return AbortReply { }; }
 
-auto backSelection() -> Response { return BackReply {}; }
+auto backSelection() -> Response { return BackReply { }; }
 
 auto isUsableQuestionnaireInterface(const std::string& interface) -> bool
 {
@@ -529,7 +529,7 @@ void configureZone1970Fixture(const ScriptedRunner::Outputs& outputs)
 }
 
 void initializePresenterTestEnvironment(
-    ScriptedRunner::Outputs outputs = ScriptedRunner::Outputs {},
+    ScriptedRunner::Outputs outputs = ScriptedRunner::Outputs { },
     bool dryRun = false)
 {
     configureZone1970Fixture(outputs);
@@ -669,7 +669,7 @@ void addHeadnodeNetwork(Cluster& cluster, Network::Profile profile,
     std::string_view interface, std::string_view networkAddress,
     std::string_view connectionAddress, std::string_view subnetMask,
     std::string_view domainName,
-    const std::vector<std::string>& nameservers = {},
+    const std::vector<std::string>& nameservers = { },
     std::optional<std::string_view> gateway = std::nullopt)
 {
     auto network = std::make_unique<Network>(profile, Network::Type::Ethernet);
@@ -767,8 +767,8 @@ TEST_SUITE("opencattus::presenter::tui")
         "time questionnaire fails cleanly when no timezones are available")
     {
         initializePresenterTestEnvironment({
-            { std::string(zone1970TabCommand), {} },
-            { "timedatectl list-timezones --no-pager", {} },
+            { std::string(zone1970TabCommand), { } },
+            { "timedatectl list-timezones --no-pager", { } },
             { "locale -a", { "en_US.utf8" } },
         });
 
@@ -790,7 +790,7 @@ TEST_SUITE("opencattus::presenter::tui")
                     "FR\t+4852+00220\tEurope/Paris" } },
             { "timedatectl list-timezones --no-pager",
                 { "America/Sao_Paulo", "Europe/Paris" } },
-            { "locale -a", {} },
+            { "locale -a", { } },
         });
 
         auto model = std::make_unique<Cluster>();
@@ -838,7 +838,7 @@ TEST_SUITE("opencattus::presenter::tui")
     TEST_CASE("time questionnaire falls back to timedatectl timezones")
     {
         initializePresenterTestEnvironment({
-            { std::string(zone1970TabCommand), {} },
+            { std::string(zone1970TabCommand), { } },
             { "timedatectl list-timezones --no-pager",
                 { "UTC", "America/Sao_Paulo" } },
             { "locale -a", { "en_US.utf8" } },
@@ -1458,7 +1458,7 @@ TEST_SUITE("opencattus::presenter::tui")
 
         auto state = std::make_shared<ScriptedViewState>();
         state->responses = {
-            multi(2, {}),
+            multi(2, { }),
         };
         std::unique_ptr<View> view = std::make_unique<ScriptedView>(state);
 
@@ -2384,7 +2384,7 @@ TEST_SUITE("opencattus::presenter::tui")
             = messageIndices(state->messages, "Time and clock settings|");
         CHECK(generalPrompts.size() >= 2);
         CHECK(timePrompts.size() >= 2);
-        CHECK(std::ranges::find(callbackStates, std::vector<std::string> {})
+        CHECK(std::ranges::find(callbackStates, std::vector<std::string> { })
             != callbackStates.end());
         CHECK(model->getTimezone().getTimezone() == "America/Sao_Paulo");
     }

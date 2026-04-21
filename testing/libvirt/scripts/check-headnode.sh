@@ -72,10 +72,17 @@ fi
 case "${provisioner}" in
     xcat)
         export PATH="/opt/xcat/bin:/opt/xcat/sbin:${PATH}"
-        provisioner_services=(
-            dhcpd
-            xcatd
-        )
+        if command -v apt >/dev/null 2>&1; then
+            provisioner_services=(
+                isc-dhcp-server
+                xcatd
+            )
+        else
+            provisioner_services=(
+                dhcpd
+                xcatd
+            )
+        fi
         ;;
     confluent)
         if command -v apt >/dev/null 2>&1; then

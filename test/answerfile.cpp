@@ -948,7 +948,7 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(diskImagePath);
     }
 
-    TEST_CASE("fillData rejects xcat on Ubuntu 24.04 headnodes")
+    TEST_CASE("fillData accepts xcat on Ubuntu 24.04 headnodes")
     {
         initializeOptionsSingleton();
 
@@ -962,7 +962,7 @@ TEST_SUITE("opencattus::models::answerfile")
         std::ofstream(diskImagePath).close();
         writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
             interfaces.front(), std::nullopt, true, "xcat", std::nullopt,
-            "rocky", "9.6");
+            "ubuntu", "24.04");
 
         try {
             AnswerFile answerfile(answerfilePath);
@@ -971,9 +971,10 @@ TEST_SUITE("opencattus::models::answerfile")
                 opencattus::models::OS(opencattus::models::OS::Distro::Ubuntu,
                     opencattus::models::OS::Platform::ubuntu24, 4));
 
-            CHECK_THROWS_WITH(cluster.fillData(answerfile),
-                doctest::Contains("xCAT on DEB head nodes is not implemented "
-                                  "yet"));
+            CHECK_NOTHROW(cluster.fillData(answerfile));
+            CHECK(cluster.getProvisioner() == Cluster::Provisioner::xCAT);
+            CHECK(cluster.getHeadnode().getOS().getPlatform()
+                == opencattus::models::OS::Platform::ubuntu24);
         } catch (const std::exception& e) {
             FAIL(std::string(e.what()));
         } catch (...) {

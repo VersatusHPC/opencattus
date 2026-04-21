@@ -7,9 +7,12 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib> // setenv / getenv
+#include <fstream>
+#include <iterator>
 #include <list>
 #include <optional>
 #include <ranges>
+#include <set>
 #include <thread>
 #include <vector>
 
@@ -84,6 +87,7 @@ bool isUbuntu24ComputeImage(const OS& nodeOS)
 std::vector<std::string> ubuntu24XcatPkgdirEntries()
 {
     return {
+        "/install/ubuntu24.04/x86_64",
         "http://archive.ubuntu.com/ubuntu noble main restricted universe "
         "multiverse",
         "http://archive.ubuntu.com/ubuntu noble-updates main restricted "
@@ -98,6 +102,49 @@ std::string ubuntu24OpenHpcOtherpkgdirEntry()
     return "[trusted=yes] "
            "https://repos.versatushpc.com.br/openhpc/versatushpc-4/"
            "Ubuntu_24.04/ ./";
+}
+
+std::vector<std::string_view> ubuntu24OpenHpcPackages(
+    const std::optional<std::vector<std::string>>& enabledBundles)
+{
+    constexpr auto bundleSerialLibraries = std::string_view("serial-libs");
+    constexpr auto bundleParallelLibraries = std::string_view("parallel-libs");
+    constexpr auto bundleIntelOneAPI = std::string_view("intel-oneapi");
+
+    auto packages = std::set<std::string_view> {
+        "ohpc-base-compute",
+        "ohpc-slurm-client",
+        "gnu15-compilers-ohpc",
+        "openmpi5-gnu15-ohpc",
+        "mpich-ucx-gnu15-ohpc",
+        "mvapich2-gnu15-ohpc",
+        "lmod-ohpc",
+        "lmod-defaults-gnu15-openmpi5-ohpc",
+        "ohpc-autotools",
+        "hwloc-ohpc",
+    };
+
+    const auto bundles = enabledBundles.value_or(
+        std::vector<std::string> { std::string(bundleSerialLibraries),
+            std::string(bundleParallelLibraries) });
+
+    if (std::ranges::find(bundles, bundleSerialLibraries) != bundles.end()) {
+        packages.emplace("ohpc-gnu15-serial-libs");
+    }
+
+    if (std::ranges::find(bundles, bundleParallelLibraries) != bundles.end()) {
+        packages.emplace("ohpc-gnu15-parallel-libs");
+    }
+
+    if (std::ranges::find(bundles, bundleIntelOneAPI) != bundles.end()) {
+        packages.emplace("intel-oneapi-toolkit-release-ohpc");
+        packages.emplace("intel-compilers-devel-ohpc");
+        packages.emplace("intel-mpi-devel-ohpc");
+        packages.emplace("ohpc-intel-serial-libs");
+        packages.emplace("ohpc-intel-impi-parallel-libs");
+    }
+
+    return { packages.begin(), packages.end() };
 }
 
 std::string buildUbuntu24OSImageDefinitionCommand(
@@ -120,6 +167,158 @@ std::string buildUbuntu24OSImageDefinitionCommand(
         "synclists=/install/custom/netboot/compute.synclists",
         fmt::arg("image", image.osimage),
         fmt::arg("rootimg", image.chroot.string()));
+}
+
+std::string buildUbuntu24CopycdsCompatibilityCommand()
+{
+    return R"(if [ ! -d /install/ubuntu24.04/x86_64 ]; then
+  ubuntu_copycds_dir=$(find /install -maxdepth 1 -type d -name 'ubuntu24.04.*' | sort -V | tail -n 1)
+  if [ -n "$ubuntu_copycds_dir" ] && [ -d "$ubuntu_copycds_dir/x86_64" ]; then
+    ln -sfnT "$ubuntu_copycds_dir" /install/ubuntu24.04
+  fi
+fi
+test -d /install/ubuntu24.04/x86_64)";
+}
+
+std::string patchUbuntu24GenimageOtherpkgdirContent(std::string content)
+{
+    constexpr std::string_view oldBlock
+        = R"(        if ($tempdir =~ /^http.*/) {
+            $otherpkgsdir_internet .= "deb " . $tempdir . "\n";
+        }
+        else {)";
+    constexpr std::string_view patchedBlock
+        = R"(        if ($tempdir =~ /^(\[[^\]]+\]\s*)?http.*/) {
+            $otherpkgsdir_internet .= "deb " . $tempdir . "\n";
+        }
+        else {)";
+
+    if (content.find(patchedBlock) != std::string::npos) {
+        return content;
+    }
+
+    const auto pos = content.find(oldBlock);
+    if (pos == std::string::npos) {
+        throw std::runtime_error(
+            "Unable to patch xCAT Ubuntu genimage otherpkgdir handling");
+    }
+
+    content.replace(pos, oldBlock.size(), patchedBlock);
+    return content;
+}
+
+void patchUbuntu24GenimageOtherpkgdirHandling()
+{
+    if (options()->dryRun) {
+        LOG_INFO("Dry Run: Would patch xCAT Ubuntu genimage otherpkgdir "
+                 "handling");
+        return;
+    }
+
+    const std::filesystem::path genimage
+        = "/opt/xcat/share/xcat/netboot/ubuntu/genimage";
+    std::ifstream input(genimage);
+    if (!input) {
+        throw std::runtime_error(
+            fmt::format("Unable to open xCAT Ubuntu genimage script at {}",
+                genimage.string()));
+    }
+
+    const std::string original((std::istreambuf_iterator<char>(input)),
+        std::istreambuf_iterator<char>());
+    const auto patched = patchUbuntu24GenimageOtherpkgdirContent(original);
+    if (patched == original) {
+        LOG_DEBUG("xCAT Ubuntu genimage already accepts apt source options in "
+                  "otherpkgdir");
+        return;
+    }
+
+    std::ofstream output(genimage, std::ios::trunc);
+    if (!output) {
+        throw std::runtime_error(
+            fmt::format("Unable to write xCAT Ubuntu genimage script at {}",
+                genimage.string()));
+    }
+    output << patched;
+    if (!output) {
+        throw std::runtime_error(
+            fmt::format("Unable to update xCAT Ubuntu genimage script at {}",
+                genimage.string()));
+    }
+
+    LOG_INFO("Patched xCAT Ubuntu genimage to accept apt source options in "
+             "otherpkgdir");
+}
+
+void cleanStatelessRootImage(const std::filesystem::path& chroot)
+{
+    if (chroot.empty()) {
+        throw std::logic_error(
+            "Refusing to clean an empty xCAT root image path");
+    }
+
+    const auto normalized = chroot.lexically_normal().string();
+    constexpr std::string_view installNetbootPrefix = "/install/netboot/";
+    if (!normalized.starts_with(installNetbootPrefix)) {
+        throw std::logic_error(
+            fmt::format("Refusing to clean unexpected xCAT root image path {}",
+                normalized));
+    }
+
+    if (options()->dryRun) {
+        LOG_INFO("Dry Run: Would remove stale xCAT root image directory {}",
+            normalized);
+        return;
+    }
+
+    if (!std::filesystem::exists(chroot)) {
+        return;
+    }
+
+    LOG_INFO("Removing stale xCAT root image directory {}", normalized);
+    std::error_code error;
+    std::filesystem::remove_all(chroot, error);
+    if (error) {
+        throw std::runtime_error(fmt::format(
+            "Unable to remove stale xCAT root image directory {}: {}",
+            normalized, error.message()));
+    }
+}
+
+std::string xcatHttpServiceName(const OS& headnodeOS)
+{
+    return headnodeOS.getPackageType() == OS::PackageType::DEB ? "apache2"
+                                                               : "httpd";
+}
+
+std::string xcatDhcpServiceName(const OS& headnodeOS)
+{
+    return headnodeOS.getPackageType() == OS::PackageType::DEB
+        ? "isc-dhcp-server"
+        : "dhcpd";
+}
+
+std::vector<std::string> buildXcatPackageInstallCommands(
+    const OS& headnodeOS, const OS& computeOS)
+{
+    if (headnodeOS.getPackageType() == OS::PackageType::DEB) {
+        return {
+            "env DEBIAN_FRONTEND=noninteractive apt install -y xcat",
+            "env DEBIAN_FRONTEND=noninteractive apt install -y ipmitool",
+            "env DEBIAN_FRONTEND=noninteractive apt install -y debootstrap",
+        };
+    }
+
+    auto commands = std::vector<std::string> {
+        "dnf -y install xCAT",
+        "dnf -y install ipmitool",
+        "dnf -y install createrepo_c",
+    };
+    if (computeOS.getPackageType() == OS::PackageType::DEB) {
+        commands.emplace_back("dnf -y install debootstrap");
+    }
+
+    return commands;
 }
 
 std::string getEnterpriseLinuxTemplateVersion(const OS& nodeOS)
@@ -856,16 +1055,12 @@ XCAT::Image XCAT::getImage() const { return m_stateless; }
 void XCAT::installPackages()
 {
     auto runner = opencattus::utils::singleton::runner();
+    const auto& headnodeOS = cluster()->getHeadnode().getOS();
     const auto& computeOS = cluster()->getComputeNodeOS();
-    runner->checkCommand("dnf -y install xCAT");
-    // xCAT's embedded Perl IPMI stack does not interoperate cleanly with
-    // VirtualBMC on EL9, so keep ipmitool available as a fallback path.
-    runner->checkCommand("dnf -y install ipmitool");
-    // xCAT always prepends a local file:// otherpkgdir for osimages; ensure we
-    // can publish metadata there even when we do not ship custom RPMs.
-    runner->checkCommand("dnf -y install createrepo_c");
-    if (computeOS.getPackageType() == OS::PackageType::DEB) {
-        runner->checkCommand("dnf -y install debootstrap");
+
+    for (const auto& command :
+        buildXcatPackageInstallCommands(headnodeOS, computeOS)) {
+        runner->checkCommand(command);
     }
 }
 
@@ -877,6 +1072,8 @@ void XCAT::patchInstall()
 
     const auto opts = opencattus::utils::singleton::options();
     auto runner = opencattus::utils::singleton::runner();
+    const auto& headnodeOS = cluster()->getHeadnode().getOS();
+    const auto httpService = xcatHttpServiceName(headnodeOS);
     if (opts->shouldForce("xcat-patch")
         || runner->executeCommand(
                "grep -q \"extensions usr_cert\" "
@@ -907,28 +1104,29 @@ void XCAT::patchInstall()
 EOF
 ))del");
         opts->maybeStopAfterStep("xcat-patch");
-
-        // `dnf install xCAT` already runs `xcatconfig -i` from the RPM
-        // scriptlets. Re-running the full interactive reconfiguration here is
-        // not idempotent and can stall unattended EL9 installs after the
-        // certificate prompts. Restart the provisioner services instead so the
-        // patched helpers and plugin code are picked up without replaying the
-        // full bootstrap workflow.
-        runner->executeCommand("systemctl enable --now xcatd httpd");
-        // Some EL9 lanes ship xCAT skeleton credential directories in the RPM
-        // payload. The package post-install then skips the actual CA/client/
-        // server credential generation because it only checks directory
-        // existence, leaving zero-length or missing credentials behind.
-        if (runner->executeCommand(buildXCATCredentialReadinessCheckCommand())
-            != 0) {
-            LOG_WARN("xCAT credentials are incomplete after package init; "
-                     "repairing with xcatconfig -c");
-            runner->checkCommand("/opt/xcat/sbin/xcatconfig -c");
-        }
-        runner->executeCommand("systemctl restart xcatd httpd");
     } else {
         LOG_WARN("xCAT Already patched, skipping");
     }
+
+    // xCAT packages already run their initial configuration from package
+    // scripts. Re-running the full interactive configuration here is not
+    // idempotent and can stall unattended installs after certificate prompts.
+    // Restart the provisioner services instead so patched helpers and plugin
+    // code are picked up without replaying the full bootstrap workflow.
+    runner->executeCommand(
+        fmt::format("systemctl enable --now xcatd {}", httpService));
+    // Some lanes ship xCAT skeleton credential directories in the package
+    // payload. The package post-install then skips the actual CA/client/server
+    // credential generation because it only checks directory existence, leaving
+    // zero-length or missing credentials behind.
+    if (runner->executeCommand(buildXCATCredentialReadinessCheckCommand())
+        != 0) {
+        LOG_WARN("xCAT credentials are incomplete after package init; "
+                 "repairing with xcatconfig -c");
+        runner->checkCommand("/opt/xcat/sbin/xcatconfig -c");
+    }
+    runner->executeCommand(
+        fmt::format("systemctl restart xcatd {}", httpService));
 }
 
 void XCAT::setup() const
@@ -1025,8 +1223,8 @@ namespace {
 
 void XCAT::copycds(const std::filesystem::path& diskImage)
 {
-    opencattus::utils::singleton::runner()->checkCommand(
-        fmt::format("copycds {}", diskImage.string()));
+    opencattus::services::runner::shell::fmt(
+        "copycds {}", shellSingleQuote(diskImage.string()));
 }
 
 void XCAT::genimage() const
@@ -1124,7 +1322,7 @@ void XCAT::configureOpenHPC()
 {
     const auto nodeOS = cluster()->getNodes().front().getOS();
     const auto packages = nodeOS.getPackageType() == OS::PackageType::DEB
-        ? std::vector<std::string_view> { "ohpc-base-compute", "lmod-ohpc" }
+        ? ubuntu24OpenHpcPackages(cluster()->getEnabledOpenHPCBundles())
         : std::vector<std::string_view> { "ohpc-base-compute", "lmod-ohpc",
               "lua" };
 
@@ -1418,14 +1616,15 @@ void XCAT::configureOSImageDefinition() const
             const auto pkgdirEntries = ubuntu24XcatPkgdirEntries();
             const auto pkgdir
                 = fmt::format("{}", fmt::join(pkgdirEntries, ","));
-            runner->executeCommand(fmt::format("chdef -t osimage {} pkgdir={}",
-                m_stateless.osimage, shellSingleQuote(pkgdir)));
+            opencattus::services::runner::shell::fmt(
+                "chdef -t osimage {} pkgdir={}", m_stateless.osimage,
+                shellSingleQuote(pkgdir));
         }
 
         const std::vector<std::string> repos = getxCATOSImageRepos();
-        runner->executeCommand(fmt::format(
+        opencattus::services::runner::shell::fmt(
             "chdef -t osimage {} --plus otherpkgdir={}", m_stateless.osimage,
-            shellSingleQuote(fmt::format("{}", fmt::join(repos, ",")))));
+            shellSingleQuote(fmt::format("{}", fmt::join(repos, ","))));
     }
 }
 
@@ -1487,6 +1686,7 @@ void XCAT::configureEL9()
 void XCAT::configureUbuntu24()
 {
     auto runner = opencattus::utils::singleton::runner();
+    patchUbuntu24GenimageOtherpkgdirHandling();
     runner->executeCommand("install -d /opt/xcat/share/xcat/netboot/ubuntu");
     runner->executeCommand(
         R"(bash -c "cat > /opt/xcat/share/xcat/netboot/ubuntu/compute.ubuntu24.04.x86_64.pkglist <<'EOF'
@@ -1569,14 +1769,15 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
                     m_stateless.chroot,
                     "/install/custom/netboot/compute.otherpkglist",
                     "/install/custom/netboot/compute.postinstall"));
-        } else if (isUbuntu24ComputeImage(
-                       cluster()->getNodes().front().getOS())) {
-            LOG_INFO("Skipping copycds for Ubuntu 24.04; xCAT will bootstrap "
-                     "the stateless image from Ubuntu archive repositories");
         } else {
             copycds(cluster()->getDiskImage().getPath());
+            if (isUbuntu24ComputeImage(cluster()->getNodes().front().getOS())) {
+                opencattus::services::runner::shell::cmd(
+                    buildUbuntu24CopycdsCompatibilityCommand());
+            }
         }
         generateOSImagePath(imageType, nodeType);
+        cleanStatelessRootImage(m_stateless.chroot);
         if (isUbuntu24ComputeImage(cluster()->getNodes().front().getOS())) {
             runner->executeCommand(
                 buildUbuntu24OSImageDefinitionCommand(m_stateless));
@@ -1656,7 +1857,8 @@ void XCAT::addNodes() const
     runner->executeCommand("makedhcp -n");
     // xCAT updates node DHCP state through OMAPI during `nodeset`; that fails
     // unless dhcpd is already running with the regenerated configuration.
-    runner->checkCommand("systemctl restart dhcpd");
+    runner->checkCommand(fmt::format("systemctl restart {}",
+        xcatDhcpServiceName(cluster()->getHeadnode().getOS())));
     runner->executeCommand("makedns -n");
     runner->executeCommand("makegocons");
     setNodesImage();
@@ -1805,8 +2007,11 @@ void XCAT::install()
     const auto opts = singleton::options();
     const auto computeOS = cluster()->getComputeNodeOS();
     auto repos = singleton::repos();
-    repos->enable("xcat-core");
-    repos->enable("xcat-dep");
+    if (cluster()->getHeadnode().getOS().getPackageType()
+        == OS::PackageType::RPM) {
+        repos->enable("xcat-core");
+        repos->enable("xcat-dep");
+    }
 
     NFS networkFileSystem = NFS("pub", "/opt/ohpc",
         cluster()
@@ -1887,14 +2092,15 @@ TEST_CASE("ubuntu24XcatPkgdirEntries uses Noble archive repositories")
 {
     const auto entries = ubuntu24XcatPkgdirEntries();
 
-    CHECK(entries.size() == 3);
-    CHECK(entries[0]
+    CHECK(entries.size() == 4);
+    CHECK(entries[0] == "/install/ubuntu24.04/x86_64");
+    CHECK(entries[1]
         == "http://archive.ubuntu.com/ubuntu noble main restricted universe "
            "multiverse");
-    CHECK(entries[1]
+    CHECK(entries[2]
         == "http://archive.ubuntu.com/ubuntu noble-updates main restricted "
            "universe multiverse");
-    CHECK(entries[2]
+    CHECK(entries[3]
         == "http://security.ubuntu.com/ubuntu noble-security main restricted "
            "universe multiverse");
 }
@@ -1922,6 +2128,54 @@ TEST_CASE("buildUbuntu24OSImageDefinitionCommand defines the xCAT image")
                            "compute.ubuntu24.04.x86_64.pkglist"));
     CHECK(command.contains(
         "rootimgdir=/install/netboot/ubuntu24.04/x86_64/compute/rootimg"));
+}
+
+TEST_CASE("buildUbuntu24CopycdsCompatibilityCommand links patch-level media")
+{
+    const auto command = buildUbuntu24CopycdsCompatibilityCommand();
+
+    CHECK(command.contains("/install/ubuntu24.04/x86_64"));
+    CHECK(command.contains("ubuntu24.04.*"));
+    CHECK(command.contains("ln -sfnT"));
+}
+
+TEST_CASE("patchUbuntu24GenimageOtherpkgdirContent accepts apt options")
+{
+    const std::string original = R"(    foreach my $tempdir (@tempdirarray) {
+        if ($tempdir =~ /^http.*/) {
+            $otherpkgsdir_internet .= "deb " . $tempdir . "\n";
+        }
+        else {
+            $otherpkgsdir_local = $tempdir;
+        }
+    }
+)";
+
+    const auto patched = patchUbuntu24GenimageOtherpkgdirContent(original);
+
+    CHECK(patched.contains(R"($tempdir =~ /^(\[[^\]]+\]\s*)?http.*/)"));
+    CHECK(patchUbuntu24GenimageOtherpkgdirContent(patched) == patched);
+}
+
+TEST_CASE("buildXcatPackageInstallCommands uses APT on Ubuntu head nodes")
+{
+    const auto ubuntu = OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+    const auto commands = buildXcatPackageInstallCommands(ubuntu, ubuntu);
+
+    CHECK(commands
+        == std::vector<std::string> {
+            "env DEBIAN_FRONTEND=noninteractive apt install -y xcat",
+            "env DEBIAN_FRONTEND=noninteractive apt install -y ipmitool",
+            "env DEBIAN_FRONTEND=noninteractive apt install -y debootstrap",
+        });
+}
+
+TEST_CASE("xCAT service helpers use Debian service names on Ubuntu")
+{
+    const auto ubuntu = OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+
+    CHECK(xcatHttpServiceName(ubuntu) == "apache2");
+    CHECK(xcatDhcpServiceName(ubuntu) == "isc-dhcp-server");
 }
 
 TEST_CASE("buildEnterpriseLinuxTemplateAliasCommands uses explicit EL releases")

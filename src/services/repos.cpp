@@ -2735,6 +2735,25 @@ std::string ubuntuOpenHpcRepositoryContents(const OS& osinfo)
         "deb [trusted=yes] {} ./\n", ubuntuOpenHpcRepositoryUrl(osinfo));
 }
 
+std::string ubuntuXcatRepositoryContents(const OS& osinfo)
+{
+    if (osinfo.getPlatform() != OS::Platform::ubuntu24) {
+        throw std::runtime_error(
+            fmt::format("Unsupported Ubuntu xCAT repository baseline for {}",
+                osinfo.getVersion()));
+    }
+
+    // xCAT publishes a Jammy xcat-core suite, but xcat-dep currently stops at
+    // Focal. Keep the compatibility split explicit until upstream publishes a
+    // native Noble dependency suite.
+    return "deb [trusted=yes] "
+           "https://xcat.org/files/xcat/repos/apt/latest/xcat-core jammy "
+           "main\n"
+           "deb [trusted=yes] "
+           "https://xcat.org/files/xcat/repos/apt/latest/xcat-dep focal "
+           "main\n";
+}
+
 TEST_CASE("ubuntuOpenHpcRepositoryUrl uses the VersatusHPC Noble fork")
 {
     const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24,
@@ -2755,12 +2774,32 @@ TEST_CASE("ubuntuOpenHpcRepositoryContents generates an apt source entry")
            "versatushpc-4/Ubuntu_24.04/ ./\n");
 }
 
+TEST_CASE("ubuntuXcatRepositoryContents uses the Ubuntu compatibility suites")
+{
+    const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24,
+        4, OS::Arch::x86_64);
+
+    CHECK(ubuntuXcatRepositoryContents(osinfo)
+        == "deb [trusted=yes] https://xcat.org/files/xcat/repos/apt/latest/"
+           "xcat-core jammy main\n"
+           "deb [trusted=yes] https://xcat.org/files/xcat/repos/apt/latest/"
+           "xcat-dep focal main\n");
+}
+
 void writeUbuntuOpenHpcRepositoryFile(
     const OS& osinfo, const std::filesystem::path& path)
 {
     LOG_INFO("Writing Ubuntu OpenHPC repository file {}", path.string());
     opencattus::services::files::write(
         path, ubuntuOpenHpcRepositoryContents(osinfo));
+}
+
+void writeUbuntuXcatRepositoryFile(
+    const OS& osinfo, const std::filesystem::path& path)
+{
+    LOG_INFO("Writing Ubuntu xCAT repository file {}", path.string());
+    opencattus::services::files::write(
+        path, ubuntuXcatRepositoryContents(osinfo));
 }
 
 void initializeDebianHeadnodeRepositories(const OS& osinfo)
@@ -2779,6 +2818,11 @@ void initializeDebianHeadnodeRepositories(const OS& osinfo)
         "DEBIAN_FRONTEND=noninteractive apt install -y ca-certificates");
     writeUbuntuOpenHpcRepositoryFile(
         osinfo, "/etc/apt/sources.list.d/opencattus-openhpc.list");
+    if (opencattus::utils::singleton::cluster()->getProvisioner()
+        == models::Cluster::Provisioner::xCAT) {
+        writeUbuntuXcatRepositoryFile(
+            osinfo, "/etc/apt/sources.list.d/opencattus-xcat.list");
+    }
     runner::shell::cmd("DEBIAN_FRONTEND=noninteractive apt update");
 }
 

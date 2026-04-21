@@ -554,8 +554,16 @@ void validateProvisionerSupport(
 {
     if (provisioner == Cluster::Provisioner::xCAT
         && headnodeOS.getPackageType() == OS::PackageType::DEB) {
-        throw std::runtime_error("xCAT on DEB head nodes is not implemented "
-                                 "yet; use confluent instead");
+        if (headnodeOS.getPlatform() != OS::Platform::ubuntu24) {
+            throw std::runtime_error(
+                "xCAT on DEB head nodes is only implemented for Ubuntu 24.04");
+        }
+
+        if (nodeOS.getPlatform() != OS::Platform::ubuntu24) {
+            throw std::runtime_error("xCAT on Ubuntu 24.04 head nodes is only "
+                                     "implemented for Ubuntu 24.04 compute "
+                                     "images");
+        }
     }
 
     switch (nodeOS.getPlatform()) {

@@ -7,8 +7,14 @@ mpi_nodes=${OPENCATTUS_MPI_SMOKE_NODES:?OPENCATTUS_MPI_SMOKE_NODES is required}
 mpi_tasks=${OPENCATTUS_MPI_SMOKE_TASKS:?OPENCATTUS_MPI_SMOKE_TASKS is required}
 mpi_workdir=${OPENCATTUS_MPI_SMOKE_WORKDIR:-${HOME}/opencattus-mpi-smoke}
 mpi_output=${OPENCATTUS_MPI_SMOKE_OUTPUT:-${mpi_workdir}/mpi-hello.out}
+mpi_run_id=${OPENCATTUS_MPI_SMOKE_RUN_ID:-$$-$(date +%s)}
+mpi_remote_dir=${OPENCATTUS_MPI_SMOKE_REMOTE_DIR:-/tmp/opencattus-mpi-smoke-${mpi_run_id}}
+mpi_remote_path=${OPENCATTUS_MPI_SMOKE_REMOTE_PATH:-${mpi_remote_dir}/mpi_hello}
+mpi_remote_launcher=${OPENCATTUS_MPI_SMOKE_REMOTE_LAUNCHER:-${mpi_remote_dir}/run-mpi-hello.sh}
 
 read -r -a nodes <<<"${node_list}"
+selected_nodes=("${nodes[@]:0:mpi_nodes}")
+nodelist_csv=$(IFS=,; printf '%s' "${selected_nodes[*]}")
 
 if [[ ${#nodes[@]} -eq 0 ]]; then
     echo "No compute nodes were provided for the MPI smoke test" >&2
@@ -104,6 +110,16 @@ resolve_mpi_modules() {
     exit 1
 }
 
+encode_base64() {
+    local path=$1
+
+    if base64 --help 2>&1 | grep -q -- ' -w,'; then
+        base64 -w 0 "${path}"
+    else
+        base64 "${path}" | tr -d '\n'
+    fi
+}
+
 set +u
 init_module_command
 module purge >/dev/null 2>&1 || true
@@ -132,9 +148,41 @@ int main(int argc, char **argv)
 EOF
 
 mpicc "${mpi_workdir}/mpi_hello.c" -o "${mpi_workdir}/mpi_hello"
+mpi_binary_base64=$(encode_base64 "${mpi_workdir}/mpi_hello")
+
+{
+    echo '#!/usr/bin/env bash'
+    echo 'set -euo pipefail'
+    echo 'if [[ -f /opt/ohpc/admin/lmod/lmod/init/bash ]]; then'
+    echo '    export LMOD_SETTARG_CMD=":"'
+    echo '    export LMOD_FULL_SETTARG_SUPPORT=no'
+    echo '    export LMOD_COLORIZE=no'
+    echo '    export LMOD_PREPEND_BLOCK=normal'
+    echo '    export MODULEPATH=/opt/ohpc/pub/modulefiles'
+    echo '    . /opt/ohpc/admin/lmod/lmod/init/bash >/dev/null'
+    echo 'elif [[ -f /etc/profile.d/lmod.sh ]]; then'
+    echo '    source /etc/profile.d/lmod.sh'
+    echo 'elif [[ -f /etc/profile.d/modules.sh ]]; then'
+    echo '    source /etc/profile.d/modules.sh'
+    echo 'else'
+    echo '    echo "Could not find a shell init script for the module command" >&2'
+    echo '    exit 1'
+    echo 'fi'
+    echo 'module purge >/dev/null 2>&1 || true'
+    printf 'module load'
+    for mpi_module in "${mpi_modules[@]}"; do
+        printf ' %q' "${mpi_module}"
+    done
+    echo ' >/dev/null 2>&1'
+    printf 'exec %q\n' "${mpi_remote_path}"
+} >"${mpi_workdir}/run-mpi-hello.sh"
+
+mpi_launcher_base64=$(encode_base64 "${mpi_workdir}/run-mpi-hello.sh")
 
 srun_args=(
     --mpi=pmix
+    --chdir=/tmp
+    --nodelist="${nodelist_csv}"
     --nodes="${mpi_nodes}"
     --ntasks="${mpi_tasks}"
 )
@@ -143,7 +191,37 @@ if (( mpi_tasks == mpi_nodes && mpi_nodes > 1 )); then
     srun_args+=(--ntasks-per-node=1)
 fi
 
-srun "${srun_args[@]}" "${mpi_workdir}/mpi_hello" | tee "${mpi_output}"
+srun \
+    --chdir=/tmp \
+    --nodelist="${nodelist_csv}" \
+    --nodes="${mpi_nodes}" \
+    --ntasks="${mpi_nodes}" \
+    --ntasks-per-node=1 \
+    mkdir -p "${mpi_remote_dir}"
+
+srun \
+    --chdir=/tmp \
+    --nodelist="${nodelist_csv}" \
+    --nodes="${mpi_nodes}" \
+    --ntasks="${mpi_nodes}" \
+    --ntasks-per-node=1 \
+    bash -lc "cat <<'EOF' | base64 -d > '${mpi_remote_path}'
+${mpi_binary_base64}
+EOF
+cat <<'EOF' | base64 -d > '${mpi_remote_launcher}'
+${mpi_launcher_base64}
+EOF
+chmod 0755 '${mpi_remote_path}'"
+
+srun \
+    --chdir=/tmp \
+    --nodelist="${nodelist_csv}" \
+    --nodes="${mpi_nodes}" \
+    --ntasks="${mpi_nodes}" \
+    --ntasks-per-node=1 \
+    chmod 0755 "${mpi_remote_path}" "${mpi_remote_launcher}"
+
+srun "${srun_args[@]}" "${mpi_remote_launcher}" | tee "${mpi_output}"
 
 hello_lines=$(grep -c '^Hello from rank ' "${mpi_output}" || true)
 if (( hello_lines != mpi_tasks )); then

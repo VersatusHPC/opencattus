@@ -34,103 +34,106 @@ namespace opencattus::models {
 
 namespace {
 
-struct HostOSProbe {
-    std::string architecture;
-    std::string family;
-    std::string kernel;
-    std::optional<std::string> platform;
-    std::string distro;
-    std::string version;
-};
-
-std::string valueFromOsReleaseLine(const std::string& line)
-{
-    std::string value;
-    const std::size_t pos = line.find_first_of('=');
-    value = line.substr(pos + 1);
-    value.erase(std::remove(value.begin(), value.end(), '"'), value.end());
-    return value;
-}
-
-HostOSProbe probeHostOS()
-{
-    LOG_INFO("Initializing OS (ctr 1)");
-    struct utsname system { };
-    // @FIXME: Unfortunately this runs during the initialization of the
-    //  cluster instance. Which prevents us of running this during testing
-    //  in a machine that does not have /etc/os-release file.
-    //  The isTest flag below is used to fill up default values during tests
-    //  to make it possible to run outside of target machines
-    auto opts = opencattus::utils::singleton::options();
-    const bool isTest = !opts->testCommand.empty();
-    uname(&system);
-
-    HostOSProbe probe {
-        .architecture = system.machine,
-        .family = system.sysname,
-        .kernel = system.release,
+    struct HostOSProbe {
+        std::string architecture;
+        std::string family;
+        std::string kernel;
+        std::optional<std::string> platform;
+        std::string distro;
+        std::string version;
     };
 
+    std::string valueFromOsReleaseLine(const std::string& line)
+    {
+        std::string value;
+        const std::size_t pos = line.find_first_of('=');
+        value = line.substr(pos + 1);
+        value.erase(std::remove(value.begin(), value.end(), '"'), value.end());
+        return value;
+    }
+
+    HostOSProbe probeHostOS()
+    {
+        LOG_INFO("Initializing OS (ctr 1)");
+        struct utsname system { };
+        // @FIXME: Unfortunately this runs during the initialization of the
+        //  cluster instance. Which prevents us of running this during testing
+        //  in a machine that does not have /etc/os-release file.
+        //  The isTest flag below is used to fill up default values during tests
+        //  to make it possible to run outside of target machines
+        auto opts = opencattus::utils::singleton::options();
+        const bool isTest = !opts->testCommand.empty();
+        uname(&system);
+
+        HostOSProbe probe {
+            .architecture = system.machine,
+            .family = system.sysname,
+            .kernel = system.release,
+        };
+
 #ifdef __APPLE__
-    if (true) {
+        if (true) {
 #else
-    if (probe.family == "Linux") {
+        if (probe.family == "Linux") {
 #endif
-        std::string filename = CHROOT "/etc/os-release";
-        LOG_INFO("Opening {}", filename);
-        std::ifstream file(filename);
+            std::string filename = CHROOT "/etc/os-release";
+            LOG_INFO("Opening {}", filename);
+            std::ifstream file(filename);
 
-        if (!file.is_open()) {
-            LOG_ERROR("Error while opening file {}", filename);
-            throw std::runtime_error(
-                fmt::format("Error while opening file: {}", filename));
-        }
+            if (!file.is_open()) {
+                LOG_ERROR("Error while opening file {}", filename);
+                throw std::runtime_error(
+                    fmt::format("Error while opening file: {}", filename));
+            }
 
-        /* Fetches OS information from /etc/os-release. The file is writen in a
-         * key=value style.
-         */
-        std::string line;
-        while (std::getline(file, line)) {
-            if (line.starts_with("PLATFORM_ID=")) {
-                if (isTest) {
-                    probe.platform = "el9";
-                } else {
-                    auto value = valueFromOsReleaseLine(line);
-                    LOG_DEBUG("Found platform (PLATFORM_ID={})", value);
-                    if (value.starts_with("platform:")) {
-                        // Skip the 'platform:' prefix
-                        constexpr auto platform = std::string_view("platform:");
-                        probe.platform = value.substr(platform.size());
+            /* Fetches OS information from /etc/os-release. The file is writen
+             * in a key=value style.
+             */
+            std::string line;
+            while (std::getline(file, line)) {
+                if (line.starts_with("PLATFORM_ID=")) {
+                    if (isTest) {
+                        probe.platform = "el9";
                     } else {
-                        probe.platform = value;
+                        auto value = valueFromOsReleaseLine(line);
+                        LOG_DEBUG("Found platform (PLATFORM_ID={})", value);
+                        if (value.starts_with("platform:")) {
+                            // Skip the 'platform:' prefix
+                            constexpr auto platform
+                                = std::string_view("platform:");
+                            probe.platform = value.substr(platform.size());
+                        } else {
+                            probe.platform = value;
+                        }
                     }
+                }
+
+                if (line.starts_with("ID=")) {
+                    probe.distro
+                        = !isTest ? valueFromOsReleaseLine(line) : "rocky";
+                    LOG_DEBUG("Found distro (ID={})", probe.distro);
+                }
+
+                if (line.starts_with("VERSION_ID=")) {
+                    probe.version
+                        = !isTest ? valueFromOsReleaseLine(line) : "9.5";
+                    LOG_DEBUG("Found version (VERSION_ID={})", probe.version);
+                } else if (probe.version.empty()
+                    && line.starts_with("VERSION=")) {
+                    probe.version
+                        = !isTest ? valueFromOsReleaseLine(line) : "9.5";
+                    LOG_DEBUG("Found version (VERSION={})", probe.version);
                 }
             }
 
-            if (line.starts_with("ID=")) {
-                probe.distro = !isTest ? valueFromOsReleaseLine(line) : "rocky";
-                LOG_DEBUG("Found distro (ID={})", probe.distro);
-            }
-
-            if (line.starts_with("VERSION_ID=")) {
-                probe.version
-                    = !isTest ? valueFromOsReleaseLine(line) : "9.5";
-                LOG_DEBUG("Found version (VERSION_ID={})", probe.version);
-            } else if (probe.version.empty() && line.starts_with("VERSION=")) {
-                probe.version
-                    = !isTest ? valueFromOsReleaseLine(line) : "9.5";
-                LOG_DEBUG("Found version (VERSION={})", probe.version);
+            if (file.bad()) {
+                throw std::runtime_error(
+                    fmt::format("Error while reading file: {}", filename));
             }
         }
 
-        if (file.bad()) {
-            throw std::runtime_error(
-                fmt::format("Error while reading file: {}", filename));
-        }
+        return probe;
     }
-
-    return probe;
-}
 
 }
 

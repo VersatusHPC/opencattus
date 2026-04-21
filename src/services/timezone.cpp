@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <fmt/format.h>
 #include <cstdlib>
 #include <filesystem>
+#include <fmt/format.h>
 #include <fstream>
 #include <map>
 #include <opencattus/functions.h>
@@ -83,9 +83,9 @@ std::vector<std::string> readZone1970Tab()
     const auto path = systemZone1970TabPath();
     std::ifstream file(path);
     if (!file.is_open()) {
-        LOG_DEBUG("Unable to read {}, falling back to timedatectl",
-            path.string());
-        return {};
+        LOG_DEBUG(
+            "Unable to read {}, falling back to timedatectl", path.string());
+        return { };
     }
 
     std::vector<std::string> lines;
@@ -96,7 +96,7 @@ std::vector<std::string> readZone1970Tab()
     if (file.bad()) {
         LOG_WARN("Error while reading {}, falling back to timedatectl",
             path.string());
-        return {};
+        return { };
     }
 
     return parseZone1970Tab(lines);
@@ -132,7 +132,7 @@ std::multimap<std::string, std::string> Timezone::getAvailableTimezones() const
 
 std::multimap<std::string, std::string> Timezone::fetchAvailableTimezones()
 {
-    std::multimap<std::string, std::string> timezones {};
+    std::multimap<std::string, std::string> timezones { };
 
     LOG_DEBUG("Fetching available system timezones")
     auto runner = opencattus::Singleton<functions::IRunner>::get();
