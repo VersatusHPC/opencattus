@@ -1,0 +1,5 @@
+[versatushpc-opencattus]
+name=VersatusHPC OpenCATTUS EL10
+baseurl=https://repos.versatushpc.com.br/opencattus/el10/
+enabled=1
+gpgcheck=0

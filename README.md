@@ -17,6 +17,41 @@ OpenCATTUS does not ship a separate user manual. The TUI and built-in command
 line help are the primary interface and are expected to be sufficient for
 normal use.
 
+# Installing
+
+OpenCATTUS RPM packages are published for EL8, EL9, and EL10 compatible
+systems. Pick the repository matching the major version of the head node OS.
+
+For EL8:
+
+```bash
+sudo curl -o /etc/yum.repos.d/versatushpc-opencattus.repo \
+  https://repos.versatushpc.com.br/opencattus/el8/versatushpc-opencattus.repo
+sudo dnf install -y opencattus-installer
+```
+
+For EL9:
+
+```bash
+sudo curl -o /etc/yum.repos.d/versatushpc-opencattus.repo \
+  https://repos.versatushpc.com.br/opencattus/el9/versatushpc-opencattus.repo
+sudo dnf install -y opencattus-installer
+```
+
+For EL10:
+
+```bash
+sudo curl -o /etc/yum.repos.d/versatushpc-opencattus.repo \
+  https://repos.versatushpc.com.br/opencattus/el10/versatushpc-opencattus.repo
+sudo dnf install -y opencattus-installer
+```
+
+Then start the installer:
+
+```bash
+sudo opencattus --tui
+```
+
 # Architecture
 
 OpenCATTUS is written in modern C++ with some C code for compatibility
