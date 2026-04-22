@@ -1,4 +1,4 @@
-Name: opencattus-installer
+Name: opencattus
 Version: 1.0
 Release: 1
 Summary: OpenCATTUS Installer
@@ -26,8 +26,9 @@ BuildRequires: glibmm2.4-devel
 %endif
 
 Requires: newt
-Provides: opencattus-installer
-Obsoletes: opencattus-installer-debug <= 1.0-6
+Provides: opencattus-installer = %{VERSION}-%{RELEASE}%{?dist}
+Obsoletes: opencattus-installer <= 1.0-1%{?dist}
+Obsoletes: opencattus-installer-debug <= 1.0-6%{?dist}
 
 # Disable debug package for now
 %global _enable_debug_package 0

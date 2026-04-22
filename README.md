@@ -27,7 +27,7 @@ For EL8:
 ```bash
 sudo curl -o /etc/yum.repos.d/versatushpc-opencattus.repo \
   https://repos.versatushpc.com.br/opencattus/el8/versatushpc-opencattus.repo
-sudo dnf install -y opencattus-installer
+sudo dnf install -y opencattus
 ```
 
 For EL9:
@@ -35,7 +35,7 @@ For EL9:
 ```bash
 sudo curl -o /etc/yum.repos.d/versatushpc-opencattus.repo \
   https://repos.versatushpc.com.br/opencattus/el9/versatushpc-opencattus.repo
-sudo dnf install -y opencattus-installer
+sudo dnf install -y opencattus
 ```
 
 For EL10:
@@ -43,7 +43,7 @@ For EL10:
 ```bash
 sudo curl -o /etc/yum.repos.d/versatushpc-opencattus.repo \
   https://repos.versatushpc.com.br/opencattus/el10/versatushpc-opencattus.repo
-sudo dnf install -y opencattus-installer
+sudo dnf install -y opencattus
 ```
 
 Then start the installer:
