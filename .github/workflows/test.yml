@@ -259,7 +259,7 @@ jobs:
           REMOTE_HOST: 172.21.1.40
           REMOTE_USER: reposync
           REMOTE_PATH: /mnt/pool1/repos/opencattus
-          OPENCATTUS_REPO_SSH_KEY: ${{ secrets.OPENCATTUS_REPO_SSH_KEY }}
+          REPOSYNC_SSH_KEY: ${{ secrets.REPOSYNC_SSH_KEY }}
         run: |
           set -euo pipefail
 
@@ -273,15 +273,15 @@ jobs:
             -e REMOTE_PATH="${REMOTE_PATH}"
           )
 
-          if [[ -n "${OPENCATTUS_REPO_SSH_KEY}" ]]; then
+          if [[ -n "${REPOSYNC_SSH_KEY}" ]]; then
             key_path="${GITHUB_WORKSPACE}/.opencattus-repo-key"
             install -m 600 /dev/null "${key_path}"
-            printf '%s\n' "${OPENCATTUS_REPO_SSH_KEY}" > "${key_path}"
+            printf '%s\n' "${REPOSYNC_SSH_KEY}" > "${key_path}"
             podman_args+=(-e "SSH_KEY=${key_path}")
           elif ! find "${HOME}/.ssh" -maxdepth 1 -type f \
             \( -name id_ed25519_openhpc -o -name id_ed25519 -o -name id_rsa \) \
             -print -quit | grep -q .; then
-            echo "::notice::Skipping remote RPM repository publish because no SSH key is configured. Set OPENCATTUS_REPO_SSH_KEY or install a runner SSH key to enable automatic publishing."
+            echo "::notice::Skipping remote RPM repository publish because no SSH key is configured. Set REPOSYNC_SSH_KEY or install a runner SSH key to enable automatic publishing."
             podman run "${podman_args[@]}" \
               docker.io/library/rockylinux:9 \
               bash -lc '
