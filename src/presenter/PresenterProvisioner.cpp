@@ -23,6 +23,11 @@ using OS = opencattus::models::OS;
 auto supportedProvisionersFor(const OS& os) -> std::vector<Cluster::Provisioner>
 {
     switch (os.getPlatform()) {
+        case OS::Platform::ubuntu24:
+            return {
+                Cluster::Provisioner::xCAT,
+                Cluster::Provisioner::Confluent,
+            };
         case OS::Platform::el10:
             return { Cluster::Provisioner::Confluent };
         case OS::Platform::el8:
@@ -107,6 +112,19 @@ TEST_CASE("supportedProvisionersFor keeps EL9 xcat and confluent available")
 {
     const auto supported
         = supportedProvisionersFor(OS(OS::Distro::Rocky, OS::Platform::el9, 6));
+
+    CHECK(supported
+        == std::vector<Cluster::Provisioner> {
+            Cluster::Provisioner::xCAT,
+            Cluster::Provisioner::Confluent,
+        });
+}
+
+TEST_CASE("supportedProvisionersFor keeps Ubuntu 24.04 xcat and confluent "
+          "available")
+{
+    const auto supported = supportedProvisionersFor(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4));
 
     CHECK(supported
         == std::vector<Cluster::Provisioner> {

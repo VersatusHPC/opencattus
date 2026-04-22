@@ -25,10 +25,18 @@ ScriptBuilder installScript(
     using namespace opencattus;
     ScriptBuilder builder(osinfo);
 
+    const auto auditPackage
+        = osinfo.getPackageType() == opencattus::models::OS::PackageType::DEB
+        ? std::string_view("auditd")
+        : std::string_view("audit");
+
     builder.addNewLine()
         .addCommand("# Install audit packages")
-        .addPackage("audit")
-        .addPackage("audispd-plugins")
+        .addPackage(auditPackage)
+        .addCommand(
+            "DEBIAN_FRONTEND=noninteractive apt install -y "
+            "audispd-plugins 2>/dev/null || dnf install -y audispd-plugins "
+            "2>/dev/null || :")
         .addCommand("# Configure auditd")
         .addFileTemplate("/etc/audit/auditd.conf", R"EOF(
 #

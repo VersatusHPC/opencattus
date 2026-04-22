@@ -1,4 +1,5 @@
 #include <opencattus/functions.h>
+#include <opencattus/models/os.h>
 #include <opencattus/services/ansible/roles/slurm.h>
 #include <opencattus/services/log.h>
 #include <opencattus/services/runner.h>
@@ -77,6 +78,51 @@ done
 sacct
 )slurm";
 }
+
+std::string buildSlurmServerInstallCommand(const opencattus::models::OS& osinfo)
+{
+    switch (osinfo.getPackageType()) {
+        case opencattus::models::OS::PackageType::RPM:
+            return "dnf -y install ohpc-slurm-server mariadb-server mariadb";
+        case opencattus::models::OS::PackageType::DEB:
+            return "DEBIAN_FRONTEND=noninteractive apt install -y "
+                   "ohpc-slurm-server mariadb-server mariadb-client";
+    }
+
+    std::unreachable();
+}
+
+std::string buildSlurmConfigSeedScript()
+{
+    return R"slurm(
+if test -f /etc/slurm/slurm.conf.ohpc; then
+    \cp /etc/slurm/slurm.conf.ohpc "$slurm_conf"
+elif test -f /etc/slurm/slurm.conf.example; then
+    \cp /etc/slurm/slurm.conf.example "$slurm_conf"
+else
+    cat > "$slurm_conf" <<'EOF'
+ClusterName=cluster
+SlurmctldHost=localhost
+MpiDefault=none
+ProctrackType=proctrack/cgroup
+ReturnToService=1
+SlurmctldPidFile=/var/run/slurmctld.pid
+SlurmctldPort=6817
+SlurmdPidFile=/var/run/slurmd.pid
+SlurmdPort=6818
+SlurmdSpoolDir=/var/spool/slurmd
+SlurmUser=slurm
+StateSaveLocation=/var/spool/slurmctld
+SwitchType=switch/none
+SchedulerType=sched/backfill
+SelectType=select/cons_tres
+SelectTypeParameters=CR_Core_Memory
+SlurmctldLogFile=/var/log/slurmctld.log
+SlurmdLogFile=/var/log/slurmd.log
+EOF
+fi
+)slurm";
+}
 } // namespace
 
 namespace opencattus::services::ansible::roles::slurm {
@@ -120,14 +166,14 @@ void run(const Role& role)
             node.hostname, "hostname missing for node {}", nodeIndex);
         const auto nodeAddress = optional::unwrap(
             node.start_ip, "node_ip missing for node {}", nodeName);
-        nodeDeclarations.emplace_back(buildNodeDeclaration(nodeName,
-            nodeAddress.to_string(), cpusPerNode, sockets, realMemory,
-            coresPerSocket, threadsPerCore));
+        nodeDeclarations.emplace_back(
+            buildNodeDeclaration(nodeName, nodeAddress.to_string(), cpusPerNode,
+                sockets, realMemory, coresPerSocket, threadsPerCore));
     }
 
     runner::shell::fmt(R"del(
 # SLURM configuration
-dnf -y install ohpc-slurm-server mariadb-server mariadb
+{slurmServerInstallCommand}
 {controllerStartupScript}
 
 # Secure the installation, `mysql -u root` will exit with
@@ -201,6 +247,8 @@ chmod 600 /etc/slurm/slurmdbd.conf
 
     )del",
         fmt::arg("controllerStartupScript", buildControllerStartupScript()),
+        fmt::arg(
+            "slurmServerInstallCommand", buildSlurmServerInstallCommand(os())),
         fmt::arg("hostname", answerfile()->hostname.hostname),
         fmt::arg(
             "mariadb_root_pass", answerfile()->slurm.mariadb_root_password),
@@ -209,7 +257,7 @@ chmod 600 /etc/slurm/slurmdbd.conf
     runner::shell::fmt(R"del(
 # Minimal /etc/slurm/slurm.conf
 slurm_conf=/etc/slurm/slurm.conf
-\cp /etc/slurm/slurm.conf.ohpc $slurm_conf
+{slurmConfigSeedScript}
 
 sed -i \
   -e "s/ClusterName=.*/ClusterName={cluster_name}/" \
@@ -228,6 +276,7 @@ sed -i \
     "$slurm_conf"
 
 )del",
+        fmt::arg("slurmConfigSeedScript", buildSlurmConfigSeedScript()),
         fmt::arg("hostname", answerfile()->hostname.hostname),
         fmt::arg("cluster_name", answerfile()->information.cluster_name));
 
@@ -248,8 +297,8 @@ EOF
 
 {controllerActivationScript}
 )del",
-        fmt::arg("controllerActivationScript",
-            buildControllerActivationScript()),
+        fmt::arg(
+            "controllerActivationScript", buildControllerActivationScript()),
         fmt::arg("hostname", answerfile()->hostname.hostname),
         fmt::arg("node_declarations", fmt::join(nodeDeclarations, "\n")),
         fmt::arg("node_prefix", nodesPrefix),
@@ -261,8 +310,8 @@ EOF
 
 TEST_CASE("buildNodeDeclaration pins the management address")
 {
-    CHECK(buildNodeDeclaration("n01", "192.168.30.1", "1", "1", "4096", "1",
-              "1")
+    CHECK(
+        buildNodeDeclaration("n01", "192.168.30.1", "1", "1", "4096", "1", "1")
         == "NodeName=n01 NodeAddr=192.168.30.1 NodeHostName=n01 CPUs=1 "
            "Sockets=1 RealMemory=4096 CoresPerSocket=1 ThreadsPerCore=1 "
            "State=UNKNOWN");
@@ -274,7 +323,8 @@ TEST_CASE("buildControllerStartupScript keeps service ordering explicit")
 
     CHECK(script.contains("systemctl enable munge slurmctld slurmdbd mariadb"));
     CHECK(script.contains("systemctl start munge mariadb"));
-    CHECK_FALSE(script.contains("systemctl enable --now munge slurmctld slurmdbd mariadb"));
+    CHECK_FALSE(script.contains(
+        "systemctl enable --now munge slurmctld slurmdbd mariadb"));
 }
 
 TEST_CASE("buildControllerActivationScript waits for slurmdbd before slurmctld")
@@ -288,4 +338,13 @@ TEST_CASE("buildControllerActivationScript waits for slurmdbd before slurmctld")
         < script.find("systemctl restart slurmctld"));
     CHECK(script.contains("systemctl is-active --quiet slurmctld"));
     CHECK(script.contains("sacct >/dev/null 2>&1"));
+}
+
+TEST_CASE("buildSlurmConfigSeedScript falls back to Ubuntu example config")
+{
+    const auto script = buildSlurmConfigSeedScript();
+
+    CHECK(script.contains("/etc/slurm/slurm.conf.ohpc"));
+    CHECK(script.contains("/etc/slurm/slurm.conf.example"));
+    CHECK(script.contains("ClusterName=cluster"));
 }

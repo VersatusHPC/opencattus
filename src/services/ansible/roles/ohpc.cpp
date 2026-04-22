@@ -1,5 +1,6 @@
 #include <opencattus/services/ansible/roles/ohpc.h>
 #include <opencattus/services/log.h>
+#include <opencattus/services/runner.h>
 #include <opencattus/utils/singleton.h>
 
 #ifdef BUILD_TESTING
@@ -55,6 +56,14 @@ namespace {
             "spack-ohpc", "valgrind-ohpc" };
     }
 
+    std::set<std::string> defaultPackagesForUbuntu24()
+    {
+        return { "gnu15-compilers-ohpc", "openmpi5-gnu15-ohpc",
+            "mpich-ucx-gnu15-ohpc", "mvapich2-gnu15-ohpc", "lmod-ohpc",
+            "lmod-defaults-gnu15-openmpi5-ohpc", "ohpc-autotools", "hwloc-ohpc",
+            "spack-ohpc", "valgrind-ohpc" };
+    }
+
     std::set<std::string> bundlePackagesForEl8(std::string_view bundleId)
     {
         if (bundleId == bundleSerialLibraries) {
@@ -64,10 +73,10 @@ namespace {
             return { "ohpc-gnu12-parallel-libs" };
         }
         if (bundleId == bundleIntelOneAPI) {
-            return {};
+            return { };
         }
 
-        return {};
+        return { };
     }
 
     std::set<std::string> bundlePackagesForEl9(std::string_view bundleId)
@@ -84,7 +93,7 @@ namespace {
                 "ohpc-intel-serial-libs", "ohpc-intel-impi-parallel-libs" };
         }
 
-        return {};
+        return { };
     }
 
     std::set<std::string> bundlePackagesForEl10(std::string_view bundleId)
@@ -101,7 +110,24 @@ namespace {
                 "ohpc-intel-serial-libs", "ohpc-intel-impi-parallel-libs" };
         }
 
-        return {};
+        return { };
+    }
+
+    std::set<std::string> bundlePackagesForUbuntu24(std::string_view bundleId)
+    {
+        if (bundleId == bundleSerialLibraries) {
+            return { "ohpc-gnu15-serial-libs" };
+        }
+        if (bundleId == bundleParallelLibraries) {
+            return { "ohpc-gnu15-parallel-libs" };
+        }
+        if (bundleId == bundleIntelOneAPI) {
+            return { "intel-oneapi-toolkit-release-ohpc",
+                "intel-compilers-devel-ohpc", "intel-mpi-devel-ohpc",
+                "ohpc-intel-serial-libs", "ohpc-intel-impi-parallel-libs" };
+        }
+
+        return { };
     }
 
     std::set<std::string> defaultPackagesFor(const models::OS& os)
@@ -113,6 +139,8 @@ namespace {
                 return defaultPackagesForEl9();
             case models::OS::Platform::el10:
                 return defaultPackagesForEl10();
+            case models::OS::Platform::ubuntu24:
+                return defaultPackagesForUbuntu24();
             default:
                 std::unreachable();
         }
@@ -124,6 +152,7 @@ namespace {
             case models::OS::Platform::el8:
             case models::OS::Platform::el9:
             case models::OS::Platform::el10:
+            case models::OS::Platform::ubuntu24:
                 return { std::string(bundleSerialLibraries),
                     std::string(bundleParallelLibraries) };
             default:
@@ -141,6 +170,8 @@ namespace {
                 return bundlePackagesForEl9(bundleId);
             case models::OS::Platform::el10:
                 return bundlePackagesForEl10(bundleId);
+            case models::OS::Platform::ubuntu24:
+                return bundlePackagesForUbuntu24(bundleId);
             default:
                 std::unreachable();
         }
@@ -166,6 +197,22 @@ namespace {
         return packages;
     }
 
+    std::string buildPackageInstallCommand(
+        const models::OS& os, const std::set<std::string>& packages)
+    {
+        const auto packageList = fmt::format("{}", fmt::join(packages, " "));
+        switch (os.getPackageType()) {
+            case models::OS::PackageType::RPM:
+                return packageList;
+            case models::OS::PackageType::DEB:
+                return fmt::format(
+                    "DEBIAN_FRONTEND=noninteractive apt install -y {}",
+                    packageList);
+        }
+
+        std::unreachable();
+    }
+
 }
 
 void run(const Role& role)
@@ -176,15 +223,22 @@ void run(const Role& role)
     auto ohpcPackages = resolvePackages(utils::singleton::os(),
         utils::singleton::cluster()->getEnabledOpenHPCBundles(),
         utils::singleton::options()->ohpcPackages);
-    utils::singleton::osservice()->install(
-        fmt::format("{}", fmt::join(ohpcPackages, " ")));
+    const auto installCommand
+        = buildPackageInstallCommand(utils::singleton::os(), ohpcPackages);
+
+    if (utils::singleton::os().getPackageType()
+        == models::OS::PackageType::DEB) {
+        opencattus::services::runner::shell::cmd(installCommand);
+    } else {
+        utils::singleton::osservice()->install(installCommand);
+    }
 }
 
 TEST_CASE("resolvePackages keeps the current EL8 defaults explicit")
 {
     const auto packages = resolvePackages(
         models::OS(models::OS::Distro::Rocky, models::OS::Platform::el8, 10),
-        std::nullopt, {});
+        std::nullopt, { });
 
     CHECK(packages.contains("gnu12-compilers-ohpc"));
     CHECK(packages.contains("openmpi4-gnu12-ohpc"));
@@ -208,7 +262,7 @@ TEST_CASE("resolvePackages keeps the current EL9 defaults explicit")
 {
     const auto packages = resolvePackages(
         models::OS(models::OS::Distro::Rocky, models::OS::Platform::el9, 7),
-        std::nullopt, {});
+        std::nullopt, { });
 
     CHECK(packages.contains("gnu15-compilers-ohpc"));
     CHECK(packages.contains("openmpi5-pmix-gnu15-ohpc"));
@@ -231,7 +285,7 @@ TEST_CASE("resolvePackages switches EL10 defaults to OpenHPC 4 toolchains")
 {
     const auto packages = resolvePackages(
         models::OS(models::OS::Distro::Rocky, models::OS::Platform::el10, 1),
-        std::nullopt, {});
+        std::nullopt, { });
 
     CHECK(packages.contains("gnu15-compilers-ohpc"));
     CHECK(packages.contains("openmpi5-pmix-gnu15-ohpc"));
@@ -251,6 +305,29 @@ TEST_CASE("resolvePackages switches EL10 defaults to OpenHPC 4 toolchains")
     CHECK_FALSE(packages.contains("openmpi5-gnu15-ohpc"));
 }
 
+TEST_CASE("resolvePackages keeps Ubuntu 24.04 OpenHPC fork defaults explicit")
+{
+    const auto packages
+        = resolvePackages(models::OS(models::OS::Distro::Ubuntu,
+                              models::OS::Platform::ubuntu24, 4),
+            std::nullopt, { });
+
+    CHECK(packages.contains("gnu15-compilers-ohpc"));
+    CHECK(packages.contains("openmpi5-gnu15-ohpc"));
+    CHECK(packages.contains("mpich-ucx-gnu15-ohpc"));
+    CHECK(packages.contains("mvapich2-gnu15-ohpc"));
+    CHECK(packages.contains("lmod-ohpc"));
+    CHECK(packages.contains("lmod-defaults-gnu15-openmpi5-ohpc"));
+    CHECK(packages.contains("ohpc-autotools"));
+    CHECK(packages.contains("hwloc-ohpc"));
+    CHECK(packages.contains("ohpc-gnu15-serial-libs"));
+    CHECK(packages.contains("ohpc-gnu15-parallel-libs"));
+    CHECK(packages.contains("spack-ohpc"));
+    CHECK(packages.contains("valgrind-ohpc"));
+    CHECK_FALSE(packages.contains("openmpi5-pmix-gnu15-ohpc"));
+    CHECK_FALSE(packages.contains("mpich-ofi-gnu15-ohpc"));
+}
+
 TEST_CASE("resolvePackages preserves explicit package overrides")
 {
     const std::set<std::string> explicitPackages { "custom-ohpc-package" };
@@ -261,6 +338,18 @@ TEST_CASE("resolvePackages preserves explicit package overrides")
     CHECK(packages == explicitPackages);
 }
 
+TEST_CASE("buildPackageInstallCommand uses apt on Ubuntu")
+{
+    const auto command
+        = buildPackageInstallCommand(models::OS(models::OS::Distro::Ubuntu,
+                                         models::OS::Platform::ubuntu24, 4),
+            { "gnu15-compilers-ohpc", "openmpi5-gnu15-ohpc" });
+
+    CHECK(command
+        == "DEBIAN_FRONTEND=noninteractive apt install -y "
+           "gnu15-compilers-ohpc openmpi5-gnu15-ohpc");
+}
+
 TEST_CASE("resolvePackages adds Intel oneAPI and Intel MPI when requested")
 {
     const auto packages = resolvePackages(
@@ -268,7 +357,7 @@ TEST_CASE("resolvePackages adds Intel oneAPI and Intel MPI when requested")
         std::vector<std::string> { std::string(bundleSerialLibraries),
             std::string(bundleParallelLibraries),
             std::string(bundleIntelOneAPI) },
-        {});
+        { });
 
     CHECK(packages.contains("ohpc-gnu15-serial-libs"));
     CHECK(packages.contains("ohpc-gnu15-parallel-libs"));

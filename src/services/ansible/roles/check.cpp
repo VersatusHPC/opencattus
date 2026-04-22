@@ -1,4 +1,5 @@
 #include <opencattus/functions.h>
+#include <opencattus/models/os.h>
 #include <opencattus/services/ansible/roles/check.h>
 #include <opencattus/services/log.h>
 #include <opencattus/services/runner.h>
@@ -30,6 +31,14 @@ auto isNewerKernelAvailable(
 void run(const Role& role)
 {
     using namespace opencattus::utils;
+
+    if (singleton::os().getPackageType()
+        == opencattus::models::OS::PackageType::DEB) {
+        runner::shell::cmd("DEBIAN_FRONTEND=noninteractive apt update");
+        LOG_WARN("Skipping kernel freshness check on Ubuntu; the existing "
+                 "check is RPM-specific");
+        return;
+    }
 
     // OFED installation fails with ISO kernel, require update and reboot
     runner::shell::cmd("dnf makecache");

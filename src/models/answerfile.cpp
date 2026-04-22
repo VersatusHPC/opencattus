@@ -26,6 +26,7 @@
 #include <opencattus/services/log.h>
 #include <opencattus/services/options.h>
 #include <opencattus/services/osservice.h>
+#include <opencattus/utils/ranges.h>
 #include <opencattus/utils/singleton.h>
 #include <opencattus/utils/string.h>
 
@@ -162,7 +163,7 @@ namespace {
         if (error == std::errc::result_out_of_range) {
             fail("value is out of range");
         }
-        if (error != std::errc {} || ptr != end) {
+        if (error != std::errc { } || ptr != end) {
             fail("not a number");
         }
         if (!allowZero && parsed == 0) {
@@ -1021,7 +1022,7 @@ auto AnswerFile::AFNodes::nodesNames() const -> std::vector<std::string>
         nodeIdx++;
         return utils::optional::unwrap(
             node.hostname, "hostname missing for node {}", nodeIdx);
-    }) | std::ranges::to<std::vector>();
+    }) | opencattus::utils::ranges::to<std::vector>();
 }
 
 bool AnswerFile::checkEnabled(const std::string& section)
@@ -1121,7 +1122,7 @@ void AnswerFile::loadRepositories()
         return;
     }
 
-    repositories.enabled = std::vector<std::string> {};
+    repositories.enabled = std::vector<std::string> { };
     const auto enabled = m_keyfile.getStringOpt("repositories", "enabled");
     if (!enabled.has_value() || enabled->empty()) {
         return;
@@ -1139,7 +1140,7 @@ void AnswerFile::loadOHPC()
         return;
     }
 
-    ohpc.enabled = std::vector<std::string> {};
+    ohpc.enabled = std::vector<std::string> { };
     const auto enabled = m_keyfile.getStringOpt("ohpc", "enabled");
     if (!enabled.has_value() || enabled->empty()) {
         return;

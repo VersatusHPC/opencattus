@@ -34,6 +34,7 @@
 #include <opencattus/services/osservice.h>
 #include <opencattus/services/repos.h>
 #include <opencattus/services/runner.h>
+#include <opencattus/utils/ranges.h>
 #include <opencattus/utils/singleton.h>
 #include <opencattus/utils/string.h>
 
@@ -578,7 +579,7 @@ struct RepoAssembler final {
         const UpstreamRepo<UChecker>& upstream, const bool enabled = false,
         const bool forceUpstream = false)
     {
-        auto repo = RPMRepository {};
+        auto repo = RPMRepository { };
         repo.group(static_cast<std::string>(repoid.id));
         repo.id(static_cast<std::string>(repoid.id));
         repo.name(static_cast<std::string>(repoid.name));
@@ -666,7 +667,7 @@ public:
     void insert(const std::string& filename, RepoConfig& value)
     {
         if (!m_files.contains(filename)) {
-            m_files.emplace(filename, std::vector<RepoConfig> {});
+            m_files.emplace(filename, std::vector<RepoConfig> { });
         }
         m_files.at(filename).emplace_back(value);
     }
@@ -684,7 +685,7 @@ public:
     {
         return m_files
             | std::views::transform([](const auto& pair) { return pair.first; })
-            | std::ranges::to<std::vector>();
+            | opencattus::utils::ranges::to<std::vector>();
     }
 
     // Find a RepoConfig by repository id, if it exists
@@ -1070,9 +1071,11 @@ std::string defaultOpenHPCVersionFor(const OS& osinfo)
             return "3";
         case OS::Platform::el10:
             return "4";
+        case OS::Platform::ubuntu24:
+            return "versatushpc-4";
         default:
             throw std::runtime_error(
-                fmt::format("Unsupported OpenHPC repository baseline for EL{}",
+                fmt::format("Unsupported OpenHPC repository baseline for {}",
                     osinfo.getMajorVersion()));
     }
 }
@@ -1139,6 +1142,10 @@ bool usesDocaMajorVersionRepo(std::string_view ofedVersion)
 std::string defaultDOCARepoTargetFor(
     const OS& osinfo, std::string_view ofedVersion)
 {
+    if (osinfo.getDistro() == OS::Distro::Ubuntu) {
+        return "";
+    }
+
     if (usesDocaMajorVersionRepo(ofedVersion)) {
         switch (osinfo.getPlatform()) {
             case OS::Platform::el8:
@@ -1178,15 +1185,21 @@ std::string defaultCUDAGPGKeyFor(const OS& osinfo)
             return "D42D0685.pub";
         case OS::Platform::el10:
             return "CDF6BA43.pub";
+        case OS::Platform::ubuntu24:
+            return "";
         default:
             throw std::runtime_error(
-                fmt::format("Unsupported CUDA repository baseline for EL{}",
+                fmt::format("Unsupported CUDA repository baseline for {}",
                     osinfo.getMajorVersion()));
     }
 }
 
 std::string defaultRHELCodeReadyMirrorRepoFor(const OS& osinfo)
 {
+    if (osinfo.getDistro() == OS::Distro::Ubuntu) {
+        return "";
+    }
+
     const auto arch = opencattus::utils::enums::toString(osinfo.getArch());
     switch (osinfo.getPlatform()) {
         case OS::Platform::el8:
@@ -1205,6 +1218,10 @@ std::string defaultRHELCodeReadyMirrorRepoFor(const OS& osinfo)
 
 std::string defaultRHELBaseMirrorGPGKeyFor(const OS& osinfo)
 {
+    if (osinfo.getDistro() == OS::Distro::Ubuntu) {
+        return "";
+    }
+
     switch (osinfo.getPlatform()) {
         case OS::Platform::el8:
         case OS::Platform::el9:
@@ -1220,6 +1237,10 @@ std::string defaultRHELBaseMirrorGPGKeyFor(const OS& osinfo)
 
 std::string defaultRHELCodeReadyMirrorGPGKeyFor(const OS& osinfo)
 {
+    if (osinfo.getDistro() == OS::Distro::Ubuntu) {
+        return "";
+    }
+
     switch (osinfo.getPlatform()) {
         case OS::Platform::el8:
         case OS::Platform::el9:
@@ -1658,6 +1679,9 @@ TEST_CASE("defaultOpenHPCVersionFor maps the supported EL releases")
     CHECK(defaultOpenHPCVersionFor(
               OS(models::OS::Distro::Rocky, OS::Platform::el10, 1))
         == "4");
+    CHECK(defaultOpenHPCVersionFor(
+              OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+        == "versatushpc-4");
 }
 
 // Installs and enable/disable RPM repositories
@@ -1746,13 +1770,13 @@ public:
         try {
             auto path = fmt::format("{}/{}", basedir, repoFileName);
             auto repos = RPMRepositoryFile(path).repos()
-                // We copy to cons unique to express that these values cannot
-                // be changed through this API
+                // We copy to const unique to express that these values cannot
+                // be changed through this API.
                 | std::views::transform([](auto&& pair) {
                       return std::make_unique<const RPMRepository>(
                           *pair.second);
                   })
-                | std::ranges::to<
+                | opencattus::utils::ranges::to<
                     std::vector<std::unique_ptr<const IRepository>>>();
             return repos;
         } catch (const std::out_of_range& e) {
@@ -1785,7 +1809,7 @@ public:
     void enable(const std::vector<std::string>& repos, bool value)
     {
         auto byIdPtr = [](const std::shared_ptr<RPMRepositoryFile>& rptr) {
-            return std::hash<std::string> {}(rptr->path());
+            return std::hash<std::string> { }(rptr->path());
         };
         std::unordered_set<std::shared_ptr<RPMRepositoryFile>,
             decltype(byIdPtr)>
@@ -1814,7 +1838,7 @@ public:
     {
         // Function to iterate over map by id
         constexpr auto byId
-            = [](auto& repo) { return std::hash<std::string> {}(repo.id()); };
+            = [](auto& repo) { return std::hash<std::string> { }(repo.id()); };
 
         std::unordered_set<RPMRepository, decltype(byId)> output;
         for (auto& [_id1, repoFile] : m_filesIdx) {
@@ -1825,7 +1849,9 @@ public:
 
         return output | std::views::transform([](auto&& repo) {
             return std::make_unique<const RPMRepository>(repo);
-        }) | std::ranges::to<std::vector<std::unique_ptr<const IRepository>>>();
+        })
+            | opencattus::utils::ranges::to<
+                std::vector<std::unique_ptr<const IRepository>>>();
     }
 };
 
@@ -2077,7 +2103,7 @@ TEST_CASE("RepoNames")
     struct ShouldUseVaultService final {
         static bool shouldUseVault(const OS& osinfo) { return false; }
     };
-    const auto enabler = RepoNames<ShouldUseVaultService> {};
+    const auto enabler = RepoNames<ShouldUseVaultService> { };
     const RepoConfigVars& vars = RepoConfigVars {
         .arch = "x86_64",
         .beegfsVersion = "beegfs_7.3.3",
@@ -2382,7 +2408,7 @@ TEST_SUITE("opencattus::services::repos [slow]")
 #ifdef BUILD_TESTING
         using namespace opencattus::services;
         opencattus::services::initializeSingletonsOptions(
-            std::make_unique<const Options>(Options {}));
+            std::make_unique<const Options>(Options { }));
         const auto repos = std::filesystem::path("./repos");
         REQUIRE(opencattus::functions::exists(repos / "repos.conf"));
         const auto confs
@@ -2494,7 +2520,7 @@ std::vector<std::string> expandSelectedRepositoryIds(
 
     std::vector<std::string> expanded;
     expanded.reserve(repositoryIds.size() + 2);
-    auto seen = std::unordered_set<std::string> {};
+    auto seen = std::unordered_set<std::string> { };
 
     const auto append
         = [&](const std::string& repoId, auto&& appendSelf) -> void {
@@ -2518,12 +2544,41 @@ std::vector<std::string> expandSelectedRepositoryIds(
     return expanded;
 }
 
+const OS& selectRepositoryBootstrapOS(const OS& headnodeOS, const OS& computeOS)
+{
+    if (headnodeOS.getPackageType() != computeOS.getPackageType()) {
+        return headnodeOS;
+    }
+
+    return computeOS;
+}
+
 std::vector<RepoManager::RepositorySelection>
 RepoManager::defaultRepositoriesFor(const OS& osinfo,
     std::string_view ofedVersion,
     const std::optional<std::vector<std::string>>& enabledRepositories,
     const std::optional<std::vector<std::string>>& enabledOpenHPCBundles)
 {
+    if (osinfo.getDistro() == OS::Distro::Ubuntu) {
+        static_cast<void>(ofedVersion);
+        static_cast<void>(enabledRepositories);
+        static_cast<void>(enabledOpenHPCBundles);
+        return {
+            { .id = "ubuntu-main",
+                .name = "Ubuntu 24.04 main, restricted, universe, multiverse",
+                .enabled = true },
+            { .id = "ubuntu-updates",
+                .name = "Ubuntu 24.04 updates",
+                .enabled = true },
+            { .id = "ubuntu-security",
+                .name = "Ubuntu 24.04 security",
+                .enabled = true },
+            { .id = "OpenHPC",
+                .name = "VersatusHPC OpenHPC 4.x for Ubuntu 24.04",
+                .enabled = true },
+        };
+    }
+
     struct NoVaultLookup final {
         static bool shouldUseVault(const OS& osinfo)
         {
@@ -2585,11 +2640,23 @@ TEST_CASE("expandSelectedRepositoryIds enables BeeGFS monitoring dependencies")
         == std::vector<std::string> { "beegfs", "grafana", "influxdata" });
 }
 
+TEST_CASE("selectRepositoryBootstrapOS uses head node for mixed package types")
+{
+    const OS ubuntuHead(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+    const OS elCompute(OS::Distro::Rocky, OS::Platform::el9, 6);
+    const OS elHead(OS::Distro::Rocky, OS::Platform::el9, 6);
+    const OS ubuntuCompute(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+
+    CHECK(&selectRepositoryBootstrapOS(ubuntuHead, elCompute) == &ubuntuHead);
+    CHECK(&selectRepositoryBootstrapOS(elHead, ubuntuCompute) == &elHead);
+    CHECK(&selectRepositoryBootstrapOS(elHead, elCompute) == &elCompute);
+}
+
 TEST_CASE("defaultRepositoriesFor keeps mandatory repositories enabled when "
           "optional repositories are selected")
 {
     opencattus::services::initializeSingletonsOptions(
-        std::make_unique<const Options>(Options {}));
+        std::make_unique<const Options>(Options { }));
     const auto osinfo
         = OS(models::OS::Distro::Rocky, OS::Platform::el9, 6, OS::Arch::x86_64);
     const auto selections = RepoManager::defaultRepositoriesFor(
@@ -2618,7 +2685,7 @@ TEST_CASE("defaultRepositoriesFor enables oneAPI when the Intel OpenHPC "
           "bundle is selected")
 {
     opencattus::services::initializeSingletonsOptions(
-        std::make_unique<const Options>(Options {}));
+        std::make_unique<const Options>(Options { }));
     const auto osinfo = OS(
         models::OS::Distro::Rocky, OS::Platform::el10, 1, OS::Arch::x86_64);
     const auto selections = RepoManager::defaultRepositoriesFor(osinfo,
@@ -2628,6 +2695,22 @@ TEST_CASE("defaultRepositoriesFor enables oneAPI when the Intel OpenHPC "
         [](const auto& selection) { return selection.id == "oneAPI"; });
     REQUIRE(it != selections.end());
     CHECK(it->enabled);
+}
+
+TEST_CASE("defaultRepositoriesFor exposes Ubuntu 24.04 mandatory repositories")
+{
+    opencattus::services::initializeSingletonsOptions(
+        std::make_unique<const Options>(Options { }));
+    const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24,
+        4, OS::Arch::x86_64);
+    const auto selections = RepoManager::defaultRepositoriesFor(
+        osinfo, "latest", std::nullopt, std::nullopt);
+
+    CHECK(selections.size() == 4);
+    CHECK(std::ranges::all_of(
+        selections, [](const auto& selection) { return selection.enabled; }));
+    CHECK(std::ranges::any_of(selections,
+        [](const auto& selection) { return selection.id == "OpenHPC"; }));
 }
 
 inline void RPMRepository::valid() const
@@ -2654,6 +2737,116 @@ struct RPMRepositoryGenerator {
     }
 };
 
+std::string ubuntuOpenHpcRepositoryUrl(const OS& osinfo)
+{
+    switch (osinfo.getPlatform()) {
+        case OS::Platform::ubuntu24:
+            return "https://repos.versatushpc.com.br/openhpc/"
+                   "versatushpc-4/Ubuntu_24.04/";
+        default:
+            throw std::runtime_error(fmt::format(
+                "Unsupported Ubuntu OpenHPC repository baseline for {}",
+                osinfo.getVersion()));
+    }
+}
+
+std::string ubuntuOpenHpcRepositoryContents(const OS& osinfo)
+{
+    return fmt::format(
+        "deb [trusted=yes] {} ./\n", ubuntuOpenHpcRepositoryUrl(osinfo));
+}
+
+std::string ubuntuXcatRepositoryContents(const OS& osinfo)
+{
+    if (osinfo.getPlatform() != OS::Platform::ubuntu24) {
+        throw std::runtime_error(
+            fmt::format("Unsupported Ubuntu xCAT repository baseline for {}",
+                osinfo.getVersion()));
+    }
+
+    // xCAT publishes a Jammy xcat-core suite, but xcat-dep currently stops at
+    // Focal. Keep the compatibility split explicit until upstream publishes a
+    // native Noble dependency suite.
+    return "deb [trusted=yes] "
+           "https://xcat.org/files/xcat/repos/apt/latest/xcat-core jammy "
+           "main\n"
+           "deb [trusted=yes] "
+           "https://xcat.org/files/xcat/repos/apt/latest/xcat-dep focal "
+           "main\n";
+}
+
+TEST_CASE("ubuntuOpenHpcRepositoryUrl uses the VersatusHPC Noble fork")
+{
+    const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24,
+        4, OS::Arch::x86_64);
+
+    CHECK(ubuntuOpenHpcRepositoryUrl(osinfo)
+        == "https://repos.versatushpc.com.br/openhpc/versatushpc-4/"
+           "Ubuntu_24.04/");
+}
+
+TEST_CASE("ubuntuOpenHpcRepositoryContents generates an apt source entry")
+{
+    const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24,
+        4, OS::Arch::x86_64);
+
+    CHECK(ubuntuOpenHpcRepositoryContents(osinfo)
+        == "deb [trusted=yes] https://repos.versatushpc.com.br/openhpc/"
+           "versatushpc-4/Ubuntu_24.04/ ./\n");
+}
+
+TEST_CASE("ubuntuXcatRepositoryContents uses the Ubuntu compatibility suites")
+{
+    const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24,
+        4, OS::Arch::x86_64);
+
+    CHECK(ubuntuXcatRepositoryContents(osinfo)
+        == "deb [trusted=yes] https://xcat.org/files/xcat/repos/apt/latest/"
+           "xcat-core jammy main\n"
+           "deb [trusted=yes] https://xcat.org/files/xcat/repos/apt/latest/"
+           "xcat-dep focal main\n");
+}
+
+void writeUbuntuOpenHpcRepositoryFile(
+    const OS& osinfo, const std::filesystem::path& path)
+{
+    LOG_INFO("Writing Ubuntu OpenHPC repository file {}", path.string());
+    opencattus::services::files::write(
+        path, ubuntuOpenHpcRepositoryContents(osinfo));
+}
+
+void writeUbuntuXcatRepositoryFile(
+    const OS& osinfo, const std::filesystem::path& path)
+{
+    LOG_INFO("Writing Ubuntu xCAT repository file {}", path.string());
+    opencattus::services::files::write(
+        path, ubuntuXcatRepositoryContents(osinfo));
+}
+
+void initializeDebianHeadnodeRepositories(const OS& osinfo)
+{
+    if (osinfo.getDistro() != OS::Distro::Ubuntu) {
+        throw std::logic_error(
+            "Debian repository initialization is only implemented for Ubuntu");
+    }
+
+    // The VersatusHPC Ubuntu OpenHPC fork publishes a signed Release file, but
+    // the public key is not published next to the repository yet. Keep this
+    // explicit so apt can consume the repo while the repository signing path is
+    // finished.
+    runner::shell::cmd("DEBIAN_FRONTEND=noninteractive apt update");
+    runner::shell::cmd(
+        "DEBIAN_FRONTEND=noninteractive apt install -y ca-certificates");
+    writeUbuntuOpenHpcRepositoryFile(
+        osinfo, "/etc/apt/sources.list.d/opencattus-openhpc.list");
+    if (opencattus::utils::singleton::cluster()->getProvisioner()
+        == models::Cluster::Provisioner::xCAT) {
+        writeUbuntuXcatRepositoryFile(
+            osinfo, "/etc/apt/sources.list.d/opencattus-xcat.list");
+    }
+    runner::shell::cmd("DEBIAN_FRONTEND=noninteractive apt update");
+}
+
 void RepoManager::initializeDefaultRepositories()
 {
     auto opts = opencattus::utils::singleton::options();
@@ -2663,7 +2856,16 @@ void RepoManager::initializeDefaultRepositories()
     }
     LOG_INFO("RepoManager initialization");
     auto cluster = opencattus::Singleton<models::Cluster>::get();
-    const auto& osinfo = cluster->getComputeNodeOS();
+    const auto& computeOS = cluster->getComputeNodeOS();
+    const auto& headnodeOS = cluster->getHeadnode().getOS();
+    const auto& osinfo = selectRepositoryBootstrapOS(headnodeOS, computeOS);
+
+    if (headnodeOS.getPackageType() != computeOS.getPackageType()) {
+        LOG_WARN("Head node and compute nodes use different package families. "
+                 "Initializing head-node repositories here; the provisioner "
+                 "will attach compute-node repositories to the node image.");
+    }
+
     const auto ofedVersion = cluster->getOFED().has_value()
         ? cluster->getOFED()->getVersion()
         : std::string("latest");
@@ -2700,7 +2902,7 @@ void RepoManager::initializeDefaultRepositories()
                                "config-manager --save --setopt=keepcache=True");
         } break;
         case OS::PackageType::DEB:
-            throw std::logic_error("DEB packages not implemented");
+            initializeDebianHeadnodeRepositories(osinfo);
             break;
     }
 }

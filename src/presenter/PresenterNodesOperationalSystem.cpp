@@ -38,6 +38,16 @@ auto defaultVersionComboFor(const OS& os) -> PresenterNodesVersionCombo
         static_cast<int>(os.getMinorVersion()), os.getArch() };
 }
 
+auto defaultVersionComboFor(const OS::Distro distro, const OS& fallbackOS)
+    -> PresenterNodesVersionCombo
+{
+    if (distro == OS::Distro::Ubuntu) {
+        return { 24, 4, fallbackOS.getArch() };
+    }
+
+    return defaultVersionComboFor(fallbackOS);
+}
+
 auto parseVersionString(std::string_view raw)
     -> std::optional<std::pair<int, int>>
 {
@@ -59,7 +69,7 @@ auto parseVersionString(std::string_view raw)
 auto parseArchitecture(std::string_view raw) -> std::optional<OS::Arch>
 {
     const auto normalized = opencattus::utils::string::lower(std::string(raw));
-    if (normalized.contains("x86_64")) {
+    if (normalized.contains("x86_64") || normalized.contains("amd64")) {
         return OS::Arch::x86_64;
     }
 
@@ -85,10 +95,18 @@ auto makeOperatingSystem(
         case 10:
             return OS(distro, OS::Platform::el10,
                 static_cast<unsigned>(minorVersion), arch);
+        case 24:
+            if (distro == OS::Distro::Ubuntu && minorVersion == 4) {
+                return OS(distro, OS::Platform::ubuntu24,
+                    static_cast<unsigned>(minorVersion), arch);
+            }
+            break;
         default:
-            throw std::runtime_error(fmt::format(
-                "Unsupported OS version {}.{}", majorVersion, minorVersion));
+            break;
     }
+
+    throw std::runtime_error(fmt::format(
+        "Unsupported OS version {}.{}", majorVersion, minorVersion));
 }
 
 auto inferVersionComboFromIso(OS::Distro distro, std::string_view isoName)
@@ -105,6 +123,16 @@ auto inferVersionComboFromIso(OS::Distro distro, std::string_view isoName)
     if (distro == OS::Distro::OL) {
         const std::regex olPattern(R"(R([0-9]+)-U([0-9]+))");
         if (!std::regex_search(isoString, match, olPattern)) {
+            return std::nullopt;
+        }
+
+        return PresenterNodesVersionCombo { std::stoi(match[1].str()),
+            std::stoi(match[2].str()), arch.value() };
+    }
+
+    if (distro == OS::Distro::Ubuntu) {
+        const std::regex ubuntuPattern(R"(ubuntu-([0-9]+)\.([0-9]+))");
+        if (!std::regex_search(isoString, match, ubuntuPattern)) {
             return std::nullopt;
         }
 
@@ -132,6 +160,8 @@ auto isoMatchesDistro(const OS::Distro distro, std::string_view isoName) -> bool
             return isoName.contains("Rocky");
         case OS::Distro::AlmaLinux:
             return isoName.contains("AlmaLinux");
+        case OS::Distro::Ubuntu:
+            return isoName.contains("ubuntu-");
     }
 
     return false;
@@ -148,16 +178,20 @@ auto isoSearchToken(const OS::Distro distro) -> std::string_view
             return "Rocky";
         case OS::Distro::AlmaLinux:
             return "AlmaLinux";
+        case OS::Distro::Ubuntu:
+            return "ubuntu-";
     }
 
-    return {};
+    return { };
 }
 
 auto exampleIsoName(const OS::Distro distro,
     const PresenterNodesVersionCombo& version) -> std::string
 {
     const auto [major, minor, arch] = version;
-    const auto architecture = opencattus::utils::enums::toString(arch);
+    const auto architecture = distro == OS::Distro::Ubuntu
+        ? std::string("amd64")
+        : opencattus::utils::enums::toString(arch);
 
     switch (distro) {
         case OS::Distro::RHEL:
@@ -172,9 +206,12 @@ auto exampleIsoName(const OS::Distro distro,
         case OS::Distro::AlmaLinux:
             return fmt::format(
                 "AlmaLinux-{}.{}-{}-dvd.iso", major, minor, architecture);
+        case OS::Distro::Ubuntu:
+            return fmt::format(
+                "ubuntu-{}.04.4-live-server-{}.iso", major, architecture);
     }
 
-    return {};
+    return { };
 }
 
 auto formatNoMatchingIsoMessage(const fs::path& directory,
@@ -233,7 +270,10 @@ std::string PresenterNodesOperationalSystem::getDownloadURL(
     auto [majorVersion, minorVersion, arch] = version;
 
     fmt::dynamic_format_arg_store<fmt::format_context> store;
-    store.push_back(fmt::arg("arch", opencattus::utils::enums::toString(arch)));
+    store.push_back(fmt::arg("arch",
+        distro == OS::Distro::Ubuntu
+            ? std::string("amd64")
+            : opencattus::utils::enums::toString(arch)));
     store.push_back(fmt::arg("major", majorVersion));
     store.push_back(fmt::arg("minor", minorVersion));
 
@@ -256,6 +296,14 @@ std::string PresenterNodesOperationalSystem::getDownloadURL(
                                 "{major}.{minor}/isos/{arch}/"
                                 "AlmaLinux-{major}.{minor}-{arch}-dvd.iso",
                 store);
+        case OS::Distro::Ubuntu:
+            if (majorVersion != 24 || minorVersion != 4) {
+                throw std::runtime_error(
+                    "Only Ubuntu 24.04 ISO download is supported");
+            }
+            return fmt::vformat("https://releases.ubuntu.com/24.04/"
+                                "ubuntu-24.04.4-live-server-{arch}.iso",
+                store);
     }
 
     return "?";
@@ -265,7 +313,7 @@ PresenterNodesVersionCombo PresenterNodesOperationalSystem::promptVersion(
     OS::Distro distro, std::optional<PresenterNodesVersionCombo> initial)
 {
     auto [defaultMajor, defaultMinor, defaultArch] = initial.value_or(
-        defaultVersionComboFor(m_model->getHeadnode().getOS()));
+        defaultVersionComboFor(distro, m_model->getHeadnode().getOS()));
 
     auto metadata = std::to_array<std::pair<std::string, std::string>>(
         { { Messages::OperationalSystemVersion::version,
@@ -306,12 +354,14 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
     distroNames.emplace_back("AlmaLinux");
     distroNames.emplace_back("Rocky Linux");
     distroNames.emplace_back("Oracle Linux");
+    distroNames.emplace_back("Ubuntu");
 
     std::map<std::string, OS::Distro> distros;
     distros["Red Hat Enterprise Linux"] = OS::Distro::RHEL;
     distros["AlmaLinux"] = OS::Distro::AlmaLinux;
     distros["Rocky Linux"] = OS::Distro::Rocky;
     distros["Oracle Linux"] = OS::Distro::OL;
+    distros["Ubuntu"] = OS::Distro::Ubuntu;
 
     const auto downloadSelectedDistro
         = [&](const std::string&, OS::Distro distro) -> bool {
@@ -406,7 +456,8 @@ PresenterNodesOperationalSystem::PresenterNodesOperationalSystem(
                 if (isos->empty()) {
                     const auto noneFoundMessage = formatNoMatchingIsoMessage(
                         isoRoot, selectedDistro->second,
-                        defaultVersionComboFor(m_model->getHeadnode().getOS()));
+                        defaultVersionComboFor(selectedDistro->second,
+                            m_model->getHeadnode().getOS()));
                     m_view->message(Messages::title, noneFoundMessage.c_str());
                     if (m_view->yesNoQuestion(Messages::title,
                             Messages::OperationalSystem::downloadMissing,
@@ -460,6 +511,16 @@ TEST_CASE("inferVersionComboFromIso parses Oracle Linux ISO names")
     CHECK(inferred.value() == expected);
 }
 
+TEST_CASE("inferVersionComboFromIso parses Ubuntu ISO names")
+{
+    const auto inferred = inferVersionComboFromIso(
+        OS::Distro::Ubuntu, "ubuntu-24.04.4-live-server-amd64.iso");
+
+    REQUIRE(inferred.has_value());
+    const PresenterNodesVersionCombo expected { 24, 4, OS::Arch::x86_64 };
+    CHECK(inferred.value() == expected);
+}
+
 TEST_CASE("makeOperatingSystem maps major versions to supported platforms")
 {
     const auto os
@@ -467,4 +528,11 @@ TEST_CASE("makeOperatingSystem maps major versions to supported platforms")
 
     CHECK(os.getPlatform() == OS::Platform::el10);
     CHECK(os.getVersion() == "10.1");
+
+    const auto ubuntu
+        = makeOperatingSystem(OS::Distro::Ubuntu, { 24, 4, OS::Arch::x86_64 });
+
+    CHECK(ubuntu.getPlatform() == OS::Platform::ubuntu24);
+    CHECK(ubuntu.getPackageType() == OS::PackageType::DEB);
+    CHECK(ubuntu.getVersion() == "24.04");
 }

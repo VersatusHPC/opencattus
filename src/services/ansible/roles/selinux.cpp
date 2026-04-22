@@ -31,6 +31,12 @@ void configureSELinuxMode()
 {
     LOG_INFO("Setting up SELinux")
 
+    if (cluster()->getHeadnode().getOS().getPackageType()
+        == opencattus::models::OS::PackageType::DEB) {
+        LOG_INFO("Skipping SELinux configuration on Ubuntu");
+        return;
+    }
+
     switch (cluster()->getSELinux()) {
         case opencattus::models::Cluster::SELinuxMode::Permissive:
             ::runner()->executeCommand("setenforce 0");

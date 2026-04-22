@@ -8,6 +8,7 @@
 #include <opencattus/functions.h>
 #include <opencattus/network.h>
 #include <opencattus/services/log.h>
+#include <opencattus/utils/ranges.h>
 
 #include <cerrno>
 #include <cstring>
@@ -56,7 +57,7 @@ namespace {
  */
 class ifaddrslist {
 private:
-    ifaddrs* m_ptr {};
+    ifaddrs* m_ptr { };
 
 public:
     // The const iterator class
@@ -270,7 +271,8 @@ std::vector<std::string> Connection::fetchInterfaces()
         interfaces.emplace(ifa.ifa_name);
     }
 
-    return interfaces | std::ranges::to<std::vector<std::string>>();
+    return interfaces
+        | opencattus::utils::ranges::to<std::vector<std::string>>();
 }
 
 std::optional<std::string_view> Connection::getMAC() const { return m_mac; }
@@ -378,7 +380,7 @@ address Connection::fetchAddress(const std::string& interface)
     }
 
     freeifaddrs(ifaddr);
-    return {};
+    return { };
     throw std::runtime_error(fmt::format(
         "Interface {} does not have an IP address defined", interface));
 }

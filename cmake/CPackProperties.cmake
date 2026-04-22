@@ -4,6 +4,7 @@ if(PROJECT_VERSION_PATCH GREATER 0)
 endif()
 
 set(OPENCATTUS_RPM_RELEASE "1" CACHE STRING "RPM package release")
+set(OPENCATTUS_DEB_RELEASE "1" CACHE STRING "DEB package release")
 
 set(CPACK_GENERATOR "RPM")
 set(CPACK_SOURCE_GENERATOR "TGZ")
@@ -55,5 +56,18 @@ set(CPACK_RPM_SPEC_MORE_DEFINE
         "%define __brp_check_rpaths %{nil}
 %global _enable_debug_package 0
 %global debug_package %{nil}")
+
+set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
+set(CPACK_DEBIAN_PACKAGE_NAME "${CPACK_PACKAGE_NAME}")
+set(CPACK_DEBIAN_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION}")
+set(CPACK_DEBIAN_PACKAGE_RELEASE "${OPENCATTUS_DEB_RELEASE}")
+set(CPACK_DEBIAN_PACKAGE_SECTION "admin")
+set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${CPACK_PACKAGE_CONTACT}")
+set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "${CPACK_PACKAGE_HOMEPAGE_URL}")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_PACKAGE_PROVIDES "opencattus-installer")
+set(CPACK_DEBIAN_PACKAGE_BREAKS "opencattus-installer (<= 1.0-1), opencattus-installer-debug (<= 1.0-6)")
+set(CPACK_DEBIAN_PACKAGE_REPLACES "opencattus-installer (<= 1.0-1), opencattus-installer-debug (<= 1.0-6)")
 
 include(CPack)

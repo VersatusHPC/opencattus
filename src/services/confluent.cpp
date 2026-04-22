@@ -136,6 +136,40 @@ std::string buildConfluentRepoRpmUrl(const models::OS& os)
 
 std::string buildConfluentBootstrapCommands(const models::OS& os)
 {
+    if (os.getPackageType() == models::OS::PackageType::DEB) {
+        return R"(
+# Add the Confluent repository
+DEBIAN_FRONTEND=noninteractive apt update
+DEBIAN_FRONTEND=noninteractive apt install -y ca-certificates wget
+wget -q -O /etc/apt/trusted.gpg.d/confluent.gpg https://hpc.lenovo.com/apt/latest/lenovo-hpc.key
+cat > /etc/apt/sources.list.d/confluent.sources <<'EOF'
+Types: deb
+URIs: https://hpc.lenovo.com/apt/latest/noble
+Suites: noble
+Components: main
+Signed-By: /etc/apt/trusted.gpg.d/confluent.gpg
+EOF
+
+# Install required packages
+DEBIAN_FRONTEND=noninteractive apt update
+DEBIAN_FRONTEND=noninteractive apt install -y lenovo-confluent tftpd-hpa dnsmasq
+systemctl enable confluent --now
+systemctl enable apache2 --now
+systemctl enable tftpd-hpa --now
+systemctl stop dnsmasq || :
+systemctl enable dnsmasq
+
+# Enable the Confluent environment
+test -f /etc/profile.d/confluent_env.sh
+set +xeu # confluent_env.sh has undefined variables
+source /etc/profile.d/confluent_env.sh
+set -xeu
+command -v confluent2hosts >/dev/null
+command -v osdeploy >/dev/null
+command -v imgutil >/dev/null
+)";
+    }
+
     return fmt::format(R"(
 # Add the Confluent repository
 rpm -q lenovo-hpc-yum >/dev/null 2>&1 || rpm -Uvh {repoRpmUrl}
@@ -178,12 +212,172 @@ std::string buildConfluentImageName(const models::OS& os)
         case models::OS::Distro::OL:
             distro = "ol";
             break;
+        case models::OS::Distro::Ubuntu:
+            return fmt::format("ubuntu{}-{}", os.getVersion(),
+                opencattus::utils::enums::toString(os.getArch()));
         default:
             std::unreachable();
     }
 
     return fmt::format("{}-{}-{}", distro, os.getVersion(),
         opencattus::utils::enums::toString(os.getArch()));
+}
+
+std::string buildConfluentImageSourceResolutionScript(
+    const models::OS& os, std::string_view image)
+{
+    if (os.getDistro() == models::OS::Distro::Ubuntu) {
+        return R"(# Ubuntu imgutil builds from the build system repositories.
+# Confluent does not support imgutil build --source for Ubuntu.
+)";
+    }
+
+    return fmt::format(R"(export confluent_image_source="{image}"
+if ! test -d "/var/lib/confluent/distributions/${{confluent_image_source}}"; then
+    echo "Unable to locate Confluent distribution source ${{confluent_image_source}}" >&2
+    find /var/lib/confluent/distributions -maxdepth 1 -mindepth 1 -type d -printf '%f\n' >&2 || :
+    exit 1
+fi
+)",
+        fmt::arg("image", image));
+}
+
+std::string buildConfluentDnsmasqCommands(const models::OS& os,
+    std::string_view internalNic, std::string_view headnodeAddress,
+    std::string_view domain)
+{
+    if (os.getPackageType() != models::OS::PackageType::DEB) {
+        return { };
+    }
+
+    return fmt::format(R"(
+# Keep dnsmasq away from systemd-resolved's loopback stub on Ubuntu.
+cat > /etc/dnsmasq.d/opencattus-confluent.conf <<'EOF'
+interface={internalNic}
+bind-interfaces
+except-interface=lo
+listen-address={headnodeAddress}
+domain={domain}
+expand-hosts
+local=/{domain}/
+EOF
+systemctl restart dnsmasq
+systemctl is-active --quiet dnsmasq
+)",
+        fmt::arg("internalNic", internalNic),
+        fmt::arg("headnodeAddress", headnodeAddress),
+        fmt::arg("domain", domain));
+}
+
+std::string buildConfluentHttpPublishCommands(const models::OS& os)
+{
+    if (os.getPackageType() != models::OS::PackageType::DEB) {
+        return { };
+    }
+
+    return R"(
+# Publish Confluent boot assets and API through Apache on Ubuntu.
+cat > /etc/apache2/conf-available/opencattus-confluent-public.conf <<'EOF'
+Alias /confluent-public/ /var/lib/confluent/public/
+Alias /confluent-public /var/lib/confluent/public
+
+<Directory /var/lib/confluent/public>
+    Options FollowSymLinks
+    AllowOverride None
+    Require all granted
+</Directory>
+EOF
+
+install -d -m 0755 /etc/confluent/apache
+export opencattus_apache_fqdn=$(hostname -f 2>/dev/null || hostname)
+export opencattus_apache_san=/etc/confluent/apache/opencattus-apache-san.cnf
+cat > "${opencattus_apache_san}" <<EOF
+[req]
+distinguished_name=req_distinguished_name
+prompt=no
+req_extensions=v3_req
+[req_distinguished_name]
+CN=${opencattus_apache_fqdn}
+[v3_req]
+keyUsage=digitalSignature,keyEncipherment
+extendedKeyUsage=serverAuth
+subjectAltName=@alt_names
+[alt_names]
+DNS.1=${opencattus_apache_fqdn}
+DNS.2=$(hostname)
+EOF
+
+opencattus_dns_idx=3
+hostname -A 2>/dev/null | tr ' ' '\n' | sort -u | while read -r name; do
+    if [ -n "${name}" ]; then
+        printf 'DNS.%s=%s\n' "${opencattus_dns_idx}" "${name}" >> "${opencattus_apache_san}"
+        opencattus_dns_idx=$((opencattus_dns_idx + 1))
+    fi
+done
+
+opencattus_ip_idx=1
+(
+    ip -o addr show scope global up | awk '{ print $4 }' | cut -d/ -f1
+    ip -o -6 addr show scope link up | awk '{ print $4 }' | cut -d/ -f1 | cut -d% -f1
+) | sort -u | while read -r addr; do
+    if [ -n "${addr}" ]; then
+        printf 'IP.%s=%s\n' "${opencattus_ip_idx}" "${addr}" >> "${opencattus_apache_san}"
+        opencattus_ip_idx=$((opencattus_ip_idx + 1))
+    fi
+done
+
+openssl req -new -nodes -newkey rsa:2048 \
+    -keyout /etc/confluent/apache/opencattus-apache.key \
+    -out /etc/confluent/apache/opencattus-apache.csr \
+    -config "${opencattus_apache_san}"
+openssl x509 -req \
+    -in /etc/confluent/apache/opencattus-apache.csr \
+    -CA /etc/confluent/tls/cacert.pem \
+    -CAkey /etc/confluent/tls/ca/private/cakey.pem \
+    -CAcreateserial \
+    -out /etc/confluent/apache/opencattus-apache.crt \
+    -days 3650 -sha256 \
+    -extensions v3_req -extfile "${opencattus_apache_san}"
+chmod 0644 /etc/confluent/apache/opencattus-apache.crt
+chmod 0600 /etc/confluent/apache/opencattus-apache.key
+chown root:root /etc/confluent/apache/opencattus-apache.*
+
+cat > /etc/apache2/sites-available/opencattus-confluent-ssl.conf <<EOF
+<VirtualHost *:443>
+    ServerName ${opencattus_apache_fqdn}
+    SSLEngine on
+    SSLCertificateFile /etc/confluent/apache/opencattus-apache.crt
+    SSLCertificateKeyFile /etc/confluent/apache/opencattus-apache.key
+
+    ProxyPreserveHost On
+    ProxyPass /confluent-api/ http://127.0.0.1:4005/confluent-api/
+    ProxyPassReverse /confluent-api/ http://127.0.0.1:4005/confluent-api/
+
+    Alias /confluent-public/ /var/lib/confluent/public/
+    Alias /confluent-public /var/lib/confluent/public
+    <Directory /var/lib/confluent/public>
+        Options FollowSymLinks
+        AllowOverride None
+        Require all granted
+    </Directory>
+</VirtualHost>
+EOF
+
+a2enmod ssl proxy proxy_http headers
+a2enconf opencattus-confluent-public
+a2ensite opencattus-confluent-ssl
+apache2ctl configtest
+systemctl reload apache2
+)";
+}
+
+std::string buildImgutilBuildCommand(const models::OS& os)
+{
+    if (os.getDistro() == models::OS::Distro::Ubuntu) {
+        return "imgutil build -y $scratchdir";
+    }
+
+    return "imgutil build -y -s \"$confluent_image_source\" $scratchdir";
 }
 
 std::string buildSpackModuleTree(const models::OS& os)
@@ -202,6 +396,9 @@ std::string buildSpackModuleTree(const models::OS& os)
         case models::OS::Distro::OL:
             distro = "ol";
             break;
+        case models::OS::Distro::Ubuntu:
+            return fmt::format("linux-ubuntu{}-{}", os.getVersion(),
+                opencattus::utils::enums::toString(os.getArch()));
         default:
             std::unreachable();
     }
@@ -229,6 +426,8 @@ std::string buildNodeImageRepoFiles(const models::OS& os)
             return "{epel,OpenHPC,rhel}.repo";
         case models::OS::Distro::OL:
             return "{epel,OpenHPC,oracle}.repo";
+        case models::OS::Distro::Ubuntu:
+            return "";
         default:
             std::unreachable();
     }
@@ -244,6 +443,8 @@ std::string buildNodeImagePackages(const models::OS& os)
             return "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs";
         case models::OS::Platform::el10:
             return "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs";
+        case models::OS::Platform::ubuntu24:
+            return "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-ohpc";
         default:
             std::unreachable();
     }
@@ -262,9 +463,136 @@ std::string buildNodeImageInstallCommand(const models::OS& os)
         case models::OS::Platform::el10:
             return "dnf install -y --nogpg "
                    "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs";
+        case models::OS::Platform::ubuntu24:
+            return "DEBIAN_FRONTEND=noninteractive apt update && "
+                   "DEBIAN_FRONTEND=noninteractive apt install -y "
+                   "ca-certificates && "
+                   "DEBIAN_FRONTEND=noninteractive apt update && "
+                   "DEBIAN_FRONTEND=noninteractive apt install -y "
+                   "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-ohpc";
         default:
             std::unreachable();
     }
+}
+
+std::string buildConfluentHeadnodeSELinuxCommands(const models::OS& os)
+{
+    if (os.getPackageType() == models::OS::PackageType::DEB) {
+        return "# SELinux is not configured on Ubuntu head nodes";
+    }
+
+    return "# Configure SELinux to allow httpd to make connections\n"
+           "setsebool -P httpd_can_network_connect=on";
+}
+
+std::string buildNodeImageRepositorySyncCommands(
+    const models::OS& os, std::string_view nodeImageRepoFiles)
+{
+    if (os.getPackageType() == models::OS::PackageType::DEB) {
+        return R"(
+# Install the APT sources and keys into the scratch image
+install -d $scratchdir/etc/apt/sources.list.d
+install -d $scratchdir/etc/apt/trusted.gpg.d
+if test -f /etc/apt/sources.list; then
+    \cp -va /etc/apt/sources.list $scratchdir/etc/apt/sources.list
+fi
+find /etc/apt/sources.list.d -maxdepth 1 \( -name '*.list' -o -name '*.sources' \) -exec \cp -va {} $scratchdir/etc/apt/sources.list.d/ \;
+find /etc/apt/trusted.gpg.d -maxdepth 1 -type f -exec \cp -va {} $scratchdir/etc/apt/trusted.gpg.d/ \;
+)";
+    }
+
+    return fmt::format(R"(
+# Install the GPG keys & repos
+\cp -va /etc/yum.repos.d/{nodeImageRepoFiles} $scratchdir/etc/yum.repos.d/
+)",
+        fmt::arg("nodeImageRepoFiles", nodeImageRepoFiles));
+}
+
+std::string buildNodeImageChronyCommands(
+    const models::OS& os, std::string_view hnIp)
+{
+    if (os.getPackageType() == models::OS::PackageType::DEB) {
+        return fmt::format(R"(
+# Install and configure chrony
+imgutil exec $scratchdir <<EOF
+DEBIAN_FRONTEND=noninteractive apt update
+DEBIAN_FRONTEND=noninteractive apt install -y chrony
+sed -e '/^pool /d' -e '/^server .* iburst$/d' -i /etc/chrony/chrony.conf
+echo "server {hnIp} iburst" >> /etc/chrony/chrony.conf
+grep -HE '^server' /etc/chrony/chrony.conf
+systemctl enable chrony
+EOF
+)",
+            fmt::arg("hnIp", hnIp));
+    }
+
+    return fmt::format(R"(
+# Install and configure chrony
+imgutil exec $scratchdir <<EOF
+dnf install -y chrony
+sed -e '/^server .* iburst$/d' -i /etc/chrony.conf
+echo "server {hnIp} iburst" >> /etc/chrony.conf
+grep -HE '^server' /etc/chrony.conf
+systemctl enable chronyd
+EOF
+)",
+        fmt::arg("hnIp", hnIp));
+}
+
+std::string buildNodeImageAutofsCommands(
+    const models::OS& os, std::string_view hnIp)
+{
+    const auto installCommand
+        = os.getPackageType() == models::OS::PackageType::DEB
+        ? "DEBIAN_FRONTEND=noninteractive apt update && "
+          "DEBIAN_FRONTEND=noninteractive apt install -y autofs nfs-common"
+        : "dnf install -y autofs";
+
+    return fmt::format(R"(
+# Install and configure nfs and autofs
+imgutil exec $scratchdir <<EOF
+{installCommand}
+mkdir -p /home /opt/ohpc/pub /opt/spack /opt/intel /opt/nvidia /scratch
+echo "/opt/ohpc/pub /etc/auto.ohpc" > /etc/auto.master.d/ohpc.autofs
+echo "* -nfsvers=4 {hnIp}:/opt/ohpc/pub/&" > /etc/auto.ohpc
+
+echo "/home /etc/auto.home" > /etc/auto.master.d/home.autofs
+echo "* -nfsvers=4 {hnIp}:/home/&" > /etc/auto.home
+
+echo "/opt/spack /etc/auto.spack" > /etc/auto.master.d/spack.autofs
+echo "* -nfsvers=4 {hnIp}:/opt/spack/&" > /etc/auto.spack
+
+echo "/opt/intel /etc/auto.intel" > /etc/auto.master.d/intel.autofs
+echo "* -nfsvers=4 {hnIp}:/opt/intel/&" > /etc/auto.intel
+
+echo "/opt/nvidia /etc/auto.nvidia" > /etc/auto.master.d/nvidia.autofs
+echo "* -nfsvers=4 {hnIp}:/opt/nvidia/&" > /etc/auto.nvidia
+
+# Configure scratch area
+echo "/scratch /etc/auto.scratch" > /etc/auto.master.d/scratch.autofs
+echo "local -fstype=xfs,rw :/dev/sda1" > /etc/auto.scratch
+
+# Check that the mounts are correct
+grep -H "{hnIp}" /etc/auto.{{home,ohpc,spack,intel,nvidia}} 2> /dev/null
+
+systemctl enable autofs
+EOF
+)",
+        fmt::arg("installCommand", installCommand), fmt::arg("hnIp", hnIp));
+}
+
+std::string buildNodeImageSlurmDefaultsCommand(
+    const models::OS& os, std::string_view hnIp)
+{
+    if (os.getPackageType() == models::OS::PackageType::DEB) {
+        return fmt::format("echo SLURMD_OPTIONS=\\\"--conf-server {hnIp}\\\" > "
+                           "/etc/default/slurmd",
+            fmt::arg("hnIp", hnIp));
+    }
+
+    return fmt::format("echo SLURMD_OPTIONS=\\\"--conf-server {hnIp}\\\" > "
+                       "/etc/sysconfig/slurmd",
+        fmt::arg("hnIp", hnIp));
 }
 
 std::optional<std::string> selectConfluentImageKernelVersion(
@@ -401,6 +729,13 @@ std::string buildNodeImageOFEDCommands(const models::OS& os,
 
     switch (ofed->getKind()) {
         case OFED::Kind::Inbox:
+            if (os.getPackageType() == models::OS::PackageType::DEB) {
+                return R"(
+imgutil exec $scratchdir <<EOF
+DEBIAN_FRONTEND=noninteractive apt install -y rdma-core ibverbs-providers perftest
+EOF
+)";
+            }
             return R"(
 imgutil exec $scratchdir <<EOF
 dnf group install -y --nogpg "Infiniband Support"
@@ -408,6 +743,11 @@ EOF
 )";
 
         case OFED::Kind::Doca: {
+            if (os.getPackageType() == models::OS::PackageType::DEB) {
+                throw std::logic_error(
+                    "DOCA staging is not supported for Ubuntu Confluent "
+                    "images yet");
+            }
             const auto kernelImageInstallCommands
                 = buildRockyKernelImageFallbackCommands(
                     os, "${doca_image_kernel}")
@@ -545,8 +885,9 @@ void Confluent::install()
     runner::shell::fmt(R"d(
 {confluentBootstrapCommands}
 
-# Configure SELinux to allow httpd to make connections
-setsebool -P httpd_can_network_connect=on
+{confluentDnsmasqCommands}
+
+{headnodeSELinuxCommands}
 
 {trustedNetworkCommands}
 
@@ -563,14 +904,17 @@ test -f ~/.ssh/id_ed25519 || ssh-keygen -f ~/.ssh/id_ed25519 -t ed25519 -N ""
 # Configure the osdeploy parameters
 osdeploy initialize -u -s -k -l -p -a -t -g
 
+{confluentHttpPublishCommands}
+
 # Import the OS ISO file.
 osdeploy import {isoPath} || :
+{confluentImageSourceResolutionScript}
 
 # Create a temporary chroot to work as basis for the boot image
 export scratchdir=/var/tmp/opencattus-scratchdir
 rm -rf $scratchdir || :
 rm -rf /var/lib/confluent/public/os/{image}-diskless || :
-imgutil build -y -s {image} $scratchdir
+{imgutilBuildCommand}
 
 \install -vD -m 0644 -o root  -g root  /etc/hosts                 $scratchdir/etc/hosts
 \install -vD -m 0644 -o root  -g root  /etc/passwd                $scratchdir/etc/passwd
@@ -582,54 +926,20 @@ imgutil build -y -s {image} $scratchdir
 # Customize the image
 #
 
-# Install and configure chrony
-imgutil exec $scratchdir <<EOF
-dnf install -y chrony
-sed -e '/^server .* iburst$/d' -i /etc/chrony.conf
-echo "server {hnIp} iburst" >> /etc/chrony.conf
-grep -HE '^server' /etc/chrony.conf
-systemctl enable chronyd
-EOF
+{nodeImageChronyCommands}
 
-# Install and configure nfs and autofs
-imgutil exec $scratchdir <<EOF
-dnf install -y autofs
-echo "/opt/ohpc/pub /etc/auto.ohpc" > /etc/auto.master.d/ohpc.autofs
-echo "* -nfsvers=4 {hnIp}:/opt/ohpc/pub/&" > /etc/auto.ohpc
-
-echo "/home /etc/auto.home" > /etc/auto.master.d/home.autofs
-echo "* -nfsvers=4 {hnIp}:/home/&" > /etc/auto.home
- 
-echo "/opt/spack /etc/auto.spack" > /etc/auto.master.d/spack.autofs
-echo "* -nfsvers=4 {hnIp}:/opt/spack/&" > /etc/auto.spack
-
-echo "/opt/intel /etc/auto.intel" > /etc/auto.master.d/intel.autofs
-echo "* -nfsvers=4 {hnIp}:/opt/intel/&" > /etc/auto.intel
- 
-echo "/opt/nvidia /etc/auto.nvidia" > /etc/auto.master.d/nvidia.autofs
-echo "* -nfsvers=4 {hnIp}:/opt/nvidia/&" > /etc/auto.nvidia
-
-# Configure scratch area 
-echo "/scratch /etc/auto.scratch" > /etc/auto.master.d/scratch.autofs
-echo "local -fstype=xfs,rw :/dev/sda1" > /etc/auto.scratch
-
-# Check that the mounts are correct
-grep -H "{hnIp}" /etc/auto.{{home,ohpc,spack,intel,nvidia}} 2> /dev/null
- 
-systemctl enable autofs
-EOF
+{nodeImageAutofsCommands}
 
 # Slurm node configuration
 \install -vD -m 0400 -o munge -g munge /etc/munge/munge.key       $scratchdir/etc/munge/munge.key
 \install -vD -m 0644 -o root  -g root  /etc/slurm/slurm.conf      $scratchdir/etc/slurm/slurm.conf
-# Install the GPG keys & repos
-\cp -va /etc/yum.repos.d/{nodeImageRepoFiles} $scratchdir/etc/yum.repos.d/
+{nodeImageRepositorySyncCommands}
 imgutil exec $scratchdir <<EOF
 set -xeu -o pipefail
 {nodeImageInstallCommand}
 sed -e '/^account required pam_slurm.so/d' -i /etc/pam.d/sshd
 echo 'account required pam_slurm.so' >> /etc/pam.d/sshd
-echo SLURMD_OPTIONS=\"--conf-server {hnIp}\" > /etc/sysconfig/slurmd
+{nodeImageSlurmDefaultsCommand}
 chown munge: /etc/munge/munge.key
 systemctl enable munge
 systemctl enable slurmd
@@ -674,11 +984,53 @@ rm -rf $scratchdir || :
         fmt::arg("domain", cluster()->getDomainName()),
         fmt::arg("confluentBootstrapCommands",
             buildConfluentBootstrapCommands(os())),
+        fmt::arg("confluentHttpPublishCommands",
+            buildConfluentHttpPublishCommands(os())),
+        fmt::arg("confluentDnsmasqCommands",
+            buildConfluentDnsmasqCommands(os(),
+                utils::optional::unwrap(answerfile()->management.con_interface,
+                    "Internal interface not found in [network_management]"),
+                cluster()
+                    ->getHeadnode()
+                    .getConnection(Network::Profile::Management)
+                    .getAddress()
+                    .to_string(),
+                cluster()->getDomainName())),
+        fmt::arg("confluentImageSourceResolutionScript",
+            buildConfluentImageSourceResolutionScript(computeNodeOS, image)),
+        fmt::arg(
+            "imgutilBuildCommand", buildImgutilBuildCommand(computeNodeOS)),
+        fmt::arg("headnodeSELinuxCommands",
+            buildConfluentHeadnodeSELinuxCommands(os())),
         fmt::arg("spackModulePathExport",
             buildUserSpackModulePathExport(computeNodeOS)),
+        fmt::arg("nodeImageChronyCommands",
+            buildNodeImageChronyCommands(computeNodeOS,
+                cluster()
+                    ->getHeadnode()
+                    .getConnection(Network::Profile::Management)
+                    .getAddress()
+                    .to_string())),
+        fmt::arg("nodeImageAutofsCommands",
+            buildNodeImageAutofsCommands(computeNodeOS,
+                cluster()
+                    ->getHeadnode()
+                    .getConnection(Network::Profile::Management)
+                    .getAddress()
+                    .to_string())),
         fmt::arg("nodeImageInstallCommand",
             buildNodeImageInstallCommand(computeNodeOS)),
         fmt::arg("nodeImageRepoFiles", buildNodeImageRepoFiles(computeNodeOS)),
+        fmt::arg("nodeImageRepositorySyncCommands",
+            buildNodeImageRepositorySyncCommands(
+                computeNodeOS, buildNodeImageRepoFiles(computeNodeOS))),
+        fmt::arg("nodeImageSlurmDefaultsCommand",
+            buildNodeImageSlurmDefaultsCommand(computeNodeOS,
+                cluster()
+                    ->getHeadnode()
+                    .getConnection(Network::Profile::Management)
+                    .getAddress()
+                    .to_string())),
         fmt::arg("hnIp",
             cluster()
                 ->getHeadnode()
@@ -844,7 +1196,7 @@ TEST_CASE("buildConfluentRepoRpmUrl uses upstream by default")
     using opencattus::services::Options;
 
     opencattus::Singleton<const Options>::init(
-        std::make_unique<const Options>(Options {}));
+        std::make_unique<const Options>(Options { }));
 
     CHECK(buildConfluentRepoRpmUrl(OS(OS::Distro::Rocky, OS::Platform::el9, 7))
         == "https://hpc.lenovo.com/yum/latest/el9/x86_64/"
@@ -897,6 +1249,68 @@ TEST_CASE("buildConfluentBootstrapCommands validates Confluent tools before "
     CHECK_FALSE(script.contains("lenovo-confluent tftp-server dnsmasq || :"));
 }
 
+TEST_CASE("buildConfluentBootstrapCommands uses Lenovo APT on Ubuntu")
+{
+    using opencattus::models::OS;
+
+    const auto script = buildConfluentBootstrapCommands(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4));
+
+    CHECK(script.contains("https://hpc.lenovo.com/apt/latest/noble"));
+    CHECK(script.contains(
+        "DEBIAN_FRONTEND=noninteractive apt install -y lenovo-confluent "
+        "tftpd-hpa dnsmasq"));
+    CHECK(script.contains("systemctl enable apache2 --now"));
+    CHECK(script.contains("systemctl enable dnsmasq"));
+    CHECK_FALSE(script.contains("systemctl enable dnsmasq --now"));
+    CHECK(script.contains("command -v confluent2hosts >/dev/null"));
+}
+
+TEST_CASE("buildConfluentDnsmasqCommands binds Ubuntu dnsmasq to management")
+{
+    using opencattus::models::OS;
+
+    const auto script = buildConfluentDnsmasqCommands(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4), "oc-mgmt0",
+        "172.31.38.254", "cluster.example.com");
+
+    CHECK(script.contains("interface=oc-mgmt0"));
+    CHECK(script.contains("bind-interfaces"));
+    CHECK(script.contains("listen-address=172.31.38.254"));
+    CHECK(script.contains("systemctl is-active --quiet dnsmasq"));
+
+    CHECK(buildConfluentDnsmasqCommands(
+        OS(OS::Distro::Rocky, OS::Platform::el9, 7), "eth1", "172.31.38.254",
+        "cluster.example.com")
+            .empty());
+}
+
+TEST_CASE("buildConfluentHttpPublishCommands exposes Ubuntu boot assets")
+{
+    using opencattus::models::OS;
+
+    const auto script = buildConfluentHttpPublishCommands(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4));
+
+    CHECK(script.contains("Alias /confluent-public/ "
+                          "/var/lib/confluent/public/"));
+    CHECK(script.contains("Require all granted"));
+    CHECK(script.contains("ProxyPass /confluent-api/ "
+                          "http://127.0.0.1:4005/confluent-api/"));
+    CHECK(script.contains("SSLCertificateFile "
+                          "/etc/confluent/apache/opencattus-apache.crt"));
+    CHECK(script.contains("openssl x509 -req"));
+    CHECK(script.contains("a2enmod ssl proxy proxy_http headers"));
+    CHECK(script.contains("a2enconf opencattus-confluent-public"));
+    CHECK(script.contains("a2ensite opencattus-confluent-ssl"));
+    CHECK(script.contains("apache2ctl configtest"));
+    CHECK(script.contains("systemctl reload apache2"));
+
+    CHECK(buildConfluentHttpPublishCommands(
+        OS(OS::Distro::Rocky, OS::Platform::el9, 7))
+            .empty());
+}
+
 TEST_CASE("buildSpackModuleTree matches Spack's Enterprise Linux module naming")
 {
     using opencattus::models::OS;
@@ -907,6 +1321,9 @@ TEST_CASE("buildSpackModuleTree matches Spack's Enterprise Linux module naming")
         == "linux-rocky9-x86_64");
     CHECK(buildSpackModuleTree(OS(OS::Distro::Rocky, OS::Platform::el10, 0))
         == "linux-rocky10-x86_64");
+    CHECK(
+        buildSpackModuleTree(OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+        == "linux-ubuntu24.04-x86_64");
 }
 
 TEST_CASE("buildConfluentImageName matches osdeploy distribution ids")
@@ -922,6 +1339,21 @@ TEST_CASE("buildConfluentImageName matches osdeploy distribution ids")
         == "rhel-9.7-x86_64");
     CHECK(buildConfluentImageName(OS(OS::Distro::OL, OS::Platform::el9, 5))
         == "ol-9.5-x86_64");
+    CHECK(buildConfluentImageName(
+              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+        == "ubuntu24.04-x86_64");
+}
+
+TEST_CASE("buildImgutilBuildCommand omits unsupported Ubuntu source")
+{
+    using opencattus::models::OS;
+
+    CHECK(buildImgutilBuildCommand(
+              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+        == "imgutil build -y $scratchdir");
+
+    CHECK(buildImgutilBuildCommand(OS(OS::Distro::Rocky, OS::Platform::el9, 7))
+        == "imgutil build -y -s \"$confluent_image_source\" $scratchdir");
 }
 
 TEST_CASE("buildUserSpackModulePathExport tolerates an unset MODULEPATH")
@@ -938,6 +1370,11 @@ TEST_CASE("buildUserSpackModulePathExport tolerates an unset MODULEPATH")
         == "export "
            "MODULEPATH=/opt/spack/share/spack/lmod/linux-rocky10-x86_64/"
            "Core${MODULEPATH:+:$MODULEPATH}");
+    CHECK(buildUserSpackModulePathExport(
+              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+        == "export "
+           "MODULEPATH=/opt/spack/share/spack/lmod/linux-ubuntu24.04-x86_64/"
+           "Core${MODULEPATH:+:$MODULEPATH}");
 }
 
 TEST_CASE("buildNodeImageRepoFiles keeps distro repo filenames explicit")
@@ -953,6 +1390,9 @@ TEST_CASE("buildNodeImageRepoFiles keeps distro repo filenames explicit")
         == "{epel,OpenHPC,rhel}.repo");
     CHECK(buildNodeImageRepoFiles(OS(OS::Distro::OL, OS::Platform::el9, 5))
         == "{epel,OpenHPC,oracle}.repo");
+    CHECK(buildNodeImageRepoFiles(
+              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+        == "");
 }
 
 TEST_CASE("buildNodeImagePackages keeps EL8 and newer node images explicit")
@@ -974,6 +1414,11 @@ TEST_CASE("buildNodeImagePackages keeps EL8 and newer node images explicit")
         = buildNodeImagePackages(OS(OS::Distro::Rocky, OS::Platform::el10, 1));
     CHECK(el10Packages
         == "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs");
+
+    const auto ubuntuPackages = buildNodeImagePackages(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4));
+    CHECK(ubuntuPackages
+        == "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-ohpc");
 }
 
 TEST_CASE("buildNodeImageInstallCommand keeps EL8, EL9, and EL10 explicit")
@@ -995,6 +1440,51 @@ TEST_CASE("buildNodeImageInstallCommand keeps EL8, EL9, and EL10 explicit")
               OS(OS::Distro::Rocky, OS::Platform::el10, 1))
         == "dnf install -y --nogpg "
            "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs");
+
+    CHECK(buildNodeImageInstallCommand(
+              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+        == "DEBIAN_FRONTEND=noninteractive apt update && "
+           "DEBIAN_FRONTEND=noninteractive apt install -y "
+           "ca-certificates && DEBIAN_FRONTEND=noninteractive apt update "
+           "&& DEBIAN_FRONTEND=noninteractive apt install -y "
+           "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-ohpc");
+}
+
+TEST_CASE("buildNodeImageChronyCommands refreshes APT metadata on Ubuntu")
+{
+    using opencattus::models::OS;
+
+    const auto script = buildNodeImageChronyCommands(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4), "172.31.38.254");
+
+    CHECK(script.contains("DEBIAN_FRONTEND=noninteractive apt update\n"
+                          "DEBIAN_FRONTEND=noninteractive apt install -y "
+                          "chrony"));
+}
+
+TEST_CASE("buildNodeImageAutofsCommands refreshes APT metadata on Ubuntu")
+{
+    using opencattus::models::OS;
+
+    const auto script = buildNodeImageAutofsCommands(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4), "172.31.38.254");
+
+    CHECK(script.contains("DEBIAN_FRONTEND=noninteractive apt update && "
+                          "DEBIAN_FRONTEND=noninteractive apt install -y "
+                          "autofs nfs-common"));
+}
+
+TEST_CASE("buildNodeImageRepositorySyncCommands copies APT sources on Ubuntu")
+{
+    using opencattus::models::OS;
+
+    const auto script = buildNodeImageRepositorySyncCommands(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4), "");
+
+    CHECK(script.contains("/etc/apt/sources.list.d"));
+    CHECK(script.contains("/etc/apt/trusted.gpg.d"));
+    CHECK(script.contains("*.sources"));
+    CHECK_FALSE(script.contains("/etc/yum.repos.d"));
 }
 
 TEST_CASE("buildNodeImageOFEDCommands skips OFED runtime staging without an "
@@ -1024,6 +1514,19 @@ TEST_CASE("buildNodeImageOFEDCommands uses inbox packages for inbox OFED")
         script.contains("dnf group install -y --nogpg \"Infiniband Support\""));
     CHECK_FALSE(script.contains("mlnx-doca.repo"));
     CHECK_FALSE(script.contains("doca-ofed"));
+}
+
+TEST_CASE("buildNodeImageOFEDCommands uses Ubuntu inbox RDMA packages")
+{
+    using opencattus::models::OS;
+
+    const auto script = buildNodeImageOFEDCommands(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4), true,
+        std::optional<OFED>(OFED(OFED::Kind::Inbox, "")), std::nullopt);
+
+    CHECK(script.contains("apt install -y rdma-core ibverbs-providers "
+                          "perftest"));
+    CHECK_FALSE(script.contains("dnf group install"));
 }
 
 TEST_CASE(

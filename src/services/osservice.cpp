@@ -160,6 +160,137 @@ public:
     };
 };
 
+class UbuntuOSService final : public IOSService {
+    OS m_osinfo;
+
+public:
+    explicit UbuntuOSService(const OS& osinfo)
+        : m_osinfo(osinfo) { };
+
+    [[nodiscard]] std::string getKernelInstalled() const override
+    {
+        auto output = Singleton<IRunner>::get()->checkOutput(
+            "bash -c \"dpkg-query -W -f='${Version} ${Package}\\n' "
+            "'linux-image-*' 2>/dev/null | sort -Vr | head -1 | awk "
+            "'{print $1}'\"");
+        return output.empty() ? getKernelRunning() : output[0];
+    }
+
+    [[nodiscard]] std::string getKernelRunning() const override
+    {
+        return Singleton<IRunner>::get()->checkOutput("uname -r")[0];
+    }
+
+    [[nodiscard]] std::string getLocale() const override
+    {
+        return Singleton<IRunner>::get()->checkOutput(
+            R"(bash -c "localectl status | awk -F'=' '/System Locale: / {print $2}'")")
+            [0];
+    }
+
+    [[nodiscard]] std::vector<std::string> getAvailableLocales() const override
+    {
+        return Singleton<IRunner>::get()->checkOutput("locale -a");
+    }
+
+    [[nodiscard]] bool install(std::string_view package) const override
+    {
+        return Singleton<IRunner>::get()->executeCommand(fmt::format(
+                   "DEBIAN_FRONTEND=noninteractive apt install -y {}", package))
+            != 0;
+    }
+
+    [[nodiscard]] bool reinstall(std::string_view package) const override
+    {
+        return Singleton<IRunner>::get()->executeCommand(fmt::format(
+                   "DEBIAN_FRONTEND=noninteractive apt install --reinstall "
+                   "-y {}",
+                   package))
+            != 0;
+    }
+
+    [[nodiscard]] bool groupInstall(std::string_view package) const override
+    {
+        return install(package);
+    }
+
+    [[nodiscard]] bool remove(std::string_view package) const override
+    {
+        return Singleton<IRunner>::get()->executeCommand(fmt::format(
+                   "DEBIAN_FRONTEND=noninteractive apt remove -y {}", package))
+            != 0;
+    }
+
+    [[nodiscard]] bool update(std::string_view package) const override
+    {
+        return Singleton<IRunner>::get()->executeCommand(
+                   fmt::format("DEBIAN_FRONTEND=noninteractive apt install "
+                               "--only-upgrade -y {}",
+                       package))
+            != 0;
+    }
+
+    [[nodiscard]] bool update() const override
+    {
+        return Singleton<IRunner>::get()->executeCommand(
+                   "DEBIAN_FRONTEND=noninteractive apt update && "
+                   "DEBIAN_FRONTEND=noninteractive apt upgrade -y")
+            != 0;
+    }
+
+    void check() const override
+    {
+        Singleton<IRunner>::get()->executeCommand("apt check");
+    }
+
+    void pinOSVersion() const override { static_cast<void>(m_osinfo); }
+
+    void clean() const override
+    {
+        Singleton<IRunner>::get()->executeCommand("apt clean");
+    }
+
+    [[nodiscard]] std::vector<std::string> repolist() const override
+    {
+        return Singleton<IRunner>::get()->checkOutput("apt-cache policy");
+    }
+
+    [[nodiscard]] bool enableService(std::string_view service) const override
+    {
+        return Singleton<IRunner>::get()->executeCommand(
+                   fmt::format("systemctl enable --now {}", service))
+            == 0;
+    };
+
+    [[nodiscard]] bool disableService(std::string_view service) const override
+    {
+        return Singleton<IRunner>::get()->executeCommand(
+                   fmt::format("systemctl disable --now {}", service))
+            == 0;
+    };
+
+    [[nodiscard]] bool startService(std::string_view service) const override
+    {
+        return Singleton<IRunner>::get()->executeCommand(
+                   fmt::format("systemctl start {}", service))
+            == 0;
+    };
+
+    [[nodiscard]] bool stopService(std::string_view service) const override
+    {
+        return Singleton<IRunner>::get()->executeCommand(
+                   fmt::format("systemctl stop {}", service))
+            == 0;
+    };
+
+    [[nodiscard]] bool restartService(std::string_view service) const override
+    {
+        return Singleton<IRunner>::get()->executeCommand(
+                   fmt::format("systemctl restart {}", service))
+            == 0;
+    };
+};
+
 std::unique_ptr<IOSService> IOSService::factory(const OS& osinfo)
 {
     switch (osinfo.getDistro()) {
@@ -168,6 +299,8 @@ std::unique_ptr<IOSService> IOSService::factory(const OS& osinfo)
         case OS::Distro::AlmaLinux:
         case OS::Distro::OL:
             return makeUniqueDerived<IOSService, ELOSService>(osinfo);
+        case OS::Distro::Ubuntu:
+            return makeUniqueDerived<IOSService, UbuntuOSService>(osinfo);
         default:
             throw std::logic_error("Not implemented");
     }

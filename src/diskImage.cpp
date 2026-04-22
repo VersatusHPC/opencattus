@@ -50,6 +50,8 @@ bool DiskImage::isKnownImage(const std::filesystem::path& path)
             return opencattus::models::OS::Distro::OL;
         } else if (imageView.starts_with("AlmaLinux")) {
             return opencattus::models::OS::Distro::AlmaLinux;
+        } else if (imageView.starts_with("ubuntu-")) {
+            return opencattus::models::OS::Distro::Ubuntu;
         }
         return std::nullopt;
     };

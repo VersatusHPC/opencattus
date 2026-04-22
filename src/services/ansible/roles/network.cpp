@@ -46,8 +46,9 @@ sleep 0.2
 nmcli connection up "{conn_name}"
 )",
         fmt::arg("iface", connection.getInterface().value()),
-        fmt::arg("conn_name", opencattus::utils::enums::toString(
-                                  connection.getNetwork()->getProfile())),
+        fmt::arg("conn_name",
+            opencattus::utils::enums::toString(
+                connection.getNetwork()->getProfile())),
         fmt::arg("type", connection.getNetwork()->getType()),
         fmt::arg("mtu", connection.getMTU()),
         fmt::arg("ip", connection.getAddress().to_string()),
@@ -73,6 +74,38 @@ void disableNetworkManagerDNSOverride()
         "dns=none\n");
 
     osservice()->restartService("NetworkManager");
+}
+
+[[nodiscard]] bool headnodeUsesUbuntu()
+{
+    return cluster()->getHeadnode().getOS().getDistro()
+        == opencattus::models::OS::Distro::Ubuntu;
+}
+
+[[nodiscard]] std::string buildNetplanNetworkManagerRendererScript()
+{
+    return R"(
+if command -v netplan >/dev/null 2>&1 && test -d /etc/netplan; then
+    cat > /etc/netplan/01-opencattus-networkmanager.yaml <<'EOF'
+network:
+  version: 2
+  renderer: NetworkManager
+EOF
+    chmod 600 /etc/netplan/01-opencattus-networkmanager.yaml
+    netplan generate
+    netplan apply
+fi
+)";
+}
+
+void ensureNetplanUsesNetworkManager()
+{
+    if (!headnodeUsesUbuntu()) {
+        return;
+    }
+
+    LOG_INFO("Configuring netplan to let NetworkManager manage interfaces")
+    shell::cmd(buildNetplanNetworkManagerRendererScript());
 }
 
 // WARNING: We used to do this in a DRY way, but each connection has its own
@@ -119,6 +152,7 @@ void configureServiceNetwork(const Connection& connection)
 void configureNetworks(const std::list<Connection>& connections)
 {
     osservice()->enableService("NetworkManager");
+    ensureNetplanUsesNetworkManager();
     disableNetworkManagerDNSOverride();
 
     for (const auto& connection : std::as_const(connections)) {
@@ -203,7 +237,7 @@ TEST_CASE("renderStaticConnectionScript activates the generated profile")
         }
 
         for (auto* current = interfaces; current != nullptr;
-             current = current->ifa_next) {
+            current = current->ifa_next) {
             if (current->ifa_name == nullptr) {
                 continue;
             }
@@ -231,9 +265,9 @@ TEST_CASE("renderStaticConnectionScript activates the generated profile")
 
     CHECK(script.contains("nmcli connection up \"Management\""));
     CHECK(script.contains(
-        fmt::format("awk -F: '$2==\"{}\" {{print $1}}' | while read -r ",
-            interfaceName)
-            + "existing_connection; do"));
+        fmt::format(
+            "awk -F: '$2==\"{}\" {{print $1}}' | while read -r ", interfaceName)
+        + "existing_connection; do"));
     CHECK(script.contains(
         fmt::format("nmcli device set {} managed yes", interfaceName)));
     CHECK(script.contains(
@@ -241,4 +275,15 @@ TEST_CASE("renderStaticConnectionScript activates the generated profile")
                     "con-name \"Management\"",
             interfaceName)));
     CHECK_FALSE(script.contains("nmcli device connect oc-mgmt0"));
+}
+
+TEST_CASE(
+    "buildNetplanNetworkManagerRendererScript sets NetworkManager renderer")
+{
+    const auto script = buildNetplanNetworkManagerRendererScript();
+
+    CHECK(script.contains("/etc/netplan/01-opencattus-networkmanager.yaml"));
+    CHECK(script.contains("renderer: NetworkManager"));
+    CHECK(script.contains("netplan generate"));
+    CHECK(script.contains("netplan apply"));
 }

@@ -1,8 +1,8 @@
-# RPM Publishing
+# Package Publishing
 
-OpenCATTUS publishes Release RPMs for EL8, EL9, and EL10. The RPM
-repository is generated with `createrepo_c`, so clients can install with
-`dnf` after adding the matching `.repo` file.
+OpenCATTUS publishes Release RPMs for EL8, EL9, and EL10, plus a DEB package
+for Ubuntu 24.04. RPM repositories are generated with `createrepo_c`, and the
+Ubuntu repository is a flat APT repository generated with `dpkg-scanpackages`.
 
 ## What CI Does
 
@@ -45,6 +45,24 @@ createrepo_c --update "${staged_el_directory}"
 
 That creates the `repodata/` directory required by `dnf`.
 
+The workflow also builds a DEB package in an Ubuntu 24.04 container with
+CPack. It uploads an artifact named `opencattus-deb-ubuntu24`. The publish job
+downloads it into `out/deb-publish-input` and runs:
+
+```bash
+scripts/publish-debs.sh --source-dir out/deb-publish-input
+```
+
+The script stages the APT repository like this:
+
+```text
+ubuntu24/
+  versatushpc-opencattus.list
+  *.deb
+  Packages
+  Packages.gz
+```
+
 ## Remote Publishing
 
 The default remote target is:
@@ -59,9 +77,12 @@ The workflow uses `lftp` over SFTP with mirror mode:
 mirror --reverse --delete
 ```
 
-That means `/mnt/pool1/repos/opencattus` is treated as disposable and owned by
-the OpenCATTUS RPM repository. Do not place unrelated repositories under that
-directory.
+Each publisher mirrors only the subtree it owns:
+
+- `scripts/publish-rpms.sh` owns `el8/`, `el9/`, and `el10/`.
+- `scripts/publish-debs.sh` owns `ubuntu24/`.
+
+Do not place unrelated files inside those subdirectories.
 
 ## SSH Key
 
@@ -84,7 +105,7 @@ container, writes the private key into the workflow workspace, and the
 container uses that key for SFTP.
 
 If `REPOSYNC_SSH_KEY` is not configured and the runner has no local SSH key,
-CI still stages the repository and runs `createrepo_c`, but it skips the remote
+CI still stages the repository and generates metadata, but it skips the remote
 sync with a notice.
 
 ## Manual Publishing
@@ -95,16 +116,24 @@ To stage and publish from a machine that already has RPMs under `out/rpm`:
 scripts/publish-rpms.sh --source-dir out/rpm
 ```
 
+To stage and publish from a machine that already has DEBs under `out/deb`:
+
+```bash
+scripts/publish-debs.sh --source-dir out/deb
+```
+
 To stage the repo and generate metadata without syncing:
 
 ```bash
 scripts/publish-rpms.sh --source-dir out/rpm --skip-sync
+scripts/publish-debs.sh --source-dir out/deb --skip-sync
 ```
 
 To preview the SFTP mirror operation:
 
 ```bash
 scripts/publish-rpms.sh --source-dir out/rpm --dry-run
+scripts/publish-debs.sh --source-dir out/deb --dry-run
 ```
 
 The script accepts these environment variables:
@@ -117,15 +146,16 @@ SSH_KEY=/path/to/private/key
 STAGING_DIR=/tmp/opencattus-rpm-repo
 ```
 
+For DEB publishing, `STAGING_DIR` defaults to `/tmp/opencattus-deb-repo`.
+
 ## GitHub Release Assets
 
-Publishing the `dnf` repository and attaching RPMs to a GitHub release are
-separate operations today. The repository publish flow is automated by CI when
-`REPOSYNC_SSH_KEY` is configured. GitHub release assets are uploaded manually,
-for example:
+Publishing the package repositories and attaching packages to a GitHub release
+are separate operations today. The repository publish flow is automated by CI
+when `REPOSYNC_SSH_KEY` is configured. GitHub release assets are uploaded
+manually, for example:
 
 ```bash
-gh release upload v1.0.0 out/rpm/EL8/*.rpm out/rpm/EL9/*.rpm out/rpm/EL10/*.rpm \
+gh release upload v1.1.0 out/rpm/EL8/*.rpm out/rpm/EL9/*.rpm out/rpm/EL10/*.rpm out/deb/*.deb \
   --repo VersatusHPC/opencattus --clobber
 ```
-
