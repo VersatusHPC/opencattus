@@ -212,7 +212,7 @@ jobs:
               cpack -G RPM \
                 --config "build-rpm-${{ matrix.el }}/CPackConfig.cmake" \
                 -B "out/rpm/${{ matrix.el }}"
-              ls -l "out/rpm/${{ matrix.el }}"/opencattus-installer*.rpm
+              ls -l "out/rpm/${{ matrix.el }}"/opencattus*.rpm
             '
 
       - name: Upload RPM artifact
