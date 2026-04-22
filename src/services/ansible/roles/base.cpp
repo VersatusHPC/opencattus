@@ -31,6 +31,10 @@ ScriptBuilder installScript(
     builder.addNewLine().addCommand("# Install EPEL repositories if needed");
 
     switch (osinfo.getDistro()) {
+        case models::OS::Distro::Ubuntu:
+            builder.addCommand("# Ubuntu does not use EPEL repositories");
+            break;
+
         case models::OS::Distro::RHEL:
         case models::OS::Distro::Rocky:
         case models::OS::Distro::AlmaLinux:
@@ -64,19 +68,38 @@ ScriptBuilder installScript(
 
     builder.addNewLine().addCommand("# Install general base packages");
 
-    // "python3-dnf-plugin-versionlock" is conflicting with dnf-plugins-core
-    // during the first install
-    // TODO: CFL initscripts is only required by xCAT
-    std::set<std::string> allPackages = {
-        "wget",
-        "curl",
-        "dnf-plugins-core",
-        "chkconfig",
-        "initscripts", // @FIXME: This is only required if the provisioner is
-                       // xCAT
-        "jq",
-        "tar",
-    };
+    std::set<std::string> allPackages;
+    switch (osinfo.getPackageType()) {
+        case models::OS::PackageType::RPM:
+            // "python3-dnf-plugin-versionlock" is conflicting with
+            // dnf-plugins-core during the first install.
+            // TODO: CFL initscripts is only required by xCAT.
+            allPackages = {
+                "wget",
+                "curl",
+                "dnf-plugins-core",
+                "chkconfig",
+                "initscripts", // @FIXME: This is only required if the
+                               // provisioner is xCAT
+                "jq",
+                "tar",
+            };
+            break;
+        case models::OS::PackageType::DEB:
+            allPackages = {
+                "ca-certificates",
+                "curl",
+                "gnupg",
+                "iproute2",
+                "jq",
+                "lsb-release",
+                "network-manager",
+                "openssh-server",
+                "tar",
+                "wget",
+            };
+            break;
+    }
     if (const auto iter = role.vars().find("base_packages");
         iter != role.vars().end()) {
         for (const auto& pkg :

@@ -910,6 +910,120 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(diskImagePath);
     }
 
+    TEST_CASE("fillData accepts Ubuntu 24.04 compute nodes with xcat")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath
+            = tempAnswerfilePath("opencattus-cluster-provisioner-ubuntu24");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-provisioner-ubuntu24");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "xcat", std::nullopt,
+            "ubuntu", "24.04");
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            Cluster cluster;
+            cluster.fillData(answerfile);
+
+            CHECK(cluster.getProvisioner() == Cluster::Provisioner::xCAT);
+            CHECK(cluster.getComputeNodeOS().getDistro()
+                == opencattus::models::OS::Distro::Ubuntu);
+            CHECK(cluster.getComputeNodeOS().getPlatform()
+                == opencattus::models::OS::Platform::ubuntu24);
+            CHECK(cluster.getComputeNodeOS().getVersion() == "24.04");
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while filling cluster for Ubuntu 24.04 "
+                 "xCAT");
+        }
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("fillData accepts xcat on Ubuntu 24.04 headnodes")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath = tempAnswerfilePath(
+            "opencattus-cluster-provisioner-ubuntu24-headnode-xcat");
+        const auto diskImagePath = tempIsoPath(
+            "opencattus-cluster-provisioner-ubuntu24-headnode-xcat");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "xcat", std::nullopt,
+            "ubuntu", "24.04");
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            Cluster cluster;
+            cluster.getHeadnode().setOS(
+                opencattus::models::OS(opencattus::models::OS::Distro::Ubuntu,
+                    opencattus::models::OS::Platform::ubuntu24, 4));
+
+            CHECK_NOTHROW(cluster.fillData(answerfile));
+            CHECK(cluster.getProvisioner() == Cluster::Provisioner::xCAT);
+            CHECK(cluster.getHeadnode().getOS().getPlatform()
+                == opencattus::models::OS::Platform::ubuntu24);
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while validating Ubuntu 24.04 headnode "
+                 "xCAT rejection");
+        }
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
+    TEST_CASE("fillData accepts Ubuntu 24.04 compute nodes with confluent")
+    {
+        initializeOptionsSingleton();
+
+        const auto interfaces = firstHostInterfaces();
+        REQUIRE_FALSE(interfaces.empty());
+
+        const auto answerfilePath = tempAnswerfilePath(
+            "opencattus-cluster-provisioner-ubuntu24-confluent");
+        const auto diskImagePath
+            = tempIsoPath("opencattus-cluster-provisioner-ubuntu24-confluent");
+        std::ofstream(diskImagePath).close();
+        writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
+            interfaces.front(), std::nullopt, true, "confluent", std::nullopt,
+            "ubuntu", "24.04");
+
+        try {
+            AnswerFile answerfile(answerfilePath);
+            Cluster cluster;
+            cluster.fillData(answerfile);
+
+            CHECK(cluster.getProvisioner() == Cluster::Provisioner::Confluent);
+            CHECK(cluster.getComputeNodeOS().getDistro()
+                == opencattus::models::OS::Distro::Ubuntu);
+            CHECK(cluster.getComputeNodeOS().getPlatform()
+                == opencattus::models::OS::Platform::ubuntu24);
+            CHECK(cluster.getComputeNodeOS().getVersion() == "24.04");
+        } catch (const std::exception& e) {
+            FAIL(std::string(e.what()));
+        } catch (...) {
+            FAIL("non-std exception while filling cluster for Ubuntu 24.04 "
+                 "Confluent");
+        }
+
+        std::filesystem::remove(answerfilePath);
+        std::filesystem::remove(diskImagePath);
+    }
+
     TEST_CASE("fillData accepts confluent on Rocky Linux 10")
     {
         initializeOptionsSingleton();

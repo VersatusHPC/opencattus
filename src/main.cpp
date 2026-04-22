@@ -65,8 +65,13 @@ int runTestCommand(const std::string& testCommand,
         runner->checkCommand(testCommandArgs[0]);
     } else if (testCommand == "initialize-repos") {
         repoManager->initializeDefaultRepositories();
-        runner->checkCommand(
-            R"(bash -c "dnf config-manager --set-enabled '*' && dnf makecache -y" )");
+        if (cluster->getHeadnode().getOS().getPackageType()
+            == opencattus::models::OS::PackageType::DEB) {
+            runner->checkCommand("DEBIAN_FRONTEND=noninteractive apt update");
+        } else {
+            runner->checkCommand(
+                R"(bash -c "dnf config-manager --set-enabled '*' && dnf makecache -y" )");
+        }
     } else if (testCommand == "create-http-repo") {
         assert(testCommandArgs.size() > 0);
         opencattus::functions::createHTTPRepo(testCommandArgs[0]);
@@ -323,9 +328,9 @@ int runApplication(int argc, const char** argv)
     auto model = std::make_unique<opencattus::models::Cluster>();
     LOG_INFO("Model initialized");
     std::unique_ptr<models::AnswerFile> answerfile;
-    auto tuiDraftState = services::tui::DraftState {};
-    auto tuiDraftPath = std::filesystem::path {};
-    auto tuiView = std::unique_ptr<View> {};
+    auto tuiDraftState = services::tui::DraftState { };
+    auto tuiDraftPath = std::filesystem::path { };
+    auto tuiView = std::unique_ptr<View> { };
     if (opts->enableTUI) {
         tuiView = std::make_unique<Newt>();
     }

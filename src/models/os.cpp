@@ -32,75 +32,124 @@
 
 namespace opencattus::models {
 
-OS::OS()
-{
-    LOG_INFO("Initializing OS (ctr 1)");
-    struct utsname system {};
-    // @FIXME: Unfortunately this runs during the initialization of the
-    //  cluster instance. Which prevents us of running this during testing
-    //  in a machine that does not have /etc/os-release file.
-    //  The isTest flag below is used to fill up default values during tests
-    //  to make it possible to run outside of target machines
-    auto opts = opencattus::utils::singleton::options();
-    const bool isTest = !opts->testCommand.empty();
-    uname(&system);
+namespace {
 
-    setArch(system.machine);
-    setFamily(system.sysname);
-    setKernel(system.release);
+    struct HostOSProbe {
+        std::string architecture;
+        std::string family;
+        std::string kernel;
+        std::optional<std::string> platform;
+        std::string distro;
+        std::string version;
+    };
+
+    std::string valueFromOsReleaseLine(const std::string& line)
+    {
+        std::string value;
+        const std::size_t pos = line.find_first_of('=');
+        value = line.substr(pos + 1);
+        value.erase(std::remove(value.begin(), value.end(), '"'), value.end());
+        return value;
+    }
+
+    HostOSProbe probeHostOS()
+    {
+        LOG_INFO("Initializing OS (ctr 1)");
+        struct utsname system { };
+        // @FIXME: Unfortunately this runs during the initialization of the
+        //  cluster instance. Which prevents us of running this during testing
+        //  in a machine that does not have /etc/os-release file.
+        //  The isTest flag below is used to fill up default values during tests
+        //  to make it possible to run outside of target machines
+        auto opts = opencattus::utils::singleton::options();
+        const bool isTest = !opts->testCommand.empty();
+        uname(&system);
+
+        HostOSProbe probe {
+            .architecture = system.machine,
+            .family = system.sysname,
+            .kernel = system.release,
+        };
 
 #ifdef __APPLE__
-    if (true) {
+        if (true) {
 #else
-    if (getFamily() == OS::Family::Linux) {
+        if (probe.family == "Linux") {
 #endif
-        std::string filename = CHROOT "/etc/os-release";
-        LOG_INFO("Opening {}", filename);
-        std::ifstream file(filename);
+            std::string filename = CHROOT "/etc/os-release";
+            LOG_INFO("Opening {}", filename);
+            std::ifstream file(filename);
 
-        if (!file.is_open()) {
-            LOG_ERROR("Error while opening file {}", filename);
-            throw std::runtime_error(
-                fmt::format("Error while opening file: {}", filename));
-        }
+            if (!file.is_open()) {
+                LOG_ERROR("Error while opening file {}", filename);
+                throw std::runtime_error(
+                    fmt::format("Error while opening file: {}", filename));
+            }
 
-        /* Fetches OS information from /etc/os-release. The file is writen in a
-         * key=value style.
-         */
-        std::string line;
-        while (std::getline(file, line)) {
-            if (line.starts_with("PLATFORM_ID=")) {
-                if (isTest) {
-                    setPlatform("el9");
-                } else {
-                    LOG_DEBUG("Found platform (PLATFORM_ID=)");
-                    auto value = getValueFromKey(line);
-                    if (value.starts_with("platform:")) {
-                        // Skip the 'platform:' prefix
-                        constexpr auto platform = std::string_view("platform:");
-                        setPlatform(value.substr(platform.size()));
+            /* Fetches OS information from /etc/os-release. The file is writen
+             * in a key=value style.
+             */
+            std::string line;
+            while (std::getline(file, line)) {
+                if (line.starts_with("PLATFORM_ID=")) {
+                    if (isTest) {
+                        probe.platform = "el9";
                     } else {
-                        setPlatform(value);
+                        auto value = valueFromOsReleaseLine(line);
+                        LOG_DEBUG("Found platform (PLATFORM_ID={})", value);
+                        if (value.starts_with("platform:")) {
+                            // Skip the 'platform:' prefix
+                            constexpr auto platform
+                                = std::string_view("platform:");
+                            probe.platform = value.substr(platform.size());
+                        } else {
+                            probe.platform = value;
+                        }
                     }
+                }
+
+                if (line.starts_with("ID=")) {
+                    probe.distro
+                        = !isTest ? valueFromOsReleaseLine(line) : "rocky";
+                    LOG_DEBUG("Found distro (ID={})", probe.distro);
+                }
+
+                if (line.starts_with("VERSION_ID=")) {
+                    probe.version
+                        = !isTest ? valueFromOsReleaseLine(line) : "9.5";
+                    LOG_DEBUG("Found version (VERSION_ID={})", probe.version);
+                } else if (probe.version.empty()
+                    && line.starts_with("VERSION=")) {
+                    probe.version
+                        = !isTest ? valueFromOsReleaseLine(line) : "9.5";
+                    LOG_DEBUG("Found version (VERSION={})", probe.version);
                 }
             }
 
-            if (line.starts_with("ID=")) {
-                LOG_DEBUG("Found distro (ID=)");
-                setDistro(!isTest ? getValueFromKey(line) : "rocky");
-            }
-
-            if (line.starts_with("VERSION=")) {
-                LOG_DEBUG("Found version (VERSION=)");
-                setVersion(!isTest ? getValueFromKey(line) : "9.5");
+            if (file.bad()) {
+                throw std::runtime_error(
+                    fmt::format("Error while reading file: {}", filename));
             }
         }
 
-        if (file.bad()) {
-            throw std::runtime_error(
-                fmt::format("Error while reading file: {}", filename));
-        }
+        return probe;
     }
+
+}
+
+OS::OS()
+{
+    static const auto host = probeHostOS();
+
+    setArch(host.architecture);
+    setFamily(host.family);
+    setKernel(host.kernel);
+
+    if (host.platform) {
+        setPlatform(*host.platform);
+    }
+    setDistro(host.distro);
+    setVersion(host.version);
 }
 
 OS::OS(const Distro& distro, const Platform& platform,
@@ -123,6 +172,9 @@ OS::OS(const Distro& distro, const Platform& platform,
             break;
         case OS::Platform::el8:
             m_majorVersion = 8;
+            break;
+        case OS::Platform::ubuntu24:
+            m_majorVersion = 24;
             break;
         default:
             opencattus::functions::abort("Invalid platform: {}",
@@ -203,11 +255,14 @@ std::string OS::getDistroString() const
         case OS::Distro::OL:
             distro = "ol";
             break;
+        case OS::Distro::Ubuntu:
+            distro = "ubuntu";
+            break;
         default:
             std::unreachable();
     }
 
-    return fmt::format("{}-{}.{}", distro, m_majorVersion, m_minorVersion);
+    return fmt::format("{}-{}", distro, getVersion());
 }
 
 OS::PackageType OS::getPackageType() const
@@ -218,6 +273,8 @@ OS::PackageType OS::getPackageType() const
         case Distro::Rocky:
         case Distro::AlmaLinux:
             return PackageType::RPM;
+        case Distro::Ubuntu:
+            return PackageType::DEB;
         default:
             throw std::runtime_error("Unknonw distro type");
     };
@@ -231,6 +288,9 @@ void OS::setDistro(std::string_view distro)
     auto normalizedDistro = utils::string::lower(std::string(distro));
     if (normalizedDistro == "alma") {
         normalizedDistro = "almalinux";
+    } else if (normalizedDistro == "ubuntu24"
+        || normalizedDistro == "ubuntu24.04") {
+        normalizedDistro = "ubuntu";
     }
 
     if (const auto& rval = enums::ofStringOpt<OS::Distro>(
@@ -261,9 +321,12 @@ void OS::setMajorVersion(unsigned int majorVersion)
         case 10:
             m_platform = OS::Platform::el10;
             break;
+        case 24:
+            m_platform = OS::Platform::ubuntu24;
+            break;
         default:
             throw std::runtime_error(fmt::format(
-                "Unsupported release: EL{} is not supported.", majorVersion));
+                "Unsupported release: {} is not supported.", majorVersion));
     }
 
     m_majorVersion = majorVersion;
@@ -278,6 +341,11 @@ void OS::setMinorVersion(unsigned int minorVersion)
 
 std::string OS::getVersion() const
 {
+    if (getPlatform() == OS::Platform::ubuntu24) {
+        return fmt::format(
+            "{}.{}", m_majorVersion, fmt::format("{:02}", m_minorVersion));
+    }
+
     return fmt::format("{}.{}", m_majorVersion, m_minorVersion);
 }
 

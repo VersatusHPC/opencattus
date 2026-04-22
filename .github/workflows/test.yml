@@ -299,3 +299,194 @@ jobs:
               dnf install -y createrepo_c lftp openssh-clients findutils
               scripts/publish-rpms.sh --source-dir out/rpm-publish-input
             '
+
+  deb-build:
+    name: DEB Build (Ubuntu 24.04)
+    needs: fast-tests
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify Podman runner state
+        run: |
+          set -euo pipefail
+          command -v podman >/dev/null || {
+            echo "Missing required command on self-hosted runner: podman" >&2
+            exit 1
+          }
+
+          podman system migrate || true
+          podman info >/dev/null
+
+      - name: Prepare Conan cache
+        run: |
+          set -euo pipefail
+          mkdir -p "${HOME}/.cache/opencattus/conan/ubuntu24"
+          mkdir -p "${HOME}/.cache/opencattus/cpm/ubuntu24"
+          mkdir -p "${HOME}/.cache/opencattus/sources/ubuntu24"
+
+      - name: Build DEB in Ubuntu 24.04 container
+        run: |
+          set -euo pipefail
+          podman run --rm \
+            -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:z" \
+            -v "${HOME}/.cache/opencattus/conan/ubuntu24:/root/.conan2:z" \
+            -v "${HOME}/.cache/opencattus/cpm/ubuntu24:/root/.cache/CPM:z" \
+            -v "${HOME}/.cache/opencattus/sources/ubuntu24:/root/.cache/opencattus/sources:z" \
+            -w "${GITHUB_WORKSPACE}" \
+            docker.io/library/ubuntu:24.04 \
+            bash -lc '
+              set -euo pipefail
+              export DEBIAN_FRONTEND=noninteractive
+              apt update
+              apt install -y ca-certificates curl git dpkg-dev \
+                build-essential cmake ninja-build \
+                pkg-config python3 python3-pip python3-venv \
+                autoconf automake libtool meson perl \
+                libglibmm-2.4-dev libnewt-dev libsystemd-dev
+              export OPENCATTUS_SOURCE_CACHE="/root/.cache/opencattus/sources"
+              mkdir -p "${OPENCATTUS_SOURCE_CACHE}"
+              fetch_source() {
+                local url="$1"
+                local path="$2"
+                local tmp="${path}.tmp"
+
+                if [ -s "${path}" ] && python3 -m zipfile -t "${path}" >/dev/null 2>&1; then
+                  return 0
+                fi
+
+                rm -f "${path}" "${tmp}"
+                for attempt in 1 2 3 4 5; do
+                  if curl --fail --location --retry 8 --retry-delay 5 \
+                    --connect-timeout 20 --output "${tmp}" "${url}" &&
+                    python3 -m zipfile -t "${tmp}" >/dev/null 2>&1; then
+                    mv "${tmp}" "${path}"
+                    return 0
+                  fi
+
+                  rm -f "${tmp}"
+                  sleep 5
+                done
+
+                echo "Failed to fetch ${url}" >&2
+                return 1
+              }
+              export OPENCATTUS_FARGS_ARCHIVE="${OPENCATTUS_SOURCE_CACHE}/cmake-forward-arguments-8c50d1f956172edb34e95efa52a2d5cb1f686ed2.zip"
+              export OPENCATTUS_YCM_ARCHIVE="${OPENCATTUS_SOURCE_CACHE}/ycm-v0.13.0.zip"
+              fetch_source \
+                "https://github.com/polysquare/cmake-forward-arguments/archive/8c50d1f956172edb34e95efa52a2d5cb1f686ed2.zip" \
+                "${OPENCATTUS_FARGS_ARCHIVE}"
+              fetch_source \
+                "https://github.com/robotology/ycm/archive/refs/tags/v0.13.0.zip" \
+                "${OPENCATTUS_YCM_ARCHIVE}"
+              python3 -m venv /tmp/conan-venv
+              /tmp/conan-venv/bin/pip install conan
+              export PATH="/tmp/conan-venv/bin:${PATH}"
+              conan profile detect --force
+              git config --global --add safe.directory "$(pwd)"
+              cmake -S . -B build-deb -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DBUILD_TESTING=OFF
+              cmake --build build-deb --target opencattus -j"$(nproc)"
+
+              mkdir -p out/deb
+              cpack -G DEB \
+                --config build-deb/CPackConfig.cmake \
+                -B out/deb
+              ls -l out/deb/opencattus*.deb
+            '
+
+      - name: Upload DEB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencattus-deb-ubuntu24
+          path: out/deb/*.deb
+          if-no-files-found: error
+
+  publish-deb-repo:
+    name: Publish DEB Repository
+    needs: deb-build
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download DEB artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: opencattus-deb-*
+          path: out/deb-publish-input
+          merge-multiple: true
+
+      - name: Verify Podman runner state
+        run: |
+          set -euo pipefail
+          command -v podman >/dev/null || {
+            echo "Missing required command on self-hosted runner: podman" >&2
+            exit 1
+          }
+
+          podman system migrate || true
+          podman info >/dev/null
+
+      - name: Publish DEB repository
+        env:
+          REMOTE_HOST: 172.21.1.40
+          REMOTE_USER: reposync
+          REMOTE_PATH: /mnt/pool1/repos/opencattus
+          REPOSYNC_SSH_KEY: ${{ secrets.REPOSYNC_SSH_KEY }}
+        run: |
+          set -euo pipefail
+
+          podman_args=(
+            --rm
+            -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:z" \
+            -v "${HOME}/.ssh:/root/.ssh:ro,z" \
+            -w "${GITHUB_WORKSPACE}" \
+            -e REMOTE_HOST="${REMOTE_HOST}" \
+            -e REMOTE_USER="${REMOTE_USER}" \
+            -e REMOTE_PATH="${REMOTE_PATH}"
+          )
+
+          if [[ -n "${REPOSYNC_SSH_KEY}" ]]; then
+            key_path="${GITHUB_WORKSPACE}/.opencattus-repo-key"
+            install -m 600 /dev/null "${key_path}"
+            printf '%s\n' "${REPOSYNC_SSH_KEY}" > "${key_path}"
+            podman_args+=(-e "SSH_KEY=${key_path}")
+          elif ! find "${HOME}/.ssh" -maxdepth 1 -type f \
+            \( -name id_ed25519_openhpc -o -name id_ed25519 -o -name id_rsa \) \
+            -print -quit | grep -q .; then
+            echo "::notice::Skipping remote DEB repository publish because no SSH key is configured. Set REPOSYNC_SSH_KEY or install a runner SSH key to enable automatic publishing."
+            podman run "${podman_args[@]}" \
+              docker.io/library/ubuntu:24.04 \
+              bash -lc '
+                set -euo pipefail
+                export DEBIAN_FRONTEND=noninteractive
+                apt update
+                apt install -y dpkg-dev findutils gzip
+                scripts/publish-debs.sh --source-dir out/deb-publish-input --skip-sync
+              '
+            exit 0
+          fi
+
+          podman run "${podman_args[@]}" \
+            docker.io/library/ubuntu:24.04 \
+            bash -lc '
+              set -euo pipefail
+              export DEBIAN_FRONTEND=noninteractive
+              apt update
+              apt install -y dpkg-dev lftp openssh-client findutils gzip
+              scripts/publish-debs.sh --source-dir out/deb-publish-input
+            '

@@ -45,19 +45,28 @@ opencattus::services::ScriptBuilder NFS::installScript(const OS& osinfo)
 {
     using namespace opencattus;
     services::ScriptBuilder builder(osinfo);
+    const auto nfsServerPackage
+        = osinfo.getPackageType() == OS::PackageType::DEB
+        ? std::string_view("nfs-kernel-server")
+        : std::string_view("nfs-utils");
+    const auto nfsServerServices
+        = osinfo.getPackageType() == OS::PackageType::DEB
+        ? std::string_view("rpcbind nfs-kernel-server")
+        : std::string_view("rpcbind nfs-server");
     builder.addNewLine()
         .addCommand("# Variables")
         .addCommand("HEADNODE=$(hostname -s)")
         .addNewLine()
         .addCommand("# install packages")
-        .addPackage("nfs-utils")
+        .addPackage(nfsServerPackage)
         .addNewLine()
         .addCommand("# Add exports to /etc/exports")
-        .addLineToFile("/etc/exports", "/home",
+        .addLineToFile("/etc/exports", "^/home[[:space:]]",
             "/home *(rw,no_subtree_check,fsid={},no_root_squash)", 10)
         .addLineToFile("/etc/exports", "/opt/ohpc/pub",
             "/opt/ohpc/pub *(ro,no_subtree_check,fsid={})", 11)
-        .addLineToFile("/etc/exports", "/opt/spack", "/opt/spack *(ro)");
+        .addLineToFile(
+            "/etc/exports", "/opt/spack", "/opt/spack *(ro,no_subtree_check)");
     if (utils::singleton::answerfile()->system.provisioner == "xcat") {
         builder
             .addLineToFile("/etc/exports", "/tftpboot",
@@ -66,7 +75,7 @@ opencattus::services::ScriptBuilder NFS::installScript(const OS& osinfo)
                 "/install *(rw,no_root_squash,sync,no_subtree_check)")
             .addNewLine();
     }
-    builder.enableService("rpcbind nfs-server")
+    builder.enableService(nfsServerServices)
         .addCommand("exportfs -a > /dev/null 2>&1 || :")
         .addNewLine()
         .addCommand(R"(# Update firewall rules
@@ -82,6 +91,10 @@ opencattus::services::ScriptBuilder NFS::imageInstallScript(
 {
     using namespace opencattus;
     services::ScriptBuilder builder(osinfo);
+    const auto nfsClientPackage
+        = osinfo.getPackageType() == OS::PackageType::DEB
+        ? std::string_view("nfs-common")
+        : std::string_view("nfs-utils");
     builder.addNewLine()
         .addCommand("# Define variables (for shell script execution)")
         .addCommand("IMAGE=\"{}\"", args.imageName)
@@ -96,7 +109,7 @@ opencattus::services::ScriptBuilder NFS::imageInstallScript(
         .addCommand("chmod +x \"${{POSTINSTALL}}\"")
         .addNewLine()
         .addCommand("# Add required packages to the image")
-        .addLineToFile("${PKGLIST}", "nfs-utils", "nfs-utils")
+        .addLineToFile("${PKGLIST}", nfsClientPackage, "{}", nfsClientPackage)
         .addLineToFile("${PKGLIST}", "autofs", "autofs")
         .addNewLine()
         .addCommand("# Configure autofs")
@@ -144,7 +157,9 @@ TEST_CASE("installScript")
     CHECK(script.contains("systemctl is-active --quiet firewalld.service"));
     CHECK(
         script.contains("/home *(rw,no_subtree_check,fsid=10,no_root_squash)"));
+    CHECK(script.contains(R"(grep -q "^/home[[:space:]]" "/etc/exports")"));
     CHECK(script.contains("/opt/ohpc/pub *(ro,no_subtree_check,fsid=11)"));
+    CHECK(script.contains("/opt/spack *(ro,no_subtree_check)"));
     CHECK(script.contains(
         "/tftpboot *(rw,no_root_squash,sync,no_subtree_check)"));
     CHECK(
@@ -184,6 +199,41 @@ TEST_CASE("installImageScript")
     CHECK(script.contains(
         R"(chdef -t osimage ${IMAGE} postinstall="${POSTINSTALL}")"));
 };
+
+TEST_CASE("installImageScript uses Debian package names for Ubuntu images")
+{
+    const OS osinfo
+        = opencattus::models::OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+    const auto builder = NFS::imageInstallScript(osinfo,
+        { .imageName = "ubuntu24.04-x86_64-netboot-compute",
+            .rootfs = "/install/netboot/ubuntu24.04/x86_64/compute/rootimg",
+            .postinstall = "/install/custom/netboot/compute.postinstall",
+            .pkglist = "/install/custom/netboot/compute.otherpkglist" });
+    const std::string script = builder.toString();
+    CHECK(script.contains(R"(echo "nfs-common" >> "${PKGLIST}")"));
+    CHECK_FALSE(script.contains(R"(echo "nfs-utils" >> "${PKGLIST}")"));
+};
+
+TEST_CASE("installScript uses Debian NFS server package names on Ubuntu")
+{
+    const OS osinfo
+        = opencattus::models::OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+    opencattus::services::initializeSingletonsOptions(
+        std::make_unique<const Options>());
+    opencattus::Singleton<const models::AnswerFile>::init(
+        []() -> std::unique_ptr<const models::AnswerFile> {
+            auto answerfile = std::make_unique<models::AnswerFile>(
+                "test/sample/answerfile/rocky9-xcat.ini");
+            return answerfile;
+        });
+    const auto builder = NFS::installScript(osinfo);
+    const auto scriptStr = builder.toString();
+    const auto script = std::string_view(scriptStr);
+
+    CHECK(script.contains("DEBIAN_FRONTEND=noninteractive apt install -y "
+                          "nfs-kernel-server"));
+    CHECK(script.contains("systemctl enable --now rpcbind nfs-kernel-server"));
+}
 
 }
 

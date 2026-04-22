@@ -32,7 +32,7 @@ namespace opencattus::services {
 class XCAT : public Provisioner<XCAT> {
 public:
     struct Image {
-        std::vector<std::string_view> otherpkgs = {};
+        std::vector<std::string_view> otherpkgs = { };
         // @TODO: We need to support more than one osimage (:
         //   this can be a default osimage though
         std::string osimage;
@@ -97,6 +97,15 @@ private:
      * This function packages the OS image for deployment.
      */
     void packimage() const;
+
+    /**
+     * @brief Applies final root image changes after xCAT genimage completes.
+     *
+     * xCAT's distro-specific postinstall hooks do not always leave the final
+     * stateless root image with OpenCATTUS credentials, so this runs after
+     * genimage and before packimage.
+     */
+    void finalizeStatelessRootImage() const;
 
     /**
      * @brief Sets the nodes for a specific image.
@@ -230,6 +239,11 @@ private:
      */
     static void configureEL9();
 
+    /**
+     * @brief Configures xCAT netboot templates for Ubuntu 24.04.
+     */
+    static void configureUbuntu24();
+
 public:
     XCAT();
 
@@ -275,7 +289,7 @@ public:
      */
     void createImage(ImageType = ImageType::Netboot,
         NodeType = NodeType::Compute,
-        const std::vector<ScriptBuilder>& customizations = {});
+        const std::vector<ScriptBuilder>& customizations = { });
 
     /**
      * @brief Adds nodes to the provisioning system.

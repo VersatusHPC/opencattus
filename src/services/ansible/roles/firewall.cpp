@@ -1,5 +1,6 @@
 #include <opencattus/services/ansible/roles/firewall.h>
 #include <opencattus/services/log.h>
+#include <opencattus/services/runner.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -15,6 +16,19 @@ using namespace opencattus::utils::singleton;
 void configureFirewall()
 {
     LOG_INFO("Setting up firewall")
+
+    if (cluster()->getHeadnode().getOS().getPackageType()
+        == opencattus::models::OS::PackageType::DEB) {
+        if (cluster()->isFirewall()) {
+            LOG_WARN("Ubuntu firewall configuration is not implemented yet; "
+                     "leaving the existing firewall state unchanged");
+        } else {
+            opencattus::services::runner::shell::cmd(
+                "systemctl disable --now ufw || :");
+            LOG_WARN("UFW has been disabled if it was installed")
+        }
+        return;
+    }
 
     if (cluster()->isFirewall()) {
         osservice()->enableService("firewalld");

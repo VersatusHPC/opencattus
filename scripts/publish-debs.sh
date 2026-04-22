@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 #
-# Publish the OpenCATTUS RPM repository.
+# Publish the OpenCATTUS Ubuntu APT repository.
 #
-# Stages CPack-built RPMs by Enterprise Linux generation, generates dnf
-# repository metadata, and mirrors the result to the repository server.
+# Stages built DEB packages, generates flat APT repository metadata, and
+# mirrors only the Ubuntu subtree to the repository server.
 #
 # Usage:
-#   scripts/publish-rpms.sh [--source-dir DIR] [--staging-dir DIR] [--dry-run] [--skip-sync]
+#   scripts/publish-debs.sh [--source-dir DIR] [--staging-dir DIR] [--dry-run] [--skip-sync]
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SOURCE_DIR="out/rpm"
-STAGING_DIR="${STAGING_DIR:-${TMPDIR:-/tmp}/opencattus-rpm-repo}"
+SOURCE_DIR="out/deb"
+STAGING_DIR="${STAGING_DIR:-${TMPDIR:-/tmp}/opencattus-deb-repo}"
 REMOTE_USER="${REMOTE_USER:-reposync}"
 REMOTE_HOST="${REMOTE_HOST:-172.21.1.40}"
 REMOTE_PATH="${REMOTE_PATH:-/mnt/pool1/repos/opencattus}"
@@ -20,6 +20,7 @@ SSH_KEY="${SSH_KEY:-}"
 DRY_RUN=""
 LFTP_DRY_RUN=""
 SKIP_SYNC=""
+REPO_DIR="ubuntu24"
 
 usage() {
     sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
@@ -88,19 +89,16 @@ resolve_ssh_key() {
     exit 1
 }
 
-stage_el_rpms() {
-    local el_number="$1"
-    local repo_dir="el${el_number}"
-    local rpm_glob="*.el${el_number}.*.rpm"
-    local destination="${STAGING_DIR}/${repo_dir}/x86_64"
-    local repo_file="${SCRIPT_DIR}/repo-files/${repo_dir}/versatushpc-opencattus.repo"
-    local rpms=()
+stage_ubuntu_debs() {
+    local destination="${STAGING_DIR}/${REPO_DIR}"
+    local repo_file="${SCRIPT_DIR}/repo-files/${REPO_DIR}/versatushpc-opencattus.list"
+    local debs=()
 
-    while IFS= read -r -d '' rpm; do
-        rpms+=("${rpm}")
-    done < <(find "${SOURCE_DIR}" -type f -name "${rpm_glob}" -print0 | sort -z)
-    if [[ "${#rpms[@]}" -eq 0 ]]; then
-        echo "No EL${el_number} RPMs found under ${SOURCE_DIR}" >&2
+    while IFS= read -r -d '' deb; do
+        debs+=("${deb}")
+    done < <(find "${SOURCE_DIR}" -type f -name '*.deb' -print0 | sort -z)
+    if [[ "${#debs[@]}" -eq 0 ]]; then
+        echo "No DEB packages found under ${SOURCE_DIR}" >&2
         exit 1
     fi
 
@@ -110,16 +108,20 @@ stage_el_rpms() {
     fi
 
     mkdir -p "${destination}"
-    for rpm in "${rpms[@]}"; do
-        cp -f "${rpm}" "${destination}/"
+    for deb in "${debs[@]}"; do
+        cp -f "${deb}" "${destination}/"
     done
-    cp "${repo_file}" "${STAGING_DIR}/${repo_dir}/"
+    cp "${repo_file}" "${destination}/"
 
-    echo "==> Running createrepo_c for ${repo_dir}"
-    createrepo_c --update "${STAGING_DIR}/${repo_dir}"
+    echo "==> Running dpkg-scanpackages for ${REPO_DIR}"
+    (
+        cd "${destination}"
+        dpkg-scanpackages . /dev/null >Packages
+        gzip -9c Packages >Packages.gz
+    )
 }
 
-require_command createrepo_c
+require_command dpkg-scanpackages
 if [[ -z "${SKIP_SYNC}" ]]; then
     require_command lftp
     resolve_ssh_key
@@ -133,36 +135,28 @@ echo "==> Preparing staging directory: ${STAGING_DIR}"
 rm -rf "${STAGING_DIR}"
 mkdir -p "${STAGING_DIR}"
 
-stage_el_rpms 8
-stage_el_rpms 9
-stage_el_rpms 10
+stage_ubuntu_debs
 
 if [[ -n "${SKIP_SYNC}" ]]; then
     echo "==> Skipping remote sync"
 else
-    echo "==> Syncing to ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH} via SFTP"
-    for repo_dir in el8 el9 el10; do
-        lftp -e "
+    echo "==> Syncing ${REPO_DIR} to ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/${REPO_DIR} via SFTP"
+    lftp -e "
 set sftp:connect-program 'ssh -l ${REMOTE_USER} -i ${SSH_KEY} -o StrictHostKeyChecking=no -o BatchMode=yes';
 open sftp://${REMOTE_HOST};
-mkdir -p ${REMOTE_PATH}/${repo_dir};
+mkdir -p ${REMOTE_PATH}/${REPO_DIR};
 mirror --reverse --delete --verbose ${LFTP_DRY_RUN} \
-    ${STAGING_DIR}/${repo_dir}/ ${REMOTE_PATH}/${repo_dir}/;
+    ${STAGING_DIR}/${REPO_DIR}/ ${REMOTE_PATH}/${REPO_DIR}/;
 bye;
 "
-    done
 fi
 
 echo ""
-echo "==> Done. RPM counts:"
-echo "    el8/x86_64:  $(find "${STAGING_DIR}/el8/x86_64" -name '*.rpm' | wc -l | tr -d ' ')"
-echo "    el9/x86_64:  $(find "${STAGING_DIR}/el9/x86_64" -name '*.rpm' | wc -l | tr -d ' ')"
-echo "    el10/x86_64: $(find "${STAGING_DIR}/el10/x86_64" -name '*.rpm' | wc -l | tr -d ' ')"
+echo "==> Done. DEB count:"
+echo "    ${REPO_DIR}: $(find "${STAGING_DIR}/${REPO_DIR}" -name '*.deb' | wc -l | tr -d ' ')"
 echo ""
-echo "    Staged repository: ${STAGING_DIR}"
-echo "    Remote repository: sftp://${REMOTE_USER}@${REMOTE_HOST}${REMOTE_PATH}"
+echo "    Staged repository: ${STAGING_DIR}/${REPO_DIR}"
+echo "    Remote repository: sftp://${REMOTE_USER}@${REMOTE_HOST}${REMOTE_PATH}/${REPO_DIR}"
 echo ""
 echo "    Users enable the repo with:"
-echo "      EL8:  curl -o /etc/yum.repos.d/versatushpc-opencattus.repo https://repos.versatushpc.com.br/opencattus/el8/versatushpc-opencattus.repo"
-echo "      EL9:  curl -o /etc/yum.repos.d/versatushpc-opencattus.repo https://repos.versatushpc.com.br/opencattus/el9/versatushpc-opencattus.repo"
-echo "      EL10: curl -o /etc/yum.repos.d/versatushpc-opencattus.repo https://repos.versatushpc.com.br/opencattus/el10/versatushpc-opencattus.repo"
+echo "      curl -o /etc/apt/sources.list.d/versatushpc-opencattus.list https://repos.versatushpc.com.br/opencattus/${REPO_DIR}/versatushpc-opencattus.list"

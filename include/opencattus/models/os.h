@@ -48,13 +48,13 @@ public:
      * @enum Platform
      * @brief Enumeration representing different platforms of the OS.
      */
-    enum class Platform { el8, el9, el10 };
+    enum class Platform { el8, el9, el10, ubuntu24 };
 
     /**
      * @enum Distro
      * @brief Enumeration representing different distributions of the OS.
      */
-    enum class Distro { RHEL, OL, Rocky, AlmaLinux };
+    enum class Distro { RHEL, OL, Rocky, AlmaLinux, Ubuntu };
 
     /**
      * @enum PackageManager
@@ -68,8 +68,8 @@ private:
     std::variant<std::monostate, Platform> m_platform;
     std::variant<std::monostate, Distro> m_distro;
     std::optional<std::string> m_kernel; // kernel version may be uninitialized
-    unsigned m_majorVersion {};
-    unsigned m_minorVersion {};
+    unsigned m_majorVersion { };
+    unsigned m_minorVersion { };
 
     void setMajorVersion(unsigned int majorVersion);
 

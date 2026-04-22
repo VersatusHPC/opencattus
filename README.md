@@ -19,8 +19,8 @@ normal use.
 
 # Installing
 
-OpenCATTUS RPM packages are published for EL8, EL9, and EL10 compatible
-systems. Pick the repository matching the major version of the head node OS.
+OpenCATTUS packages are published for EL8, EL9, EL10, and Ubuntu 24.04
+systems. Pick the repository matching the head node OS.
 
 For EL8:
 
@@ -46,13 +46,22 @@ sudo curl -o /etc/yum.repos.d/versatushpc-opencattus.repo \
 sudo dnf install -y opencattus
 ```
 
+For Ubuntu 24.04:
+
+```bash
+sudo curl -o /etc/apt/sources.list.d/versatushpc-opencattus.list \
+  https://repos.versatushpc.com.br/opencattus/ubuntu24/versatushpc-opencattus.list
+sudo apt update
+sudo apt install -y opencattus
+```
+
 Then start the installer:
 
 ```bash
 sudo opencattus --tui
 ```
 
-Maintainer details for building and publishing the RPM repository are in
+Maintainer details for building and publishing the package repositories are in
 [docs/rpm-publishing.md](docs/rpm-publishing.md).
 
 # Architecture
