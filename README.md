@@ -52,6 +52,9 @@ Then start the installer:
 sudo opencattus --tui
 ```
 
+Maintainer details for building and publishing the RPM repository are in
+[docs/rpm-publishing.md](docs/rpm-publishing.md).
+
 # Architecture
 
 OpenCATTUS is written in modern C++ with some C code for compatibility
