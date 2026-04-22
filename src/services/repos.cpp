@@ -2544,6 +2544,15 @@ std::vector<std::string> expandSelectedRepositoryIds(
     return expanded;
 }
 
+const OS& selectRepositoryBootstrapOS(const OS& headnodeOS, const OS& computeOS)
+{
+    if (headnodeOS.getPackageType() != computeOS.getPackageType()) {
+        return headnodeOS;
+    }
+
+    return computeOS;
+}
+
 std::vector<RepoManager::RepositorySelection>
 RepoManager::defaultRepositoriesFor(const OS& osinfo,
     std::string_view ofedVersion,
@@ -2629,6 +2638,18 @@ TEST_CASE("expandSelectedRepositoryIds enables BeeGFS monitoring dependencies")
 {
     CHECK(expandSelectedRepositoryIds({ "beegfs" })
         == std::vector<std::string> { "beegfs", "grafana", "influxdata" });
+}
+
+TEST_CASE("selectRepositoryBootstrapOS uses head node for mixed package types")
+{
+    const OS ubuntuHead(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+    const OS elCompute(OS::Distro::Rocky, OS::Platform::el9, 6);
+    const OS elHead(OS::Distro::Rocky, OS::Platform::el9, 6);
+    const OS ubuntuCompute(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+
+    CHECK(&selectRepositoryBootstrapOS(ubuntuHead, elCompute) == &ubuntuHead);
+    CHECK(&selectRepositoryBootstrapOS(elHead, ubuntuCompute) == &elHead);
+    CHECK(&selectRepositoryBootstrapOS(elHead, elCompute) == &elCompute);
 }
 
 TEST_CASE("defaultRepositoriesFor keeps mandatory repositories enabled when "
@@ -2837,17 +2858,12 @@ void RepoManager::initializeDefaultRepositories()
     auto cluster = opencattus::Singleton<models::Cluster>::get();
     const auto& computeOS = cluster->getComputeNodeOS();
     const auto& headnodeOS = cluster->getHeadnode().getOS();
-    const auto& osinfo = computeOS.getPackageType() == OS::PackageType::DEB
-            && headnodeOS.getPackageType() == OS::PackageType::RPM
-        ? headnodeOS
-        : computeOS;
+    const auto& osinfo = selectRepositoryBootstrapOS(headnodeOS, computeOS);
 
-    if (computeOS.getPackageType() == OS::PackageType::DEB
-        && headnodeOS.getPackageType() == OS::PackageType::RPM) {
-        LOG_WARN("Compute nodes use DEB repositories, but the head node uses "
-                 "RPM. Initializing RPM repositories for head-node packages; "
-                 "xCAT will attach Ubuntu APT repositories directly to the "
-                 "compute image.");
+    if (headnodeOS.getPackageType() != computeOS.getPackageType()) {
+        LOG_WARN("Head node and compute nodes use different package families. "
+                 "Initializing head-node repositories here; the provisioner "
+                 "will attach compute-node repositories to the node image.");
     }
 
     const auto ofedVersion = cluster->getOFED().has_value()

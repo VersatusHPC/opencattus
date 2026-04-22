@@ -1340,9 +1340,8 @@ void XCAT::finalizeStatelessRootImage() const
     LOG_ASSERT(
         !m_stateless.chroot.empty(), "xCAT stateless root image path is empty");
 
-    const auto rootImage = m_stateless.chroot / "rootimg";
     const auto script = buildFinalizeStatelessRootImageScript(
-        cluster()->getHeadnode().getOS(), rootImage,
+        cluster()->getHeadnode().getOS(), m_stateless.chroot,
         getStatelessNodeRootPassword());
     opencattus::utils::singleton::runner()->run(script);
 }
@@ -2647,12 +2646,11 @@ TEST_CASE("buildFinalizeStatelessRootImageScript fixes the final root image")
 {
     const OS osinfo(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
     const auto script = buildFinalizeStatelessRootImageScript(osinfo,
-        "/install/netboot/ubuntu24.04/x86_64/compute/rootimg/rootimg",
-        "labroot");
+        "/install/netboot/ubuntu24.04/x86_64/compute/rootimg", "labroot");
     const auto content = script.toString();
 
-    CHECK(content.contains("/install/netboot/ubuntu24.04/x86_64/compute/"
-                           "rootimg/rootimg"));
+    CHECK(content.contains(
+        "/install/netboot/ubuntu24.04/x86_64/compute/rootimg"));
     CHECK(content.contains("password='labroot'"));
     CHECK(content.contains("chtab key=system passwd.username=root "
                            "passwd.password=\"$password\" "
