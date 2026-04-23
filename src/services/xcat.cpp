@@ -976,10 +976,21 @@ opencattus::services::ScriptBuilder buildFinalizeStatelessRootImageScript(
                     "passwd.password=\"$password\" passwd.cryptmethod=sha512")
         .addCommand("# Set xCAT root image root password")
         .addCommand("rootimg={}", shellSingleQuote(rootImage.string()))
-        .addCommand(R"(if [ -x "$rootimg/usr/sbin/chpasswd" ]; then
-  printf 'root:%s\n' "$password" | chroot "$rootimg" /usr/sbin/chpasswd
-elif [ -x "$rootimg/sbin/chpasswd" ]; then
-  printf 'root:%s\n' "$password" | chroot "$rootimg" /sbin/chpasswd
+        .addCommand(R"(rootfs=
+for candidate in "$rootimg" "$rootimg/rootimg"; do
+  if [ -x "$candidate/usr/sbin/chpasswd" ] || [ -x "$candidate/sbin/chpasswd" ]; then
+    rootfs="$candidate"
+    break
+  fi
+done
+if [ -z "$rootfs" ]; then
+  echo "Unable to set root password: chpasswd not found in xCAT image" >&2
+  exit 1
+fi
+if [ -x "$rootfs/usr/sbin/chpasswd" ]; then
+  printf 'root:%s\n' "$password" | chroot "$rootfs" /usr/sbin/chpasswd
+elif [ -x "$rootfs/sbin/chpasswd" ]; then
+  printf 'root:%s\n' "$password" | chroot "$rootfs" /sbin/chpasswd
 else
   echo "Unable to set root password: chpasswd not found in xCAT image" >&2
   exit 1
@@ -2655,7 +2666,9 @@ TEST_CASE("buildFinalizeStatelessRootImageScript fixes the final root image")
     CHECK(content.contains("chtab key=system passwd.username=root "
                            "passwd.password=\"$password\" "
                            "passwd.cryptmethod=sha512"));
-    CHECK(content.contains("chroot \"$rootimg\" /usr/sbin/chpasswd"));
-    CHECK(content.contains("chroot \"$rootimg\" /sbin/chpasswd"));
+    CHECK(content.contains("for candidate in \"$rootimg\" "
+                           "\"$rootimg/rootimg\""));
+    CHECK(content.contains("chroot \"$rootfs\" /usr/sbin/chpasswd"));
+    CHECK(content.contains("chroot \"$rootfs\" /sbin/chpasswd"));
     CHECK(content.contains("printf 'root:%s\\n' \"$password\""));
 }
