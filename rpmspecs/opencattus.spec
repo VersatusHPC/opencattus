@@ -1,5 +1,5 @@
 Name: opencattus
-Version: 1.0
+Version: 1.1
 Release: 1
 Summary: OpenCATTUS Installer
 License: Apache 2.0
@@ -85,6 +85,10 @@ install -m 644 repos/rocky-vault.conf %{buildroot}/opt/opencattus/conf/repos/roc
 /opt/opencattus/conf/repos/rocky-vault.conf
 
 %changelog
+* Thu Apr 23 2026  OpenCATTUS Maintainers <vinicius@ferrao.net.br> - 1.1-1
+- Add Ubuntu 24.04 support for Confluent and xCAT deployments
+- Build and publish RPM and DEB packages from self-hosted CI
+- Rename shipped package artifacts to opencattus
 * Tue Apr 21 2026  OpenCATTUS Maintainers <vinicius@ferrao.net.br> - 1.0-1
 - Switch packaged RPMs to Release builds and non-debug package name
 * Tue Sep 16 2025  Daniel Hilst <daniel@versatushpc.com.br> - 1.0-6 - xCAT bugfixes
