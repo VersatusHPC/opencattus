@@ -65,6 +65,20 @@ require_command() {
     }
 }
 
+seed_remote_repo_dir() {
+    mkdir -p "${STAGING_DIR}/${REPO_DIR}"
+
+    echo "==> Fetching current remote contents for ${REPO_DIR}"
+    lftp -e "
+set cmd:fail-exit yes;
+set sftp:connect-program 'ssh -l ${REMOTE_USER} -i ${SSH_KEY} -o StrictHostKeyChecking=no -o BatchMode=yes';
+open sftp://${REMOTE_HOST};
+mkdir -p ${REMOTE_PATH}/${REPO_DIR};
+mirror --verbose ${REMOTE_PATH}/${REPO_DIR}/ ${STAGING_DIR}/${REPO_DIR}/;
+bye;
+"
+}
+
 resolve_ssh_key() {
     if [[ -n "${SSH_KEY}" ]]; then
         [[ -f "${SSH_KEY}" ]] && return 0
@@ -113,6 +127,7 @@ stage_ubuntu_debs() {
     done
     cp "${repo_file}" "${destination}/"
 
+    rm -f "${destination}/Packages" "${destination}/Packages.gz"
     echo "==> Running dpkg-scanpackages for ${REPO_DIR}"
     (
         cd "${destination}"
@@ -134,6 +149,10 @@ fi
 echo "==> Preparing staging directory: ${STAGING_DIR}"
 rm -rf "${STAGING_DIR}"
 mkdir -p "${STAGING_DIR}"
+
+if [[ -z "${SKIP_SYNC}" ]]; then
+    seed_remote_repo_dir
+fi
 
 stage_ubuntu_debs
 

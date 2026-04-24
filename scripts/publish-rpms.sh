@@ -64,6 +64,22 @@ require_command() {
     }
 }
 
+seed_remote_repo_dir() {
+    local repo_dir="$1"
+
+    mkdir -p "${STAGING_DIR}/${repo_dir}"
+
+    echo "==> Fetching current remote contents for ${repo_dir}"
+    lftp -e "
+set cmd:fail-exit yes;
+set sftp:connect-program 'ssh -l ${REMOTE_USER} -i ${SSH_KEY} -o StrictHostKeyChecking=no -o BatchMode=yes';
+open sftp://${REMOTE_HOST};
+mkdir -p ${REMOTE_PATH}/${repo_dir};
+mirror --verbose ${REMOTE_PATH}/${repo_dir}/ ${STAGING_DIR}/${repo_dir}/;
+bye;
+"
+}
+
 resolve_ssh_key() {
     if [[ -n "${SSH_KEY}" ]]; then
         [[ -f "${SSH_KEY}" ]] && return 0
@@ -115,6 +131,7 @@ stage_el_rpms() {
     done
     cp "${repo_file}" "${STAGING_DIR}/${repo_dir}/"
 
+    rm -rf "${STAGING_DIR}/${repo_dir}/repodata"
     echo "==> Running createrepo_c for ${repo_dir}"
     createrepo_c --update "${STAGING_DIR}/${repo_dir}"
 }
@@ -132,6 +149,12 @@ fi
 echo "==> Preparing staging directory: ${STAGING_DIR}"
 rm -rf "${STAGING_DIR}"
 mkdir -p "${STAGING_DIR}"
+
+if [[ -z "${SKIP_SYNC}" ]]; then
+    seed_remote_repo_dir el8
+    seed_remote_repo_dir el9
+    seed_remote_repo_dir el10
+fi
 
 stage_el_rpms 8
 stage_el_rpms 9

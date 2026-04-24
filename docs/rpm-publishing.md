@@ -3,6 +3,9 @@
 OpenCATTUS publishes Release RPMs for EL8, EL9, and EL10, plus a DEB package
 for Ubuntu 24.04. RPM repositories are generated with `createrepo_c`, and the
 Ubuntu repository is a flat APT repository generated with `dpkg-scanpackages`.
+The publish scripts preserve existing package history by first mirroring the
+current remote repository into a local staging tree, then adding new packages
+and regenerating metadata.
 
 ## What CI Does
 
@@ -83,6 +86,11 @@ Each publisher mirrors only the subtree it owns:
 - `scripts/publish-debs.sh` owns `ubuntu24/`.
 
 Do not place unrelated files inside those subdirectories.
+
+`--delete` is safe here because each publish step first seeds the staging tree
+from the current remote repository. That keeps older package files present in
+the staged tree, so regenerated metadata continues to index historical
+versions.
 
 ## SSH Key
 
