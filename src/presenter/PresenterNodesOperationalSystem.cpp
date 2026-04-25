@@ -97,8 +97,7 @@ auto makeOperatingSystem(
                 static_cast<unsigned>(minorVersion), arch);
         case 24:
             if (distro == OS::Distro::Ubuntu && minorVersion == 4) {
-                return OS(distro, OS::Platform::ubuntu24,
-                    static_cast<unsigned>(minorVersion), arch);
+                return OS(distro, OS::Platform::ubuntu2404, 0, arch);
             }
             break;
         default:
@@ -532,7 +531,7 @@ TEST_CASE("makeOperatingSystem maps major versions to supported platforms")
     const auto ubuntu
         = makeOperatingSystem(OS::Distro::Ubuntu, { 24, 4, OS::Arch::x86_64 });
 
-    CHECK(ubuntu.getPlatform() == OS::Platform::ubuntu24);
+    CHECK(ubuntu.getPlatform() == OS::Platform::ubuntu2404);
     CHECK(ubuntu.getPackageType() == OS::PackageType::DEB);
     CHECK(ubuntu.getVersion() == "24.04");
 }

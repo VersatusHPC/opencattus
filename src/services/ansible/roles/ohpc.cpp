@@ -139,7 +139,7 @@ namespace {
                 return defaultPackagesForEl9();
             case models::OS::Platform::el10:
                 return defaultPackagesForEl10();
-            case models::OS::Platform::ubuntu24:
+            case models::OS::Platform::ubuntu2404:
                 return defaultPackagesForUbuntu24();
             default:
                 std::unreachable();
@@ -152,7 +152,7 @@ namespace {
             case models::OS::Platform::el8:
             case models::OS::Platform::el9:
             case models::OS::Platform::el10:
-            case models::OS::Platform::ubuntu24:
+            case models::OS::Platform::ubuntu2404:
                 return { std::string(bundleSerialLibraries),
                     std::string(bundleParallelLibraries) };
             default:
@@ -170,7 +170,7 @@ namespace {
                 return bundlePackagesForEl9(bundleId);
             case models::OS::Platform::el10:
                 return bundlePackagesForEl10(bundleId);
-            case models::OS::Platform::ubuntu24:
+            case models::OS::Platform::ubuntu2404:
                 return bundlePackagesForUbuntu24(bundleId);
             default:
                 std::unreachable();
@@ -309,7 +309,7 @@ TEST_CASE("resolvePackages keeps Ubuntu 24.04 OpenHPC fork defaults explicit")
 {
     const auto packages
         = resolvePackages(models::OS(models::OS::Distro::Ubuntu,
-                              models::OS::Platform::ubuntu24, 4),
+                              models::OS::Platform::ubuntu2404, 0),
             std::nullopt, { });
 
     CHECK(packages.contains("gnu15-compilers-ohpc"));
@@ -342,7 +342,7 @@ TEST_CASE("buildPackageInstallCommand uses apt on Ubuntu")
 {
     const auto command
         = buildPackageInstallCommand(models::OS(models::OS::Distro::Ubuntu,
-                                         models::OS::Platform::ubuntu24, 4),
+                                         models::OS::Platform::ubuntu2404, 0),
             { "gnu15-compilers-ohpc", "openmpi5-gnu15-ohpc" });
 
     CHECK(command

@@ -1071,7 +1071,7 @@ std::string defaultOpenHPCVersionFor(const OS& osinfo)
             return "3";
         case OS::Platform::el10:
             return "4";
-        case OS::Platform::ubuntu24:
+        case OS::Platform::ubuntu2404:
             return "versatushpc-4";
         default:
             throw std::runtime_error(
@@ -1185,7 +1185,7 @@ std::string defaultCUDAGPGKeyFor(const OS& osinfo)
             return "D42D0685.pub";
         case OS::Platform::el10:
             return "CDF6BA43.pub";
-        case OS::Platform::ubuntu24:
+        case OS::Platform::ubuntu2404:
             return "";
         default:
             throw std::runtime_error(
@@ -1680,7 +1680,7 @@ TEST_CASE("defaultOpenHPCVersionFor maps the supported EL releases")
               OS(models::OS::Distro::Rocky, OS::Platform::el10, 1))
         == "4");
     CHECK(defaultOpenHPCVersionFor(
-              OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+              OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0))
         == "versatushpc-4");
 }
 
@@ -2642,10 +2642,10 @@ TEST_CASE("expandSelectedRepositoryIds enables BeeGFS monitoring dependencies")
 
 TEST_CASE("selectRepositoryBootstrapOS uses head node for mixed package types")
 {
-    const OS ubuntuHead(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+    const OS ubuntuHead(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
     const OS elCompute(OS::Distro::Rocky, OS::Platform::el9, 6);
     const OS elHead(OS::Distro::Rocky, OS::Platform::el9, 6);
-    const OS ubuntuCompute(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+    const OS ubuntuCompute(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
 
     CHECK(&selectRepositoryBootstrapOS(ubuntuHead, elCompute) == &ubuntuHead);
     CHECK(&selectRepositoryBootstrapOS(elHead, ubuntuCompute) == &elHead);
@@ -2701,8 +2701,8 @@ TEST_CASE("defaultRepositoriesFor exposes Ubuntu 24.04 mandatory repositories")
 {
     opencattus::services::initializeSingletonsOptions(
         std::make_unique<const Options>(Options { }));
-    const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24,
-        4, OS::Arch::x86_64);
+    const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu2404,
+        0, OS::Arch::x86_64);
     const auto selections = RepoManager::defaultRepositoriesFor(
         osinfo, "latest", std::nullopt, std::nullopt);
 
@@ -2740,7 +2740,7 @@ struct RPMRepositoryGenerator {
 std::string ubuntuOpenHpcRepositoryUrl(const OS& osinfo)
 {
     switch (osinfo.getPlatform()) {
-        case OS::Platform::ubuntu24:
+        case OS::Platform::ubuntu2404:
             return "https://repos.versatushpc.com.br/openhpc/"
                    "versatushpc-4/Ubuntu_24.04/";
         default:
@@ -2758,7 +2758,7 @@ std::string ubuntuOpenHpcRepositoryContents(const OS& osinfo)
 
 std::string ubuntuXcatRepositoryContents(const OS& osinfo)
 {
-    if (osinfo.getPlatform() != OS::Platform::ubuntu24) {
+    if (osinfo.getPlatform() != OS::Platform::ubuntu2404) {
         throw std::runtime_error(
             fmt::format("Unsupported Ubuntu xCAT repository baseline for {}",
                 osinfo.getVersion()));
@@ -2777,8 +2777,8 @@ std::string ubuntuXcatRepositoryContents(const OS& osinfo)
 
 TEST_CASE("ubuntuOpenHpcRepositoryUrl uses the VersatusHPC Noble fork")
 {
-    const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24,
-        4, OS::Arch::x86_64);
+    const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu2404,
+        0, OS::Arch::x86_64);
 
     CHECK(ubuntuOpenHpcRepositoryUrl(osinfo)
         == "https://repos.versatushpc.com.br/openhpc/versatushpc-4/"
@@ -2787,8 +2787,8 @@ TEST_CASE("ubuntuOpenHpcRepositoryUrl uses the VersatusHPC Noble fork")
 
 TEST_CASE("ubuntuOpenHpcRepositoryContents generates an apt source entry")
 {
-    const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24,
-        4, OS::Arch::x86_64);
+    const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu2404,
+        0, OS::Arch::x86_64);
 
     CHECK(ubuntuOpenHpcRepositoryContents(osinfo)
         == "deb [trusted=yes] https://repos.versatushpc.com.br/openhpc/"
@@ -2797,8 +2797,8 @@ TEST_CASE("ubuntuOpenHpcRepositoryContents generates an apt source entry")
 
 TEST_CASE("ubuntuXcatRepositoryContents uses the Ubuntu compatibility suites")
 {
-    const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu24,
-        4, OS::Arch::x86_64);
+    const auto osinfo = OS(models::OS::Distro::Ubuntu, OS::Platform::ubuntu2404,
+        0, OS::Arch::x86_64);
 
     CHECK(ubuntuXcatRepositoryContents(osinfo)
         == "deb [trusted=yes] https://xcat.org/files/xcat/repos/apt/latest/"

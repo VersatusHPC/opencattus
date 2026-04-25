@@ -79,12 +79,12 @@ std::string getOSImageDistroVersion(const OS& nodeOS)
     return osimage;
 }
 
-bool isUbuntu24ComputeImage(const OS& nodeOS)
+bool isUbuntu2404ComputeImage(const OS& nodeOS)
 {
-    return nodeOS.getPlatform() == OS::Platform::ubuntu24;
+    return nodeOS.getPlatform() == OS::Platform::ubuntu2404;
 }
 
-std::vector<std::string> ubuntu24XcatPkgdirEntries()
+std::vector<std::string> ubuntu2404XcatPkgdirEntries()
 {
     return {
         "/install/ubuntu24.04/x86_64",
@@ -97,14 +97,14 @@ std::vector<std::string> ubuntu24XcatPkgdirEntries()
     };
 }
 
-std::string ubuntu24OpenHpcOtherpkgdirEntry()
+std::string ubuntu2404OpenHpcOtherpkgdirEntry()
 {
     return "[trusted=yes] "
            "https://repos.versatushpc.com.br/openhpc/versatushpc-4/"
            "Ubuntu_24.04/ ./";
 }
 
-std::vector<std::string_view> ubuntu24OpenHpcPackages(
+std::vector<std::string_view> ubuntu2404OpenHpcPackages(
     const std::optional<std::vector<std::string>>& enabledBundles)
 {
     constexpr auto bundleSerialLibraries = std::string_view("serial-libs");
@@ -463,7 +463,7 @@ XcatInfinibandPlan buildXcatInfinibandPlan(const OFED& ofed, const OS& nodeOS,
     std::string_view runningKernel)
 {
     switch (nodeOS.getPlatform()) {
-        case OS::Platform::ubuntu24:
+        case OS::Platform::ubuntu2404:
             if (ofed.getKind() != OFED::Kind::Inbox) {
                 throw std::invalid_argument(
                     "xCAT Ubuntu 24.04 compute-node OFED staging only "
@@ -1386,7 +1386,7 @@ void XCAT::configureOpenHPC()
 {
     const auto nodeOS = cluster()->getNodes().front().getOS();
     const auto packages = nodeOS.getPackageType() == OS::PackageType::DEB
-        ? ubuntu24OpenHpcPackages(cluster()->getEnabledOpenHPCBundles())
+        ? ubuntu2404OpenHpcPackages(cluster()->getEnabledOpenHPCBundles())
         : std::vector<std::string_view> { "ohpc-base-compute", "lmod-ohpc",
               "lua" };
 
@@ -1674,7 +1674,7 @@ void XCAT::configureOSImageDefinition() const
     /* Add external repositories to otherpkgdir */
     if (!opts->dryRun) {
         if (nodeOS.getPackageType() == OS::PackageType::DEB) {
-            const auto pkgdirEntries = ubuntu24XcatPkgdirEntries();
+            const auto pkgdirEntries = ubuntu2404XcatPkgdirEntries();
             const auto pkgdir
                 = fmt::format("{}", fmt::join(pkgdirEntries, ","));
             opencattus::services::runner::shell::fmt(
@@ -1799,7 +1799,7 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
     const std::vector<ScriptBuilder>& customizations)
 {
     switch (cluster()->getNodes().front().getOS().getPlatform()) {
-        case OS::Platform::ubuntu24:
+        case OS::Platform::ubuntu2404:
             configureUbuntu24();
             break;
         case OS::Platform::el8:
@@ -1833,13 +1833,13 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
                     "/install/custom/netboot/compute.postinstall"));
         } else {
             copycds(cluster()->getDiskImage().getPath());
-            if (isUbuntu24ComputeImage(cluster()->getNodes().front().getOS())) {
+            if (isUbuntu2404ComputeImage(cluster()->getNodes().front().getOS())) {
                 opencattus::services::runner::shell::cmd(
                     buildUbuntu24CopycdsCompatibilityCommand());
             }
         }
         cleanStatelessRootImage(m_stateless.chroot);
-        if (isUbuntu24ComputeImage(cluster()->getNodes().front().getOS())) {
+        if (isUbuntu2404ComputeImage(cluster()->getNodes().front().getOS())) {
             runner->executeCommand(
                 buildUbuntu24OSImageDefinitionCommand(m_stateless));
         }
@@ -2023,7 +2023,7 @@ std::vector<std::string> XCAT::getxCATOSImageRepos()
 {
     const auto& osinfo = cluster()->getComputeNodeOS();
     if (osinfo.getPackageType() == OS::PackageType::DEB) {
-        return { ubuntu24OpenHpcOtherpkgdirEntry() };
+        return { ubuntu2404OpenHpcOtherpkgdirEntry() };
     }
 
     const auto repoManager = opencattus::utils::singleton::repos();
@@ -2146,13 +2146,13 @@ TEST_CASE("getOSImageDistroVersion uses node OS metadata")
     CHECK(getOSImageDistroVersion(OS(OS::Distro::OL, OS::Platform::el9, 7))
         == "ol9.7.0");
     CHECK(getOSImageDistroVersion(
-              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0))
         == "ubuntu24.04");
 }
 
-TEST_CASE("ubuntu24XcatPkgdirEntries uses Noble archive repositories")
+TEST_CASE("ubuntu2404XcatPkgdirEntries uses Noble archive repositories")
 {
-    const auto entries = ubuntu24XcatPkgdirEntries();
+    const auto entries = ubuntu2404XcatPkgdirEntries();
 
     CHECK(entries.size() == 4);
     CHECK(entries[0] == "/install/ubuntu24.04/x86_64");
@@ -2167,9 +2167,9 @@ TEST_CASE("ubuntu24XcatPkgdirEntries uses Noble archive repositories")
            "universe multiverse");
 }
 
-TEST_CASE("ubuntu24OpenHpcOtherpkgdirEntry uses VersatusHPC OpenHPC")
+TEST_CASE("ubuntu2404OpenHpcOtherpkgdirEntry uses VersatusHPC OpenHPC")
 {
-    CHECK(ubuntu24OpenHpcOtherpkgdirEntry()
+    CHECK(ubuntu2404OpenHpcOtherpkgdirEntry()
         == "[trusted=yes] "
            "https://repos.versatushpc.com.br/openhpc/versatushpc-4/"
            "Ubuntu_24.04/ ./");
@@ -2221,7 +2221,7 @@ TEST_CASE("patchUbuntu24GenimageOtherpkgdirContent accepts apt options")
 
 TEST_CASE("buildXcatPackageInstallCommands uses APT on Ubuntu head nodes")
 {
-    const auto ubuntu = OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+    const auto ubuntu = OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
     const auto commands = buildXcatPackageInstallCommands(ubuntu, ubuntu);
 
     CHECK(commands
@@ -2234,7 +2234,7 @@ TEST_CASE("buildXcatPackageInstallCommands uses APT on Ubuntu head nodes")
 
 TEST_CASE("xCAT service helpers use Debian service names on Ubuntu")
 {
-    const auto ubuntu = OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+    const auto ubuntu = OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
 
     CHECK(xcatHttpServiceName(ubuntu) == "apache2");
     CHECK(xcatDhcpServiceName(ubuntu) == "isc-dhcp-server");
@@ -2655,7 +2655,7 @@ TEST_CASE("buildSetRootPasswordPostinstallSnippet uses absolute chpasswd paths")
 
 TEST_CASE("buildFinalizeStatelessRootImageScript fixes the final root image")
 {
-    const OS osinfo(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+    const OS osinfo(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
     const auto script = buildFinalizeStatelessRootImageScript(osinfo,
         "/install/netboot/ubuntu24.04/x86_64/compute/rootimg", "labroot");
     const auto content = script.toString();

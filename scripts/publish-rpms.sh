@@ -74,7 +74,6 @@ seed_remote_repo_dir() {
 set cmd:fail-exit yes;
 set sftp:connect-program 'ssh -l ${REMOTE_USER} -i ${SSH_KEY} -o StrictHostKeyChecking=no -o BatchMode=yes';
 open sftp://${REMOTE_HOST};
-mkdir -p ${REMOTE_PATH}/${repo_dir};
 mirror --verbose ${REMOTE_PATH}/${repo_dir}/ ${STAGING_DIR}/${repo_dir}/;
 bye;
 "
@@ -166,9 +165,9 @@ else
     echo "==> Syncing to ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH} via SFTP"
     for repo_dir in el8 el9 el10; do
         lftp -e "
+set cmd:fail-exit yes;
 set sftp:connect-program 'ssh -l ${REMOTE_USER} -i ${SSH_KEY} -o StrictHostKeyChecking=no -o BatchMode=yes';
 open sftp://${REMOTE_HOST};
-mkdir -p ${REMOTE_PATH}/${repo_dir};
 mirror --reverse --delete --verbose ${LFTP_DRY_RUN} \
     ${STAGING_DIR}/${repo_dir}/ ${REMOTE_PATH}/${repo_dir}/;
 bye;

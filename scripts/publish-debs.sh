@@ -20,7 +20,7 @@ SSH_KEY="${SSH_KEY:-}"
 DRY_RUN=""
 LFTP_DRY_RUN=""
 SKIP_SYNC=""
-REPO_DIR="ubuntu24"
+REPO_DIR="ubuntu2404"
 
 usage() {
     sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
@@ -73,7 +73,6 @@ seed_remote_repo_dir() {
 set cmd:fail-exit yes;
 set sftp:connect-program 'ssh -l ${REMOTE_USER} -i ${SSH_KEY} -o StrictHostKeyChecking=no -o BatchMode=yes';
 open sftp://${REMOTE_HOST};
-mkdir -p ${REMOTE_PATH}/${REPO_DIR};
 mirror --verbose ${REMOTE_PATH}/${REPO_DIR}/ ${STAGING_DIR}/${REPO_DIR}/;
 bye;
 "
@@ -161,9 +160,9 @@ if [[ -n "${SKIP_SYNC}" ]]; then
 else
     echo "==> Syncing ${REPO_DIR} to ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/${REPO_DIR} via SFTP"
     lftp -e "
+set cmd:fail-exit yes;
 set sftp:connect-program 'ssh -l ${REMOTE_USER} -i ${SSH_KEY} -o StrictHostKeyChecking=no -o BatchMode=yes';
 open sftp://${REMOTE_HOST};
-mkdir -p ${REMOTE_PATH}/${REPO_DIR};
 mirror --reverse --delete --verbose ${LFTP_DRY_RUN} \
     ${STAGING_DIR}/${REPO_DIR}/ ${REMOTE_PATH}/${REPO_DIR}/;
 bye;

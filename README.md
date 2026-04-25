@@ -50,7 +50,7 @@ For Ubuntu 24.04:
 
 ```bash
 sudo curl -o /etc/apt/sources.list.d/versatushpc-opencattus.list \
-  https://repos.versatushpc.com.br/opencattus/ubuntu24/versatushpc-opencattus.list
+  https://repos.versatushpc.com.br/opencattus/ubuntu2404/versatushpc-opencattus.list
 sudo apt update
 sudo apt install -y opencattus
 ```

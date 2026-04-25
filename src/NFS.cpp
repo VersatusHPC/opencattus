@@ -203,7 +203,7 @@ TEST_CASE("installImageScript")
 TEST_CASE("installImageScript uses Debian package names for Ubuntu images")
 {
     const OS osinfo
-        = opencattus::models::OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+        = opencattus::models::OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
     const auto builder = NFS::imageInstallScript(osinfo,
         { .imageName = "ubuntu24.04-x86_64-netboot-compute",
             .rootfs = "/install/netboot/ubuntu24.04/x86_64/compute/rootimg",
@@ -217,7 +217,7 @@ TEST_CASE("installImageScript uses Debian package names for Ubuntu images")
 TEST_CASE("installScript uses Debian NFS server package names on Ubuntu")
 {
     const OS osinfo
-        = opencattus::models::OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4);
+        = opencattus::models::OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
     opencattus::services::initializeSingletonsOptions(
         std::make_unique<const Options>());
     opencattus::Singleton<const models::AnswerFile>::init(

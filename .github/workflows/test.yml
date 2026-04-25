@@ -327,18 +327,18 @@ jobs:
       - name: Prepare Conan cache
         run: |
           set -euo pipefail
-          mkdir -p "${HOME}/.cache/opencattus/conan/ubuntu24"
-          mkdir -p "${HOME}/.cache/opencattus/cpm/ubuntu24"
-          mkdir -p "${HOME}/.cache/opencattus/sources/ubuntu24"
+          mkdir -p "${HOME}/.cache/opencattus/conan/ubuntu2404"
+          mkdir -p "${HOME}/.cache/opencattus/cpm/ubuntu2404"
+          mkdir -p "${HOME}/.cache/opencattus/sources/ubuntu2404"
 
       - name: Build DEB in Ubuntu 24.04 container
         run: |
           set -euo pipefail
           podman run --rm \
             -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:z" \
-            -v "${HOME}/.cache/opencattus/conan/ubuntu24:/root/.conan2:z" \
-            -v "${HOME}/.cache/opencattus/cpm/ubuntu24:/root/.cache/CPM:z" \
-            -v "${HOME}/.cache/opencattus/sources/ubuntu24:/root/.cache/opencattus/sources:z" \
+            -v "${HOME}/.cache/opencattus/conan/ubuntu2404:/root/.conan2:z" \
+            -v "${HOME}/.cache/opencattus/cpm/ubuntu2404:/root/.cache/CPM:z" \
+            -v "${HOME}/.cache/opencattus/sources/ubuntu2404:/root/.cache/opencattus/sources:z" \
             -w "${GITHUB_WORKSPACE}" \
             docker.io/library/ubuntu:24.04 \
             bash -lc '
@@ -405,7 +405,7 @@ jobs:
       - name: Upload DEB artifact
         uses: actions/upload-artifact@v4
         with:
-          name: opencattus-deb-ubuntu24
+          name: opencattus-deb-ubuntu2404
           path: out/deb/*.deb
           if-no-files-found: error
 

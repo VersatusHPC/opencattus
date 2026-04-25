@@ -918,9 +918,9 @@ TEST_SUITE("opencattus::models::answerfile")
         REQUIRE_FALSE(interfaces.empty());
 
         const auto answerfilePath
-            = tempAnswerfilePath("opencattus-cluster-provisioner-ubuntu24");
+            = tempAnswerfilePath("opencattus-cluster-provisioner-ubuntu2404");
         const auto diskImagePath
-            = tempIsoPath("opencattus-cluster-provisioner-ubuntu24");
+            = tempIsoPath("opencattus-cluster-provisioner-ubuntu2404");
         std::ofstream(diskImagePath).close();
         writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
             interfaces.front(), std::nullopt, true, "xcat", std::nullopt,
@@ -935,7 +935,7 @@ TEST_SUITE("opencattus::models::answerfile")
             CHECK(cluster.getComputeNodeOS().getDistro()
                 == opencattus::models::OS::Distro::Ubuntu);
             CHECK(cluster.getComputeNodeOS().getPlatform()
-                == opencattus::models::OS::Platform::ubuntu24);
+                == opencattus::models::OS::Platform::ubuntu2404);
             CHECK(cluster.getComputeNodeOS().getVersion() == "24.04");
         } catch (const std::exception& e) {
             FAIL(std::string(e.what()));
@@ -956,9 +956,9 @@ TEST_SUITE("opencattus::models::answerfile")
         REQUIRE_FALSE(interfaces.empty());
 
         const auto answerfilePath = tempAnswerfilePath(
-            "opencattus-cluster-provisioner-ubuntu24-headnode-xcat");
+            "opencattus-cluster-provisioner-ubuntu2404-headnode-xcat");
         const auto diskImagePath = tempIsoPath(
-            "opencattus-cluster-provisioner-ubuntu24-headnode-xcat");
+            "opencattus-cluster-provisioner-ubuntu2404-headnode-xcat");
         std::ofstream(diskImagePath).close();
         writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
             interfaces.front(), std::nullopt, true, "xcat", std::nullopt,
@@ -969,12 +969,12 @@ TEST_SUITE("opencattus::models::answerfile")
             Cluster cluster;
             cluster.getHeadnode().setOS(
                 opencattus::models::OS(opencattus::models::OS::Distro::Ubuntu,
-                    opencattus::models::OS::Platform::ubuntu24, 4));
+                    opencattus::models::OS::Platform::ubuntu2404, 0));
 
             CHECK_NOTHROW(cluster.fillData(answerfile));
             CHECK(cluster.getProvisioner() == Cluster::Provisioner::xCAT);
             CHECK(cluster.getHeadnode().getOS().getPlatform()
-                == opencattus::models::OS::Platform::ubuntu24);
+                == opencattus::models::OS::Platform::ubuntu2404);
         } catch (const std::exception& e) {
             FAIL(std::string(e.what()));
         } catch (...) {
@@ -994,9 +994,9 @@ TEST_SUITE("opencattus::models::answerfile")
         REQUIRE_FALSE(interfaces.empty());
 
         const auto answerfilePath = tempAnswerfilePath(
-            "opencattus-cluster-provisioner-ubuntu24-confluent");
+            "opencattus-cluster-provisioner-ubuntu2404-confluent");
         const auto diskImagePath
-            = tempIsoPath("opencattus-cluster-provisioner-ubuntu24-confluent");
+            = tempIsoPath("opencattus-cluster-provisioner-ubuntu2404-confluent");
         std::ofstream(diskImagePath).close();
         writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
             interfaces.front(), std::nullopt, true, "confluent", std::nullopt,
@@ -1011,7 +1011,7 @@ TEST_SUITE("opencattus::models::answerfile")
             CHECK(cluster.getComputeNodeOS().getDistro()
                 == opencattus::models::OS::Distro::Ubuntu);
             CHECK(cluster.getComputeNodeOS().getPlatform()
-                == opencattus::models::OS::Platform::ubuntu24);
+                == opencattus::models::OS::Platform::ubuntu2404);
             CHECK(cluster.getComputeNodeOS().getVersion() == "24.04");
         } catch (const std::exception& e) {
             FAIL(std::string(e.what()));

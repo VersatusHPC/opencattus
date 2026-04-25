@@ -49,7 +49,7 @@ createrepo_c --update "${staged_el_directory}"
 That creates the `repodata/` directory required by `dnf`.
 
 The workflow also builds a DEB package in an Ubuntu 24.04 container with
-CPack. It uploads an artifact named `opencattus-deb-ubuntu24`. The publish job
+CPack. It uploads an artifact named `opencattus-deb-ubuntu2404`. The publish job
 downloads it into `out/deb-publish-input` and runs:
 
 ```bash
@@ -59,7 +59,7 @@ scripts/publish-debs.sh --source-dir out/deb-publish-input
 The script stages the APT repository like this:
 
 ```text
-ubuntu24/
+ubuntu2404/
   versatushpc-opencattus.list
   *.deb
   Packages
@@ -83,7 +83,7 @@ mirror --reverse --delete
 Each publisher mirrors only the subtree it owns:
 
 - `scripts/publish-rpms.sh` owns `el8/`, `el9/`, and `el10/`.
-- `scripts/publish-debs.sh` owns `ubuntu24/`.
+- `scripts/publish-debs.sh` owns `ubuntu2404/`.
 
 Do not place unrelated files inside those subdirectories.
 

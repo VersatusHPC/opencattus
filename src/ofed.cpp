@@ -684,7 +684,7 @@ TEST_CASE("buildInboxOFEDInstalledCommand uses APT package probes on Ubuntu")
 {
     CHECK(buildInboxOFEDInstalledCommand(
               opencattus::models::OS(opencattus::models::OS::Distro::Ubuntu,
-                  opencattus::models::OS::Platform::ubuntu24, 4))
+                  opencattus::models::OS::Platform::ubuntu2404, 0))
         == "dpkg-query -W rdma-core ibverbs-providers infiniband-diags");
 }
 
@@ -692,7 +692,7 @@ TEST_CASE("buildInboxOFEDInstallCommand installs Ubuntu RDMA packages")
 {
     CHECK(buildInboxOFEDInstallCommand(
               opencattus::models::OS(opencattus::models::OS::Distro::Ubuntu,
-                  opencattus::models::OS::Platform::ubuntu24, 4))
+                  opencattus::models::OS::Platform::ubuntu2404, 0))
         == "DEBIAN_FRONTEND=noninteractive apt install -y "
            "rdma-core ibverbs-providers infiniband-diags perftest");
 }

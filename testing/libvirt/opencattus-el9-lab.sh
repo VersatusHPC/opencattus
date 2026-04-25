@@ -121,12 +121,12 @@ is_distro_major_el10() {
     [[ "${DISTRO_MAJOR}" == "10" ]]
 }
 
-is_distro_major_ubuntu24() {
-    [[ "${DISTRO_ID}" == "ubuntu" && "${DISTRO_MAJOR}" == "24" ]]
+is_distro_ubuntu2404() {
+    [[ "${DISTRO_ID}" == "ubuntu" && "${DISTRO_VERSION}" == 24.04* ]]
 }
 
 require_supported_distro_major() {
-    if is_distro_major_ubuntu24; then
+    if is_distro_ubuntu2404; then
         return 0
     fi
 
@@ -134,14 +134,14 @@ require_supported_distro_major() {
         8|9|10)
             ;;
         *)
-            die "Unsupported DISTRO_MAJOR ${DISTRO_MAJOR}; the shared lab supports explicit EL8, EL9, EL10, and Ubuntu 24 paths only"
+            die "Unsupported DISTRO_MAJOR ${DISTRO_MAJOR}; the shared lab supports explicit EL8, EL9, EL10, and Ubuntu 24.04 paths only"
             ;;
     esac
 }
 
 default_remote_build_preset() {
-    if is_distro_major_ubuntu24; then
-        printf 'ubuntu24-gcc-release'
+    if is_distro_ubuntu2404; then
+        printf 'ubuntu2404-gcc-release'
     elif is_distro_major_el10; then
         printf 'el10-gcc-release'
     elif is_distro_major_el8; then
@@ -154,8 +154,8 @@ default_remote_build_preset() {
 }
 
 default_remote_build_preset_build() {
-    if is_distro_major_ubuntu24; then
-        printf 'ubuntu24-gcc-release-build'
+    if is_distro_ubuntu2404; then
+        printf 'ubuntu2404-gcc-release-build'
     elif is_distro_major_el10; then
         printf 'el10-gcc-release-build'
     elif is_distro_major_el8; then
@@ -168,7 +168,7 @@ default_remote_build_preset_build() {
 }
 
 headnode_glibmm_package() {
-    if is_distro_major_ubuntu24; then
+    if is_distro_ubuntu2404; then
         printf 'libglibmm-2.68-1t64'
     elif is_distro_major_el10; then
         printf 'glibmm2.68'
@@ -182,7 +182,7 @@ headnode_glibmm_package() {
 }
 
 virt_install_osinfo_name() {
-    if is_distro_major_ubuntu24; then
+    if is_distro_ubuntu2404; then
         printf 'ubuntu24.04'
     elif is_distro_major_el10; then
         printf 'generic'
@@ -208,7 +208,7 @@ load_defaults() {
     require_supported_distro_major
 
     if [[ -z "${PROVISIONER+x}" ]]; then
-        if is_distro_major_ubuntu24; then
+        if is_distro_ubuntu2404; then
             PROVISIONER=confluent
         elif is_distro_major_el8; then
             PROVISIONER=confluent
@@ -621,7 +621,7 @@ render_headnode_cloud_init() {
     local pubkey
     pubkey=$(<"${SSH_PUBLIC_KEY}")
 
-    if is_distro_major_ubuntu24; then
+    if is_distro_ubuntu2404; then
         cat >"$(headnode_user_data_path)" <<EOF
 #cloud-config
 hostname: ${HEADNODE_NAME}
@@ -910,7 +910,7 @@ check_config() {
             ;;
     esac
     if [[ "${DISTRO_ID}" == "ubuntu" ]]; then
-        [[ "${DISTRO_MAJOR}" == "24" ]] || die \
+        is_distro_ubuntu2404 || die \
             "Ubuntu lab support is currently limited to Ubuntu 24.04"
     fi
     if is_distro_major_el10; then
@@ -978,7 +978,11 @@ check_config() {
 }
 
 answerfile_template_path() {
-    local distro_template="${SCRIPT_DIR}/templates/${DISTRO_ID}${DISTRO_MAJOR}-${PROVISIONER}.answerfile.ini"
+    local distro_tag="${DISTRO_ID}${DISTRO_MAJOR}"
+    if [[ "${DISTRO_ID}" == "ubuntu" ]]; then
+        distro_tag="${DISTRO_ID}${DISTRO_VERSION//.}"
+    fi
+    local distro_template="${SCRIPT_DIR}/templates/${distro_tag}-${PROVISIONER}.answerfile.ini"
     local fallback_template
 
     if [[ -f "${distro_template}" ]]; then
@@ -1348,7 +1352,7 @@ prepare_headnode() {
 
     wait_for_headnode_ssh
 
-    if is_distro_major_ubuntu24; then
+    if is_distro_ubuntu2404; then
         log "Ensuring Ubuntu headnode runtime and build prerequisites are installed"
         wait_for_ubuntu_apt
         ssh_remote "sudo systemctl stop packagekit packagekit-offline-update >/dev/null 2>&1 || true;
@@ -1703,7 +1707,7 @@ build_binary_in_guest() {
 
     sync_repo_to_remote
 
-    if is_distro_major_ubuntu24; then
+    if is_distro_ubuntu2404; then
         wait_for_ubuntu_apt
         compiler_setup_cmd=$(cat <<'EOF'
 sudo DEBIAN_FRONTEND=noninteractive apt update &&

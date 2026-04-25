@@ -443,7 +443,7 @@ std::string buildNodeImagePackages(const models::OS& os)
             return "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs";
         case models::OS::Platform::el10:
             return "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs";
-        case models::OS::Platform::ubuntu24:
+        case models::OS::Platform::ubuntu2404:
             return "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-ohpc";
         default:
             std::unreachable();
@@ -463,7 +463,7 @@ std::string buildNodeImageInstallCommand(const models::OS& os)
         case models::OS::Platform::el10:
             return "dnf install -y --nogpg "
                    "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs";
-        case models::OS::Platform::ubuntu24:
+        case models::OS::Platform::ubuntu2404:
             return "DEBIAN_FRONTEND=noninteractive apt update && "
                    "DEBIAN_FRONTEND=noninteractive apt install -y "
                    "ca-certificates && "
@@ -1254,7 +1254,7 @@ TEST_CASE("buildConfluentBootstrapCommands uses Lenovo APT on Ubuntu")
     using opencattus::models::OS;
 
     const auto script = buildConfluentBootstrapCommands(
-        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4));
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0));
 
     CHECK(script.contains("https://hpc.lenovo.com/apt/latest/noble"));
     CHECK(script.contains(
@@ -1271,7 +1271,7 @@ TEST_CASE("buildConfluentDnsmasqCommands binds Ubuntu dnsmasq to management")
     using opencattus::models::OS;
 
     const auto script = buildConfluentDnsmasqCommands(
-        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4), "oc-mgmt0",
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0), "oc-mgmt0",
         "172.31.38.254", "cluster.example.com");
 
     CHECK(script.contains("interface=oc-mgmt0"));
@@ -1290,7 +1290,7 @@ TEST_CASE("buildConfluentHttpPublishCommands exposes Ubuntu boot assets")
     using opencattus::models::OS;
 
     const auto script = buildConfluentHttpPublishCommands(
-        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4));
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0));
 
     CHECK(script.contains("Alias /confluent-public/ "
                           "/var/lib/confluent/public/"));
@@ -1322,7 +1322,7 @@ TEST_CASE("buildSpackModuleTree matches Spack's Enterprise Linux module naming")
     CHECK(buildSpackModuleTree(OS(OS::Distro::Rocky, OS::Platform::el10, 0))
         == "linux-rocky10-x86_64");
     CHECK(
-        buildSpackModuleTree(OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+        buildSpackModuleTree(OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0))
         == "linux-ubuntu24.04-x86_64");
 }
 
@@ -1340,7 +1340,7 @@ TEST_CASE("buildConfluentImageName matches osdeploy distribution ids")
     CHECK(buildConfluentImageName(OS(OS::Distro::OL, OS::Platform::el9, 5))
         == "ol-9.5-x86_64");
     CHECK(buildConfluentImageName(
-              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0))
         == "ubuntu24.04-x86_64");
 }
 
@@ -1349,7 +1349,7 @@ TEST_CASE("buildImgutilBuildCommand omits unsupported Ubuntu source")
     using opencattus::models::OS;
 
     CHECK(buildImgutilBuildCommand(
-              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0))
         == "imgutil build -y $scratchdir");
 
     CHECK(buildImgutilBuildCommand(OS(OS::Distro::Rocky, OS::Platform::el9, 7))
@@ -1371,7 +1371,7 @@ TEST_CASE("buildUserSpackModulePathExport tolerates an unset MODULEPATH")
            "MODULEPATH=/opt/spack/share/spack/lmod/linux-rocky10-x86_64/"
            "Core${MODULEPATH:+:$MODULEPATH}");
     CHECK(buildUserSpackModulePathExport(
-              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0))
         == "export "
            "MODULEPATH=/opt/spack/share/spack/lmod/linux-ubuntu24.04-x86_64/"
            "Core${MODULEPATH:+:$MODULEPATH}");
@@ -1391,7 +1391,7 @@ TEST_CASE("buildNodeImageRepoFiles keeps distro repo filenames explicit")
     CHECK(buildNodeImageRepoFiles(OS(OS::Distro::OL, OS::Platform::el9, 5))
         == "{epel,OpenHPC,oracle}.repo");
     CHECK(buildNodeImageRepoFiles(
-              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0))
         == "");
 }
 
@@ -1416,7 +1416,7 @@ TEST_CASE("buildNodeImagePackages keeps EL8 and newer node images explicit")
         == "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs");
 
     const auto ubuntuPackages = buildNodeImagePackages(
-        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4));
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0));
     CHECK(ubuntuPackages
         == "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-ohpc");
 }
@@ -1442,7 +1442,7 @@ TEST_CASE("buildNodeImageInstallCommand keeps EL8, EL9, and EL10 explicit")
            "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs");
 
     CHECK(buildNodeImageInstallCommand(
-              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4))
+              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0))
         == "DEBIAN_FRONTEND=noninteractive apt update && "
            "DEBIAN_FRONTEND=noninteractive apt install -y "
            "ca-certificates && DEBIAN_FRONTEND=noninteractive apt update "
@@ -1455,7 +1455,7 @@ TEST_CASE("buildNodeImageChronyCommands refreshes APT metadata on Ubuntu")
     using opencattus::models::OS;
 
     const auto script = buildNodeImageChronyCommands(
-        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4), "172.31.38.254");
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0), "172.31.38.254");
 
     CHECK(script.contains("DEBIAN_FRONTEND=noninteractive apt update\n"
                           "DEBIAN_FRONTEND=noninteractive apt install -y "
@@ -1467,7 +1467,7 @@ TEST_CASE("buildNodeImageAutofsCommands refreshes APT metadata on Ubuntu")
     using opencattus::models::OS;
 
     const auto script = buildNodeImageAutofsCommands(
-        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4), "172.31.38.254");
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0), "172.31.38.254");
 
     CHECK(script.contains("DEBIAN_FRONTEND=noninteractive apt update && "
                           "DEBIAN_FRONTEND=noninteractive apt install -y "
@@ -1479,7 +1479,7 @@ TEST_CASE("buildNodeImageRepositorySyncCommands copies APT sources on Ubuntu")
     using opencattus::models::OS;
 
     const auto script = buildNodeImageRepositorySyncCommands(
-        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4), "");
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0), "");
 
     CHECK(script.contains("/etc/apt/sources.list.d"));
     CHECK(script.contains("/etc/apt/trusted.gpg.d"));
@@ -1521,7 +1521,7 @@ TEST_CASE("buildNodeImageOFEDCommands uses Ubuntu inbox RDMA packages")
     using opencattus::models::OS;
 
     const auto script = buildNodeImageOFEDCommands(
-        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu24, 4), true,
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0), true,
         std::optional<OFED>(OFED(OFED::Kind::Inbox, "")), std::nullopt);
 
     CHECK(script.contains("apt install -y rdma-core ibverbs-providers "

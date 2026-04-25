@@ -173,8 +173,8 @@ OS::OS(const Distro& distro, const Platform& platform,
         case OS::Platform::el8:
             m_majorVersion = 8;
             break;
-        case OS::Platform::ubuntu24:
-            m_majorVersion = 24;
+        case OS::Platform::ubuntu2404:
+            m_majorVersion = 2404;
             break;
         default:
             opencattus::functions::abort("Invalid platform: {}",
@@ -288,7 +288,8 @@ void OS::setDistro(std::string_view distro)
     auto normalizedDistro = utils::string::lower(std::string(distro));
     if (normalizedDistro == "alma") {
         normalizedDistro = "almalinux";
-    } else if (normalizedDistro == "ubuntu24"
+    } else if (normalizedDistro == "ubuntu2404"
+        || normalizedDistro == "ubuntu24"
         || normalizedDistro == "ubuntu24.04") {
         normalizedDistro = "ubuntu";
     }
@@ -321,8 +322,8 @@ void OS::setMajorVersion(unsigned int majorVersion)
         case 10:
             m_platform = OS::Platform::el10;
             break;
-        case 24:
-            m_platform = OS::Platform::ubuntu24;
+        case 2404:
+            m_platform = OS::Platform::ubuntu2404;
             break;
         default:
             throw std::runtime_error(fmt::format(
@@ -341,9 +342,13 @@ void OS::setMinorVersion(unsigned int minorVersion)
 
 std::string OS::getVersion() const
 {
-    if (getPlatform() == OS::Platform::ubuntu24) {
-        return fmt::format(
-            "{}.{}", m_majorVersion, fmt::format("{:02}", m_minorVersion));
+    if (getDistro() == OS::Distro::Ubuntu) {
+        auto base = fmt::format("{}.{:02}", m_majorVersion / 100,
+            m_majorVersion % 100);
+        if (m_minorVersion > 0) {
+            return fmt::format("{}.{}", base, m_minorVersion);
+        }
+        return base;
     }
 
     return fmt::format("{}.{}", m_majorVersion, m_minorVersion);
@@ -351,14 +356,6 @@ std::string OS::getVersion() const
 
 void OS::setVersion(const std::string& version)
 {
-    setMajorVersion(static_cast<unsigned>(
-        std::stoul(version.substr(0, version.find('.')))));
-
-    // FIXME: Read the value from the ISO file intead of
-    // expecting it to be explicit in answerfile.ini
-
-    // We expect the system.version in the answerfile
-    // to be in the format M.N, and abort if it is not valid
     if (version.find('.') == std::string::npos) {
         throw std::runtime_error(fmt::format(
             "Unexpected value for system.version (in answerfile.ini). "
@@ -366,6 +363,25 @@ void OS::setVersion(const std::string& version)
             version));
     }
 
+    if (getDistro() == OS::Distro::Ubuntu) {
+        auto first = version.find('.');
+        auto year = static_cast<unsigned>(std::stoul(version.substr(0, first)));
+        auto rest = version.substr(first + 1);
+        auto second = rest.find('.');
+        auto month = static_cast<unsigned>(
+            std::stoul(rest.substr(0, second)));
+        setMajorVersion(year * 100 + month);
+        if (second != std::string::npos) {
+            setMinorVersion(
+                static_cast<unsigned>(std::stoul(rest.substr(second + 1))));
+        } else {
+            setMinorVersion(0);
+        }
+        return;
+    }
+
+    setMajorVersion(static_cast<unsigned>(
+        std::stoul(version.substr(0, version.find('.')))));
     setMinorVersion(
         static_cast<unsigned>(stoul(version.substr(version.find('.') + 1))));
 }
