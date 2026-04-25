@@ -46,7 +46,7 @@ endif ()
 # Set the project name and language
 project(
         OpenCATTUS
-        VERSION 1.1.0
+        VERSION 1.1.1
         DESCRIPTION "OpenCATTUS is a turnkey HPC cluster solution with an user-friendly installer"
         HOMEPAGE_URL "https://github.com/versatushpc/opencattus"
         LANGUAGES CXX C)
