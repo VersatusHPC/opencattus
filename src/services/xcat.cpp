@@ -1833,7 +1833,8 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
                     "/install/custom/netboot/compute.postinstall"));
         } else {
             copycds(cluster()->getDiskImage().getPath());
-            if (isUbuntu2404ComputeImage(cluster()->getNodes().front().getOS())) {
+            if (isUbuntu2404ComputeImage(
+                    cluster()->getNodes().front().getOS())) {
                 opencattus::services::runner::shell::cmd(
                     buildUbuntu24CopycdsCompatibilityCommand());
             }

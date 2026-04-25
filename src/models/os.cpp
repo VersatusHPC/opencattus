@@ -350,8 +350,8 @@ void OS::setMinorVersion(unsigned int minorVersion)
 std::string OS::getVersion() const
 {
     if (getDistro() == OS::Distro::Ubuntu) {
-        auto base = fmt::format("{}.{:02}", m_majorVersion / 100,
-            m_majorVersion % 100);
+        auto base = fmt::format(
+            "{}.{:02}", m_majorVersion / 100, m_majorVersion % 100);
         if (m_minorVersion > 0) {
             return fmt::format("{}.{}", base, m_minorVersion);
         }
@@ -375,8 +375,7 @@ void OS::setVersion(const std::string& version)
         auto year = static_cast<unsigned>(std::stoul(version.substr(0, first)));
         auto rest = version.substr(first + 1);
         auto second = rest.find('.');
-        auto month = static_cast<unsigned>(
-            std::stoul(rest.substr(0, second)));
+        auto month = static_cast<unsigned>(std::stoul(rest.substr(0, second)));
         setMajorVersion(year * 100 + month);
         if (second != std::string::npos) {
             setMinorVersion(
@@ -434,23 +433,27 @@ TEST_CASE("Ubuntu version model encodes year and month in majorVersion")
 {
     using opencattus::models::OS;
 
-    SUBCASE("constructor sets majorVersion to 2404 for ubuntu2404") {
+    SUBCASE("constructor sets majorVersion to 2404 for ubuntu2404")
+    {
         const auto os = OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
         CHECK(os.getMajorVersion() == 2404);
         CHECK(os.getMinorVersion() == 0);
     }
 
-    SUBCASE("getVersion formats base release as 24.04") {
+    SUBCASE("getVersion formats base release as 24.04")
+    {
         const auto os = OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
         CHECK(os.getVersion() == "24.04");
     }
 
-    SUBCASE("getVersion formats point release as 24.04.2") {
+    SUBCASE("getVersion formats point release as 24.04.2")
+    {
         const auto os = OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 2);
         CHECK(os.getVersion() == "24.04.2");
     }
 
-    SUBCASE("getVersion omits point release suffix when minorVersion is 0") {
+    SUBCASE("getVersion omits point release suffix when minorVersion is 0")
+    {
         const auto os = OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
         CHECK(os.getVersion() == "24.04");
     }
@@ -460,7 +463,8 @@ TEST_CASE("Ubuntu setVersion parses version strings into major and minor")
 {
     using opencattus::models::OS;
 
-    SUBCASE("24.04 parses to major=2404, minor=0") {
+    SUBCASE("24.04 parses to major=2404, minor=0")
+    {
         auto os = OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
         os.setVersion("24.04");
         CHECK(os.getMajorVersion() == 2404);
@@ -468,27 +472,31 @@ TEST_CASE("Ubuntu setVersion parses version strings into major and minor")
         CHECK(os.getPlatform() == OS::Platform::ubuntu2404);
     }
 
-    SUBCASE("24.04.2 parses to major=2404, minor=2") {
+    SUBCASE("24.04.2 parses to major=2404, minor=2")
+    {
         auto os = OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
         os.setVersion("24.04.2");
         CHECK(os.getMajorVersion() == 2404);
         CHECK(os.getMinorVersion() == 2);
     }
 
-    SUBCASE("24.04.4 parses to major=2404, minor=4") {
+    SUBCASE("24.04.4 parses to major=2404, minor=4")
+    {
         auto os = OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
         os.setVersion("24.04.4");
         CHECK(os.getMajorVersion() == 2404);
         CHECK(os.getMinorVersion() == 4);
     }
 
-    SUBCASE("round-trip: setVersion then getVersion") {
+    SUBCASE("round-trip: setVersion then getVersion")
+    {
         auto os = OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
         os.setVersion("24.04.2");
         CHECK(os.getVersion() == "24.04.2");
     }
 
-    SUBCASE("round-trip: base release without point release") {
+    SUBCASE("round-trip: base release without point release")
+    {
         auto os = OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
         os.setVersion("24.04");
         CHECK(os.getVersion() == "24.04");
@@ -499,19 +507,22 @@ TEST_CASE("EL version model is unchanged by Ubuntu refactor")
 {
     using opencattus::models::OS;
 
-    SUBCASE("EL9 major and minor are simple integers") {
+    SUBCASE("EL9 major and minor are simple integers")
+    {
         const auto os = OS(OS::Distro::Rocky, OS::Platform::el9, 5);
         CHECK(os.getMajorVersion() == 9);
         CHECK(os.getMinorVersion() == 5);
         CHECK(os.getVersion() == "9.5");
     }
 
-    SUBCASE("EL9.0 formats with explicit zero minor") {
+    SUBCASE("EL9.0 formats with explicit zero minor")
+    {
         const auto os = OS(OS::Distro::Rocky, OS::Platform::el9, 0);
         CHECK(os.getVersion() == "9.0");
     }
 
-    SUBCASE("EL setVersion round-trip") {
+    SUBCASE("EL setVersion round-trip")
+    {
         auto os = OS(OS::Distro::Rocky, OS::Platform::el9, 0);
         os.setVersion("9.5");
         CHECK(os.getMajorVersion() == 9);

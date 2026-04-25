@@ -1321,8 +1321,8 @@ TEST_CASE("buildSpackModuleTree matches Spack's Enterprise Linux module naming")
         == "linux-rocky9-x86_64");
     CHECK(buildSpackModuleTree(OS(OS::Distro::Rocky, OS::Platform::el10, 0))
         == "linux-rocky10-x86_64");
-    CHECK(
-        buildSpackModuleTree(OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0))
+    CHECK(buildSpackModuleTree(
+              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0))
         == "linux-ubuntu24.04-x86_64");
 }
 
