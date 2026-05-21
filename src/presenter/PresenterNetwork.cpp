@@ -52,16 +52,28 @@ auto canShareInterface(
 auto isUsableQuestionnaireInterface(
     std::string_view interface, Network::Type type) -> bool
 {
-    if (!interfaceMatchesType(interface, type)) {
-        return false;
-    }
+    return interfaceMatchesType(interface, type);
+}
 
+auto fetchOptionalAddress(const std::string& interface) -> std::string
+{
     try {
-        static_cast<void>(Connection::fetchAddress(std::string(interface)));
-        static_cast<void>(Network::fetchSubnetMask(std::string(interface)));
-        return true;
+        const auto addr = Connection::fetchAddress(interface);
+        if (addr.is_unspecified()) {
+            return { };
+        }
+        return addr.to_string();
     } catch (const std::exception&) {
-        return false;
+        return { };
+    }
+}
+
+auto fetchOptionalSubnetMask(const std::string& interface) -> std::string
+{
+    try {
+        return Network::fetchSubnetMask(interface).to_string();
+    } catch (const std::exception&) {
+        return { };
     }
 }
 
@@ -84,12 +96,12 @@ auto fetchOptionalGateway(const std::string& interface) -> std::string
     try {
         const auto gateway = Network::fetchGateway(interface);
         if (gateway.is_unspecified()) {
-            return {};
+            return { };
         }
 
         return gateway.to_string();
     } catch (const std::exception&) {
-        return {};
+        return { };
     }
 }
 
@@ -98,7 +110,7 @@ auto fetchOptionalDomainName() -> std::string
     try {
         return Network::fetchDomainName();
     } catch (const std::exception&) {
-        return {};
+        return { };
     }
 }
 
@@ -107,7 +119,7 @@ auto fetchOptionalNameservers() -> std::vector<address>
     try {
         return Network::fetchNameservers();
     } catch (const std::exception&) {
-        return {};
+        return { };
     }
 }
 
@@ -223,6 +235,37 @@ auto validateSharedServiceNetwork(
     }
 
     return SharedServiceNetworkStatus::valid;
+}
+
+TEST_CASE("isUsableQuestionnaireInterface filters only by type, not by IP "
+          "presence")
+{
+    CHECK(isUsableQuestionnaireInterface("eth0", Network::Type::Ethernet));
+    CHECK(isUsableQuestionnaireInterface("enp0s3", Network::Type::Ethernet));
+    CHECK(isUsableQuestionnaireInterface("enX1", Network::Type::Ethernet));
+    CHECK_FALSE(isUsableQuestionnaireInterface("ib0", Network::Type::Ethernet));
+
+    CHECK(isUsableQuestionnaireInterface("ib0", Network::Type::Infiniband));
+    CHECK(isUsableQuestionnaireInterface("ib1", Network::Type::Infiniband));
+    CHECK_FALSE(
+        isUsableQuestionnaireInterface("eth0", Network::Type::Infiniband));
+
+    // Regression: a NIC without any configured IPv4 address or netmask must
+    // still be selectable so the operator can assign one in the TUI. Use an
+    // interface name that cannot exist on any host to guarantee the lookup
+    // misses without depending on the runner's NIC layout.
+    CHECK(isUsableQuestionnaireInterface(
+        "opencattus-no-such-nic", Network::Type::Ethernet));
+}
+
+TEST_CASE("fetchOptionalAddress returns blank for interfaces without IPv4")
+{
+    CHECK(fetchOptionalAddress("opencattus-no-such-nic").empty());
+}
+
+TEST_CASE("fetchOptionalSubnetMask returns blank for interfaces without IPv4")
+{
+    CHECK(fetchOptionalSubnetMask("opencattus-no-such-nic").empty());
 }
 
 } // namespace
@@ -456,10 +499,8 @@ void PresenterNetwork::createNetwork(
     }
 
     auto networkDetails = std::to_array<std::pair<std::string, std::string>>(
-        { { Messages::IP::address,
-              Connection::fetchAddress(interface).to_string() },
-            { Messages::IP::subnetMask,
-                Network::fetchSubnetMask(interface).to_string() },
+        { { Messages::IP::address, fetchOptionalAddress(interface) },
+            { Messages::IP::subnetMask, fetchOptionalSubnetMask(interface) },
             { gatewayLabelFor(ncd.profile), gateway },
             // Nameserver definitions
             { Messages::Domain::name, domainName },
