@@ -6,6 +6,8 @@ on:
       - master
   pull_request:
   workflow_dispatch:
+  release:
+    types: [published]
 
 concurrency:
   group: opencattus-${{ github.workflow }}-${{ github.ref }}
@@ -119,6 +121,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Verify release tag matches project version
+        if: github.event_name == 'release'
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name }}"
+          tag="${tag#v}"
+          project_version=$(sed -nE 's/^[[:space:]]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt | head -n1)
+          if [[ -z "${project_version}" ]]; then
+            echo "::error::Could not parse VERSION from CMakeLists.txt" >&2
+            exit 1
+          fi
+          if [[ "${tag}" != "${project_version}" ]]; then
+            echo "::error::Release tag (${tag}) does not match CMakeLists.txt project version (${project_version}). Bump CMakeLists.txt project VERSION and re-tag." >&2
+            exit 1
+          fi
+          echo "Release tag and project version match: ${tag}"
+
       - name: Verify Podman runner state
         run: |
           set -euo pipefail
@@ -225,12 +244,15 @@ jobs:
   publish-rpm-repo:
     name: Publish RPM Repository
     needs: rpm-build
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'release'
     runs-on:
       - self-hosted
       - Linux
       - X64
     timeout-minutes: 30
+
+    env:
+      REPO_MOUNT: /srv/opencattus-repo
 
     steps:
       - name: Checkout code
@@ -243,62 +265,27 @@ jobs:
           path: out/rpm-publish-input
           merge-multiple: true
 
-      - name: Verify Podman runner state
+      - name: Verify runner prerequisites
         run: |
           set -euo pipefail
-          command -v podman >/dev/null || {
-            echo "Missing required command on self-hosted runner: podman" >&2
+          for cmd in createrepo_c flock mountpoint; do
+            command -v "${cmd}" >/dev/null || {
+              echo "::error::Missing required command on self-hosted runner: ${cmd}" >&2
+              exit 1
+            }
+          done
+          mountpoint -q "${REPO_MOUNT}" || {
+            echo "::error::Repo NFS mount missing on $(hostname) at ${REPO_MOUNT}. Bring up the mount and retry." >&2
             exit 1
           }
 
-          podman system migrate || true
-          podman info >/dev/null
-
       - name: Publish RPM repository
-        env:
-          REMOTE_HOST: 172.21.1.40
-          REMOTE_USER: reposync
-          REMOTE_PATH: /mnt/pool1/repos/opencattus
-          REPOSYNC_SSH_KEY: ${{ secrets.REPOSYNC_SSH_KEY }}
         run: |
           set -euo pipefail
-
-          podman_args=(
-            --rm
-            -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:z" \
-            -v "${HOME}/.ssh:/root/.ssh:ro,z" \
-            -w "${GITHUB_WORKSPACE}" \
-            -e REMOTE_HOST="${REMOTE_HOST}" \
-            -e REMOTE_USER="${REMOTE_USER}" \
-            -e REMOTE_PATH="${REMOTE_PATH}"
-          )
-
-          if [[ -n "${REPOSYNC_SSH_KEY}" ]]; then
-            key_path="${GITHUB_WORKSPACE}/.opencattus-repo-key"
-            install -m 600 /dev/null "${key_path}"
-            printf '%s\n' "${REPOSYNC_SSH_KEY}" > "${key_path}"
-            podman_args+=(-e "SSH_KEY=${key_path}")
-          elif ! find "${HOME}/.ssh" -maxdepth 1 -type f \
-            \( -name id_ed25519_openhpc -o -name id_ed25519 -o -name id_rsa \) \
-            -print -quit | grep -q .; then
-            echo "::notice::Skipping remote RPM repository publish because no SSH key is configured. Set REPOSYNC_SSH_KEY or install a runner SSH key to enable automatic publishing."
-            podman run "${podman_args[@]}" \
-              docker.io/library/rockylinux:9 \
-              bash -lc '
-                set -euo pipefail
-                dnf install -y createrepo_c findutils
-                scripts/publish-rpms.sh --source-dir out/rpm-publish-input --skip-sync
-              '
-            exit 0
-          fi
-
-          podman run "${podman_args[@]}" \
-            docker.io/library/rockylinux:9 \
-            bash -lc '
-              set -euo pipefail
-              dnf install -y createrepo_c lftp openssh-clients findutils
-              scripts/publish-rpms.sh --source-dir out/rpm-publish-input
-            '
+          flock "${REPO_MOUNT}/.publish.lock" \
+            scripts/publish-rpms.sh \
+              --source-dir out/rpm-publish-input \
+              --target-dir "${REPO_MOUNT}"
 
   deb-build:
     name: DEB Build (Ubuntu 24.04)
@@ -312,6 +299,23 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Verify release tag matches project version
+        if: github.event_name == 'release'
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name }}"
+          tag="${tag#v}"
+          project_version=$(sed -nE 's/^[[:space:]]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt | head -n1)
+          if [[ -z "${project_version}" ]]; then
+            echo "::error::Could not parse VERSION from CMakeLists.txt" >&2
+            exit 1
+          fi
+          if [[ "${tag}" != "${project_version}" ]]; then
+            echo "::error::Release tag (${tag}) does not match CMakeLists.txt project version (${project_version}). Bump CMakeLists.txt project VERSION and re-tag." >&2
+            exit 1
+          fi
+          echo "Release tag and project version match: ${tag}"
 
       - name: Verify Podman runner state
         run: |
@@ -344,6 +348,9 @@ jobs:
             bash -lc '
               set -euo pipefail
               export DEBIAN_FRONTEND=noninteractive
+              # Self-hosted runners have broken IPv6 routing to security.ubuntu.com;
+              # pin apt to IPv4 so updates do not stall on the CDN AAAA records.
+              echo "Acquire::ForceIPv4 \"true\";" > /etc/apt/apt.conf.d/99force-ipv4
               apt update
               apt install -y ca-certificates curl git dpkg-dev \
                 build-essential cmake ninja-build \
@@ -412,12 +419,15 @@ jobs:
   publish-deb-repo:
     name: Publish DEB Repository
     needs: deb-build
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'release'
     runs-on:
       - self-hosted
       - Linux
       - X64
     timeout-minutes: 30
+
+    env:
+      REPO_MOUNT: /srv/opencattus-repo
 
     steps:
       - name: Checkout code
@@ -430,63 +440,24 @@ jobs:
           path: out/deb-publish-input
           merge-multiple: true
 
-      - name: Verify Podman runner state
+      - name: Verify runner prerequisites
         run: |
           set -euo pipefail
-          command -v podman >/dev/null || {
-            echo "Missing required command on self-hosted runner: podman" >&2
+          for cmd in dpkg-scanpackages flock mountpoint gzip; do
+            command -v "${cmd}" >/dev/null || {
+              echo "::error::Missing required command on self-hosted runner: ${cmd}" >&2
+              exit 1
+            }
+          done
+          mountpoint -q "${REPO_MOUNT}" || {
+            echo "::error::Repo NFS mount missing on $(hostname) at ${REPO_MOUNT}. Bring up the mount and retry." >&2
             exit 1
           }
 
-          podman system migrate || true
-          podman info >/dev/null
-
       - name: Publish DEB repository
-        env:
-          REMOTE_HOST: 172.21.1.40
-          REMOTE_USER: reposync
-          REMOTE_PATH: /mnt/pool1/repos/opencattus
-          REPOSYNC_SSH_KEY: ${{ secrets.REPOSYNC_SSH_KEY }}
         run: |
           set -euo pipefail
-
-          podman_args=(
-            --rm
-            -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:z" \
-            -v "${HOME}/.ssh:/root/.ssh:ro,z" \
-            -w "${GITHUB_WORKSPACE}" \
-            -e REMOTE_HOST="${REMOTE_HOST}" \
-            -e REMOTE_USER="${REMOTE_USER}" \
-            -e REMOTE_PATH="${REMOTE_PATH}"
-          )
-
-          if [[ -n "${REPOSYNC_SSH_KEY}" ]]; then
-            key_path="${GITHUB_WORKSPACE}/.opencattus-repo-key"
-            install -m 600 /dev/null "${key_path}"
-            printf '%s\n' "${REPOSYNC_SSH_KEY}" > "${key_path}"
-            podman_args+=(-e "SSH_KEY=${key_path}")
-          elif ! find "${HOME}/.ssh" -maxdepth 1 -type f \
-            \( -name id_ed25519_openhpc -o -name id_ed25519 -o -name id_rsa \) \
-            -print -quit | grep -q .; then
-            echo "::notice::Skipping remote DEB repository publish because no SSH key is configured. Set REPOSYNC_SSH_KEY or install a runner SSH key to enable automatic publishing."
-            podman run "${podman_args[@]}" \
-              docker.io/library/ubuntu:24.04 \
-              bash -lc '
-                set -euo pipefail
-                export DEBIAN_FRONTEND=noninteractive
-                apt update
-                apt install -y dpkg-dev findutils gzip
-                scripts/publish-debs.sh --source-dir out/deb-publish-input --skip-sync
-              '
-            exit 0
-          fi
-
-          podman run "${podman_args[@]}" \
-            docker.io/library/ubuntu:24.04 \
-            bash -lc '
-              set -euo pipefail
-              export DEBIAN_FRONTEND=noninteractive
-              apt update
-              apt install -y dpkg-dev lftp openssh-client findutils gzip
-              scripts/publish-debs.sh --source-dir out/deb-publish-input
-            '
+          flock "${REPO_MOUNT}/.publish.lock" \
+            scripts/publish-debs.sh \
+              --source-dir out/deb-publish-input \
+              --target-dir "${REPO_MOUNT}"
