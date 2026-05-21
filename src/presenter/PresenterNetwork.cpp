@@ -60,11 +60,11 @@ auto fetchOptionalAddress(const std::string& interface) -> std::string
     try {
         const auto addr = Connection::fetchAddress(interface);
         if (addr.is_unspecified()) {
-            return {};
+            return { };
         }
         return addr.to_string();
     } catch (const std::exception&) {
-        return {};
+        return { };
     }
 }
 
@@ -73,7 +73,7 @@ auto fetchOptionalSubnetMask(const std::string& interface) -> std::string
     try {
         return Network::fetchSubnetMask(interface).to_string();
     } catch (const std::exception&) {
-        return {};
+        return { };
     }
 }
 
@@ -96,12 +96,12 @@ auto fetchOptionalGateway(const std::string& interface) -> std::string
     try {
         const auto gateway = Network::fetchGateway(interface);
         if (gateway.is_unspecified()) {
-            return {};
+            return { };
         }
 
         return gateway.to_string();
     } catch (const std::exception&) {
-        return {};
+        return { };
     }
 }
 
@@ -110,7 +110,7 @@ auto fetchOptionalDomainName() -> std::string
     try {
         return Network::fetchDomainName();
     } catch (const std::exception&) {
-        return {};
+        return { };
     }
 }
 
@@ -119,7 +119,7 @@ auto fetchOptionalNameservers() -> std::vector<address>
     try {
         return Network::fetchNameservers();
     } catch (const std::exception&) {
-        return {};
+        return { };
     }
 }
 
