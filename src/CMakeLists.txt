@@ -64,6 +64,8 @@ target_include_directories(opencattus_object ${WARNING_GUARD} PRIVATE
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
 
+add_dependencies(opencattus_object opencattus_embedded_repos)
+
 target_include_directories(${opencattus_BINARY_NAME} PRIVATE
         "${CMAKE_BINARY_DIR}/configured_files/include")
 target_include_directories(${opencattus_BINARY_NAME} ${WARNING_GUARD} PRIVATE

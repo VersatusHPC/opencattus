@@ -33,6 +33,8 @@
 #include <opencattus/services/options.h>
 #include <opencattus/services/osservice.h>
 #include <opencattus/services/repos.h>
+
+#include <internal_use_only/embedded_repos.hpp>
 #include <opencattus/services/runner.h>
 #include <opencattus/utils/ranges.h>
 #include <opencattus/utils/singleton.h>
@@ -734,11 +736,42 @@ public:
     // Base path used during production, tests use another path
     static constexpr std::string_view defaultPath
         = "/opt/opencattus/conf/repos/";
+    // Write the embedded copy of `path.filename()` to `path` if and only if
+    // (a) the file is missing on disk and (b) the binary actually carries an
+    // embedded copy for that filename. Returns true when seeding happened.
+    static bool seedFromEmbedded(const std::filesystem::path& path)
+    {
+        const auto name = path.filename().string();
+        for (const auto& entry :
+            opencattus::services::embedded_repos::entries) {
+            if (entry.name != name) {
+                continue;
+            }
+            try {
+                std::filesystem::create_directories(path.parent_path());
+                std::ofstream out(path);
+                if (!out.is_open()) {
+                    return false;
+                }
+                out << entry.content;
+            } catch (const std::exception& e) {
+                LOG_WARN("Failed to seed embedded repo config {}: {}",
+                    path.string(), e.what());
+                return false;
+            }
+            LOG_INFO("Seeded missing repository configuration file from "
+                     "embedded copy: {}",
+                path.string());
+            return true;
+        }
+        return false;
+    }
+
     static void parse(const std::filesystem::path& path, RepoConfFile& output,
         const RepoConfigVars& vars)
     {
         LOG_DEBUG("Loading repo config: {}", path);
-        if (!opencattus::functions::exists(path)) {
+        if (!opencattus::functions::exists(path) && !seedFromEmbedded(path)) {
             throw std::runtime_error(fmt::format(
                 "Repository configuration file is missing: {}", path));
         }
