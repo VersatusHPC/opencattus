@@ -96,10 +96,14 @@ void writeAnswerfile(const std::filesystem::path& path,
         << "domain_name=cluster.management.example.com\n";
 
     if (includeServiceNetwork) {
+        // Explicit in-subnet gateway prevents Cluster::fillData from falling
+        // back to the runner's system default route (which would land outside
+        // 192.168.31.0/24 and fail validateGatewayInSubnet on round-trip).
         out << "\n[network_service]\n"
             << "interface=" << serviceInterface << '\n'
             << "ip_address=192.168.31.254\n"
             << "subnet_mask=255.255.255.0\n"
+            << "gateway=192.168.31.1\n"
             << "domain_name=cluster.service.example.com\n";
 
         if (serviceNameservers.has_value()) {
