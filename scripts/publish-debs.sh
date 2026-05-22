@@ -2,28 +2,24 @@
 #
 # Publish the OpenCATTUS Ubuntu APT repository.
 #
-# Stages built DEB packages, generates flat APT repository metadata, and
-# mirrors only the Ubuntu subtree to the repository server.
+# Copies built DEB packages into the repo target directory (typically an NFS
+# mount of the storage pool) and regenerates flat APT repository metadata in
+# place. Metadata is written to temp files and renamed into place so HTTPS
+# clients do not observe partial writes.
 #
 # Usage:
-#   scripts/publish-debs.sh [--source-dir DIR] [--staging-dir DIR] [--dry-run] [--skip-sync]
+#   scripts/publish-debs.sh --source-dir DIR --target-dir DIR [--dry-run]
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SOURCE_DIR="out/deb"
-STAGING_DIR="${STAGING_DIR:-${TMPDIR:-/tmp}/opencattus-deb-repo}"
-REMOTE_USER="${REMOTE_USER:-reposync}"
-REMOTE_HOST="${REMOTE_HOST:-172.21.1.40}"
-REMOTE_PATH="${REMOTE_PATH:-/mnt/pool1/repos/opencattus}"
-SSH_KEY="${SSH_KEY:-}"
+SOURCE_DIR=""
+TARGET_DIR=""
 DRY_RUN=""
-LFTP_DRY_RUN=""
-SKIP_SYNC=""
 REPO_DIR="ubuntu2404"
 
 usage() {
-    sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -32,17 +28,12 @@ while [[ $# -gt 0 ]]; do
             SOURCE_DIR="$2"
             shift 2
             ;;
-        --staging-dir)
-            STAGING_DIR="$2"
+        --target-dir)
+            TARGET_DIR="$2"
             shift 2
             ;;
         --dry-run)
             DRY_RUN="yes"
-            LFTP_DRY_RUN="--dry-run"
-            shift
-            ;;
-        --skip-sync)
-            SKIP_SYNC="yes"
             shift
             ;;
         -h|--help)
@@ -65,45 +56,31 @@ require_command() {
     }
 }
 
-seed_remote_repo_dir() {
-    mkdir -p "${STAGING_DIR}/${REPO_DIR}"
+if [[ -z "${SOURCE_DIR}" ]]; then
+    echo "--source-dir is required" >&2
+    usage >&2
+    exit 2
+fi
+if [[ -z "${TARGET_DIR}" ]]; then
+    echo "--target-dir is required" >&2
+    usage >&2
+    exit 2
+fi
 
-    echo "==> Fetching current remote contents for ${REPO_DIR}"
-    lftp -e "
-set cmd:fail-exit yes;
-set sftp:connect-program 'ssh -l ${REMOTE_USER} -i ${SSH_KEY} -o StrictHostKeyChecking=no -o BatchMode=yes';
-open sftp://${REMOTE_HOST};
-mirror --verbose ${REMOTE_PATH}/${REPO_DIR}/ ${STAGING_DIR}/${REPO_DIR}/;
-bye;
-"
-}
+require_command dpkg-scanpackages
+require_command gzip
 
-resolve_ssh_key() {
-    if [[ -n "${SSH_KEY}" ]]; then
-        [[ -f "${SSH_KEY}" ]] && return 0
-        echo "SSH key not found: ${SSH_KEY}" >&2
-        echo "Set SSH_KEY=/path/to/reposync_key before publishing." >&2
-        exit 1
-    fi
-
-    local candidate
-    for candidate in \
-        "${HOME}/.ssh/id_ed25519_openhpc" \
-        "${HOME}/.ssh/id_ed25519" \
-        "${HOME}/.ssh/id_rsa"; do
-        if [[ -f "${candidate}" ]]; then
-            SSH_KEY="${candidate}"
-            return 0
-        fi
-    done
-
-    echo "No SSH key found under ${HOME}/.ssh." >&2
-    echo "Set SSH_KEY=/path/to/reposync_key before publishing." >&2
+if [[ ! -d "${SOURCE_DIR}" ]]; then
+    echo "Source directory does not exist: ${SOURCE_DIR}" >&2
     exit 1
-}
+fi
+if [[ ! -d "${TARGET_DIR}" ]]; then
+    echo "Target directory does not exist: ${TARGET_DIR}" >&2
+    exit 1
+fi
 
-stage_ubuntu_debs() {
-    local destination="${STAGING_DIR}/${REPO_DIR}"
+publish_ubuntu() {
+    local destination="${TARGET_DIR}/${REPO_DIR}"
     local repo_file="${SCRIPT_DIR}/repo-files/${REPO_DIR}/versatushpc-opencattus.list"
     local debs=()
 
@@ -120,61 +97,42 @@ stage_ubuntu_debs() {
         exit 1
     fi
 
+    if [[ -n "${DRY_RUN}" ]]; then
+        echo "==> [dry-run] would publish ${#debs[@]} DEB(s) into ${destination}"
+        for deb in "${debs[@]}"; do
+            echo "    - $(basename "${deb}")"
+        done
+        echo "==> [dry-run] would copy ${repo_file} into ${destination}/"
+        echo "==> [dry-run] would regenerate Packages and Packages.gz in ${destination}"
+        return
+    fi
+
     mkdir -p "${destination}"
     for deb in "${debs[@]}"; do
         cp -f "${deb}" "${destination}/"
     done
-    cp "${repo_file}" "${destination}/"
+    cp -f "${repo_file}" "${destination}/"
 
-    rm -f "${destination}/Packages" "${destination}/Packages.gz"
     echo "==> Running dpkg-scanpackages for ${REPO_DIR}"
     (
         cd "${destination}"
-        dpkg-scanpackages . /dev/null >Packages
-        gzip -9c Packages >Packages.gz
+        dpkg-scanpackages . /dev/null > Packages.new
+        gzip -9c Packages.new > Packages.gz.new
+        mv -f Packages.new Packages
+        mv -f Packages.gz.new Packages.gz
     )
 }
 
-require_command dpkg-scanpackages
-if [[ -z "${SKIP_SYNC}" ]]; then
-    require_command lftp
-    resolve_ssh_key
-fi
-
 if [[ -n "${DRY_RUN}" ]]; then
-    echo "*** DRY RUN - repository metadata will be staged, no files will be transferred ***"
+    echo "*** DRY RUN - no files will be copied; metadata will not be regenerated ***"
 fi
 
-echo "==> Preparing staging directory: ${STAGING_DIR}"
-rm -rf "${STAGING_DIR}"
-mkdir -p "${STAGING_DIR}"
-
-if [[ -z "${SKIP_SYNC}" ]]; then
-    seed_remote_repo_dir
-fi
-
-stage_ubuntu_debs
-
-if [[ -n "${SKIP_SYNC}" ]]; then
-    echo "==> Skipping remote sync"
-else
-    echo "==> Syncing ${REPO_DIR} to ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/${REPO_DIR} via SFTP"
-    lftp -e "
-set cmd:fail-exit yes;
-set sftp:connect-program 'ssh -l ${REMOTE_USER} -i ${SSH_KEY} -o StrictHostKeyChecking=no -o BatchMode=yes';
-open sftp://${REMOTE_HOST};
-mirror --reverse --delete --verbose ${LFTP_DRY_RUN} \
-    ${STAGING_DIR}/${REPO_DIR}/ ${REMOTE_PATH}/${REPO_DIR}/;
-bye;
-"
-fi
+publish_ubuntu
 
 echo ""
-echo "==> Done. DEB count:"
-echo "    ${REPO_DIR}: $(find "${STAGING_DIR}/${REPO_DIR}" -name '*.deb' | wc -l | tr -d ' ')"
-echo ""
-echo "    Staged repository: ${STAGING_DIR}/${REPO_DIR}"
-echo "    Remote repository: sftp://${REMOTE_USER}@${REMOTE_HOST}${REMOTE_PATH}/${REPO_DIR}"
+echo "==> Done. DEB count under ${TARGET_DIR}/${REPO_DIR}:"
+count=$(find "${TARGET_DIR}/${REPO_DIR}" -maxdepth 1 -name '*.deb' 2>/dev/null | wc -l | tr -d ' ')
+printf '    %s: %s\n' "${REPO_DIR}" "${count}"
 echo ""
 echo "    Users enable the repo with:"
 echo "      curl -o /etc/apt/sources.list.d/versatushpc-opencattus.list https://repos.versatushpc.com.br/opencattus/${REPO_DIR}/versatushpc-opencattus.list"
