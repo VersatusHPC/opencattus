@@ -72,10 +72,12 @@ target_link_system_libraries(
         ${COMMON_LIBS})
 
 target_include_directories(opencattus_test_object PRIVATE
-        "${CMAKE_BINARY_DIR}/../configured_files/include")
+        "${PROJECT_BINARY_DIR}/../configured_files/include")
 target_include_directories(opencattus_test_object ${WARNING_GUARD} PRIVATE
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/../include>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/../include>)
+
+add_dependencies(opencattus_test_object opencattus_embedded_repos)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD ${CMAKE_CXX_STANDARD})
 
