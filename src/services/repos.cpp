@@ -737,10 +737,24 @@ public:
     static constexpr std::string_view defaultPath
         = "/opt/opencattus/conf/repos/";
     // Write the embedded copy of `path.filename()` to `path` if and only if
-    // (a) the file is missing on disk and (b) the binary actually carries an
-    // embedded copy for that filename. Returns true when seeding happened.
+    // (a) the file is missing on disk, (b) the path targets the production
+    // configuration directory (defaultPath), and (c) the binary carries an
+    // embedded copy for that filename. Custom paths (tests, dev installs)
+    // keep the original "throw on missing" contract.
     static bool seedFromEmbedded(const std::filesystem::path& path)
     {
+        std::error_code ec;
+        const auto canonicalParent
+            = std::filesystem::weakly_canonical(path.parent_path(), ec);
+        if (ec) {
+            return false;
+        }
+        const auto canonicalDefault = std::filesystem::weakly_canonical(
+            std::filesystem::path(defaultPath), ec);
+        if (ec || canonicalParent != canonicalDefault) {
+            return false;
+        }
+
         const auto name = path.filename().string();
         for (const auto& entry :
             opencattus::services::embedded_repos::entries) {
