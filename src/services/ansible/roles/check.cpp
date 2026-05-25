@@ -48,11 +48,22 @@ void run(const Role& role)
                                 "2>/dev/null | sort -V | tail -1");
 
     if (!singleton::options()->shouldSkip("check-kernel")) {
+        const auto& opts = *singleton::options();
+        auto answerfilePath = opts.answerfile.empty()
+            ? opts.dumpAnswerfile.empty()
+                ? "opencattus-tui.ini"
+                : opts.dumpAnswerfile
+            : opts.answerfile;
+
         functions::abortif(isNewerKernelAvailable(kernelAvailable,
                                singleton::osservice()->getKernelRunning()),
-            "New kernel available, run `dnf install -y kernel` and reboot "
-            "before continue, use `--skip check-kernel` to skip (not "
-            "recommended)");
+            fmt::format(
+                "New kernel available, run `dnf install -y kernel` and "
+                "reboot before continuing. Your configuration has been "
+                "saved; after reboot resume with:\n\n"
+                "    opencattus --answerfile {}\n\n"
+                "Use `--skip check-kernel` to skip (not recommended)",
+                answerfilePath));
     }
     // TODO
     // Implement checks to run before the installation
