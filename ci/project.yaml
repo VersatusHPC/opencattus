@@ -1,0 +1,63 @@
+languages: [cpp]
+
+preflight:
+  image: registry.access.redhat.com/ubi10/ubi:latest
+
+container_builds:
+  - name: EL8
+    image: docker.io/library/rockylinux:8
+    arch: x86_64
+    script: ./ci/build.sh
+    args: [el8, x86_64]
+    artifacts: "out/rpm/el8/*.rpm"
+  - name: EL9
+    image: docker.io/library/rockylinux:9
+    arch: x86_64
+    script: ./ci/build.sh
+    args: [el9, x86_64]
+    artifacts: "out/rpm/el9/*.rpm"
+  - name: EL10
+    image: registry.access.redhat.com/ubi10/ubi:latest
+    arch: x86_64
+    script: ./ci/build.sh
+    args: [el10, x86_64]
+    artifacts: "out/rpm/el10/*.rpm"
+  - name: Ubuntu 24.04
+    image: docker.io/library/ubuntu:24.04
+    arch: x86_64
+    script: ./ci/build.sh
+    args: [ubuntu2404, x86_64]
+    artifacts: "out/deb/*.deb"
+
+cache:
+  enabled: true
+  base_dir: /var/lib/jenkins-agent/.cache/opencattus
+  mounts:
+    - host_subdir: "conan/{name}"
+      container_path: /root/.conan2
+    - host_subdir: "cpm/{name}"
+      container_path: /root/.cache/CPM
+    - host_subdir: "sources"
+      container_path: /root/.cache/opencattus/sources
+
+change_policy:
+  docs_only_paths:
+    - "docs/**"
+    - "**/*.md"
+    - "**/*.rst"
+  source_paths:
+    - "src/**"
+    - "include/**"
+    - "test/**"
+    - "fuzz_test/**"
+    - "cmake/**"
+    - "**/*.cpp"
+    - "**/*.hpp"
+    - "**/*.h"
+    - "CMakeLists.txt"
+    - "CMakePresets.json"
+    - "conanfile.py"
+  packaging_paths:
+    - "rpmspecs/**"
+    - "scripts/**"
+    - "**/*.spec"
