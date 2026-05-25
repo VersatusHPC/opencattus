@@ -38,9 +38,10 @@ sudo curl -o /etc/yum.repos.d/versatushpc-opencattus.repo \
 sudo dnf install -y opencattus
 ```
 
-For EL10:
+For EL10 (AlmaLinux, Rocky, RHEL):
 
 ```bash
+sudo dnf install -y epel-release          # required for glibmm runtime libraries
 sudo curl -o /etc/yum.repos.d/versatushpc-opencattus.repo \
   https://repos.versatushpc.com.br/opencattus/el10/versatushpc-opencattus.repo
 sudo dnf install -y opencattus
