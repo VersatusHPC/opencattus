@@ -26,6 +26,7 @@ BuildRequires: glibmm2.4-devel
 %endif
 
 Requires: newt
+Requires: wget
 Provides: opencattus-installer = %{VERSION}-%{RELEASE}%{?dist}
 Obsoletes: opencattus-installer <= 1.0-1%{?dist}
 Obsoletes: opencattus-installer-debug <= 1.0-6%{?dist}
