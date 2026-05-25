@@ -11,8 +11,6 @@
 
 #include <fmt/core.h>
 
-// @FIXME: Add support for hostbased auth
-
 namespace {
 
 using namespace opencattus::utils::singleton;
@@ -26,10 +24,35 @@ void disallowSSHRootPasswordLogin()
         " /etc/ssh/sshd_config");
 }
 
+void enableHostbasedAuthentication()
+{
+    LOG_INFO("Enabling host-based authentication (SSH)")
+
+    ::runner()->executeCommand(
+        "sed -i \"/^#\\?HostbasedAuthentication/c\\HostbasedAuthentication yes\""
+        " /etc/ssh/sshd_config");
+
+    ::runner()->executeCommand(
+        "sed -i \"/^#\\?IgnoreRhosts/c\\IgnoreRhosts no\""
+        " /etc/ssh/sshd_config");
+
+    ::runner()->executeCommand(
+        "install -d -m 0755 /etc/ssh/ssh_config.d && "
+        "cat > /etc/ssh/ssh_config.d/50-opencattus.conf <<'SSH_EOF'\n"
+        "Host *\n"
+        "    HostbasedAuthentication yes\n"
+        "    EnableSSHKeysign yes\n"
+        "SSH_EOF");
+}
+
 }
 
 namespace opencattus::services::ansible::roles::sshd {
 
-void run(const Role& /*role*/) { disallowSSHRootPasswordLogin(); }
+void run(const Role& /*role*/)
+{
+    disallowSSHRootPasswordLogin();
+    enableHostbasedAuthentication();
+}
 
 }
