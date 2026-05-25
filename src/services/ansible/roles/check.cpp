@@ -17,6 +17,8 @@
 #include <cstring>
 #include <filesystem>
 
+#include <opencattus/services/tui_session.h>
+
 namespace opencattus::services::ansible::roles::check {
 
 auto isNewerKernelAvailable(
@@ -50,10 +52,9 @@ void run(const Role& role)
 
     if (!singleton::options()->shouldSkip("check-kernel")) {
         const auto& opts = *singleton::options();
-        auto answerfilePath = std::filesystem::absolute(!opts.answerfile.empty()
-                ? opts.answerfile
-                : !opts.dumpAnswerfile.empty() ? opts.dumpAnswerfile
-                                               : "opencattus-tui.ini");
+        auto answerfilePath = opts.answerfile.empty()
+            ? services::tui::defaultAnswerfilePath(opts)
+            : std::filesystem::absolute(opts.answerfile);
 
         functions::abortif(isNewerKernelAvailable(kernelAvailable,
                                singleton::osservice()->getKernelRunning()),
