@@ -14,4 +14,20 @@ if ! command -v "clang-format-${REQUIRED_VERSION}" >/dev/null 2>&1; then
     fi
 fi
 
-exec ./format-changed.sh --check
+if git rev-parse --verify origin/master >/dev/null 2>&1; then
+    exec ./format-changed.sh --check origin/master
+fi
+
+echo "origin/master not available; checking all source files"
+CLANG_FORMAT_BIN="$(command -v "clang-format-${REQUIRED_VERSION}" 2>/dev/null || command -v clang-format)"
+export CLANG_FORMAT_BIN
+
+failed=0
+while IFS= read -r -d '' file; do
+    if ! "${CLANG_FORMAT_BIN}" --dry-run --Werror "$file" 2>/dev/null; then
+        echo "Format error: $file" >&2
+        failed=1
+    fi
+done < <(find include src -type f \( -name '*.cpp' -o -name '*.hpp' -o -name '*.h' \) -print0)
+
+exit "$failed"
