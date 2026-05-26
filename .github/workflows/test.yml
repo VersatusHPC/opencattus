@@ -1,13 +1,6 @@
 name: Self-Hosted CI
 
-on:
-  push:
-    branches:
-      - master
-  pull_request:
-  workflow_dispatch:
-  release:
-    types: [published]
+on: workflow_dispatch
 
 concurrency:
   group: opencattus-${{ github.workflow }}-${{ github.ref }}

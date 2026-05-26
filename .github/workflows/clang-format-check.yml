@@ -1,11 +1,6 @@
 name: Clang Format Check
 
-on:
-  push:
-    branches:
-      - master
-  pull_request:
-  workflow_dispatch:
+on: workflow_dispatch
 
 concurrency:
   group: opencattus-format-${{ github.ref }}
