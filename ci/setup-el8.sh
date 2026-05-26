@@ -3,6 +3,7 @@ set -euxo pipefail
 
 dnf install -y dnf-plugins-core epel-release
 dnf config-manager --set-enabled powertools
+sed -i 's|^metalink=|#metalink=|; s|^#baseurl=https\?://download.*/epel/|baseurl=https://mirror.local.versatushpc.com.br/epel/|' /etc/yum.repos.d/epel*.repo
 dnf install -y python39 python39-pip
 alternatives --set python3 /usr/bin/python3.9
 
