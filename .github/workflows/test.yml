@@ -73,7 +73,9 @@ jobs:
           cmake --build build-host --target opencattus OpenCATTUS-tests -j"$(nproc)"
 
       - name: Run fast test suite
-        run: ctest --test-dir build-host --output-on-failure
+        run: |
+          eval "$(dbus-launch --sh-syntax)" 2>/dev/null || true
+          ctest --test-dir build-host --output-on-failure
 
   rpm-build:
     name: RPM Build (${{ matrix.el }})
@@ -118,6 +120,9 @@ jobs:
               glibmm2.4-devel
 
     steps:
+      - name: Fix workspace ownership from previous sudo podman builds
+        run: sudo chown -R "$(id -u):$(id -g)" "${GITHUB_WORKSPACE}" 2>/dev/null || true
+
       - name: Checkout code
         uses: actions/checkout@v6
 
@@ -149,8 +154,8 @@ jobs:
           # Self-hosted runners occasionally keep stale rootless Podman state
           # after reboots or package updates. Try the recommended repair first
           # so container-based jobs can recover without manual intervention.
-          podman system migrate || true
-          podman info >/dev/null
+          sudo podman system migrate || true
+          sudo podman info >/dev/null
 
       - name: Prepare Conan cache
         run: |
@@ -162,7 +167,7 @@ jobs:
       - name: Build RPM in ${{ matrix.el }} container
         run: |
           set -euo pipefail
-          podman run --rm \
+          sudo podman run --rm \
             -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:z" \
             -v "${HOME}/.cache/opencattus/conan/${{ matrix.el }}:/root/.conan2:z" \
             -v "${HOME}/.cache/opencattus/cpm/${{ matrix.el }}:/root/.cache/CPM:z" \
@@ -297,6 +302,9 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      - name: Fix workspace ownership from previous sudo podman builds
+        run: sudo chown -R "$(id -u):$(id -g)" "${GITHUB_WORKSPACE}" 2>/dev/null || true
+
       - name: Checkout code
         uses: actions/checkout@v6
 
@@ -325,8 +333,8 @@ jobs:
             exit 1
           }
 
-          podman system migrate || true
-          podman info >/dev/null
+          sudo podman system migrate || true
+          sudo podman info >/dev/null
 
       - name: Prepare Conan cache
         run: |
@@ -338,7 +346,7 @@ jobs:
       - name: Build DEB in Ubuntu 24.04 container
         run: |
           set -euo pipefail
-          podman run --rm \
+          sudo podman run --rm \
             -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:z" \
             -v "${HOME}/.cache/opencattus/conan/ubuntu2404:/root/.conan2:z" \
             -v "${HOME}/.cache/opencattus/cpm/ubuntu2404:/root/.cache/CPM:z" \
