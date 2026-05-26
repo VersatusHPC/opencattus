@@ -977,6 +977,14 @@ if test -n "${{doca_image_kernel:-}}"; then
     fi
 fi
 
+# Ensure the diskless profile has a syncfiles so Confluent keeps
+# /etc/passwd and /etc/group in sync with the headnode at boot time.
+cat > /var/lib/confluent/public/os/{image}-diskless/syncfiles <<'SYNCFILES_EOF'
+MERGE:
+/etc/passwd
+/etc/group
+SYNCFILES_EOF
+
 # Remove the leftover files from the chroot
 rm -rf $scratchdir || :
 )d",
