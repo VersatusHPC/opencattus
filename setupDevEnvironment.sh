@@ -36,7 +36,7 @@ case "${ID:-}" in
     os_version=$(rpm -E %rhel)
     ;;
   *)
-    echo "Unsupported distribution: ${ID:-unknown}. Supported: RHEL, Rocky, AlmaLinux, Oracle Linux, Ubuntu, Debian."
+    echo "Unsupported distribution: ${ID:-unknown}. Supported: RHEL, Rocky, AlmaLinux, Oracle Linux, Ubuntu."
     exit 2
     ;;
 esac
