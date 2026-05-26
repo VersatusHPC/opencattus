@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
+dnf install -y epel-release dnf-plugins-core
+/usr/bin/crb enable
+sed -i 's|^metalink=|#metalink=|; s|^#baseurl=.*|baseurl=http://mirror.local.versatushpc.com.br/epel/10z/Everything/$basearch/|' /etc/yum.repos.d/epel.repo
 
 dnf install -y \
     git rpmdevtools rpm-build tar gzip \
