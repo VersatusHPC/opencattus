@@ -1,4 +1,5 @@
 #include <opencattus/functions.h>
+#include <opencattus/models/os.h>
 #include <opencattus/services/ansible/roles/sshd.h>
 #include <opencattus/services/log.h>
 
@@ -28,6 +29,10 @@ void enableHostbasedAuthentication()
 {
     LOG_INFO("Enabling host-based authentication (SSH)")
 
+    if (::os().getPackageType() == opencattus::models::OS::PackageType::RPM) {
+        ::runner()->executeCommand("dnf install -y openssh-keysign || true");
+    }
+
     ::runner()->executeCommand(
         "sed -i \"/^#\\?HostbasedAuthentication/c\\HostbasedAuthentication "
         "yes\""
@@ -43,6 +48,7 @@ void enableHostbasedAuthentication()
         "Host *\n"
         "    HostbasedAuthentication yes\n"
         "    EnableSSHKeysign yes\n"
+        "    HostbasedKeyTypes *ed25519*\n"
         "SSH_EOF");
 }
 
