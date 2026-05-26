@@ -15,6 +15,9 @@
 #include <fmt/core.h>
 
 #include <cstring>
+#include <filesystem>
+
+#include <opencattus/services/tui_session.h>
 
 namespace opencattus::services::ansible::roles::check {
 
@@ -48,11 +51,19 @@ void run(const Role& role)
                                 "2>/dev/null | sort -V | tail -1");
 
     if (!singleton::options()->shouldSkip("check-kernel")) {
+        const auto& opts = *singleton::options();
+        auto answerfilePath = opts.answerfile.empty()
+            ? services::tui::defaultAnswerfilePath(opts)
+            : std::filesystem::absolute(opts.answerfile);
+
         functions::abortif(isNewerKernelAvailable(kernelAvailable,
                                singleton::osservice()->getKernelRunning()),
-            "New kernel available, run `dnf install -y kernel` and reboot "
-            "before continue, use `--skip check-kernel` to skip (not "
-            "recommended)");
+            fmt::format("New kernel available, run `dnf install -y kernel` and "
+                        "reboot before continuing. Your configuration has been "
+                        "saved; after reboot resume with:\n\n"
+                        "    opencattus --answerfile '{}'\n\n"
+                        "Use `--skip check-kernel` to skip (not recommended)",
+                answerfilePath.string()));
     }
     // TODO
     // Implement checks to run before the installation
