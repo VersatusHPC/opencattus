@@ -32,11 +32,11 @@ void enableHostbasedAuthentication()
     switch (::os().getPackageType()) {
         case opencattus::models::OS::PackageType::RPM:
             ::runner()->executeCommand(
-                "dnf install -y openssh-keysign || true");
+                "dnf install -y openssh-keysign");
             break;
         case opencattus::models::OS::PackageType::DEB:
             ::runner()->executeCommand(
-                "apt-get install -y openssh-client || true");
+                "apt-get install -y openssh-client");
             break;
     }
 
