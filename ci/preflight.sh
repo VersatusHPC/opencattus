@@ -29,6 +29,7 @@ dbus-daemon --system --fork 2>/dev/null || true
 eval "$(dbus-launch --sh-syntax)" || true
 export DBUS_SESSION_BUS_ADDRESS
 
-ip link add dummy0 type dummy 2>/dev/null && ip addr add 10.99.0.1/24 dev dummy0 && ip link set dummy0 up || true
+ip link add eth0 type dummy 2>/dev/null && ip addr add 10.99.0.1/24 dev eth0 && ip link set eth0 up || true
+ip link add eth1 type dummy 2>/dev/null && ip addr add 10.99.1.1/24 dev eth1 && ip link set eth1 up || true
 
 ctest --test-dir build-preflight --output-on-failure
