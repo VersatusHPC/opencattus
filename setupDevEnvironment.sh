@@ -79,10 +79,8 @@ install_conan() {
 
   case "$os_family" in
     debian)
-      "$python_bin" -m venv "$HOME/.local/opencattus-venv"
-      "$HOME/.local/opencattus-venv/bin/pip" install --upgrade pip conan
-      mkdir -p "$HOME/.local/bin"
-      ln -sf "$HOME/.local/opencattus-venv/bin/conan" "$HOME/.local/bin/conan"
+      "$python_bin" -m pip install --break-system-packages --user --upgrade pip
+      "$python_bin" -m pip install --break-system-packages --user conan
       ;;
     el)
       case "$os_version" in
@@ -229,11 +227,18 @@ install_conan
 echo
 echo Development tools, packages and libraries were installed on your system.
 echo
-if [ "$os_family" = "el" ]; then
-  echo If compiling or running on EL8 or EL9, please remember to source or
-  echo activate the environment file with the correct toolset compiler:
-  echo "    source rhel-gcc-toolset-14.sh"
-  echo
-fi
+case "$os_family" in
+  el)
+    echo If compiling or running on EL8 or EL9, please remember to source or
+    echo activate the environment file with the correct toolset compiler:
+    echo "    source rhel-gcc-toolset-14.sh"
+    echo
+    ;;
+  debian)
+    echo Ensure ~/.local/bin is in your PATH so cmake can find conan:
+    echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
+    echo
+    ;;
+esac
 echo To proceed with the compilation please refer to the README.md file.
 echo
