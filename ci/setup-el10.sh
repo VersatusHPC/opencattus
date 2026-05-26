@@ -2,7 +2,7 @@
 set -euxo pipefail
 
 dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
-sed -i 's|^metalink=|#metalink=|; s|^#baseurl=https\?://download.*/epel/|baseurl=http://mirror.local.versatushpc.com.br/epel/|' /etc/yum.repos.d/epel*.repo
+sed -i 's|^metalink=|#metalink=|; s|^#baseurl=.*|baseurl=http://mirror.local.versatushpc.com.br/epel/10z/Everything/$basearch/|' /etc/yum.repos.d/epel.repo
 
 dnf install -y \
     git rpmdevtools rpm-build tar gzip \

@@ -3,7 +3,7 @@ set -euxo pipefail
 
 dnf install -y dnf-plugins-core epel-release
 dnf config-manager --set-enabled crb
-sed -i 's|^metalink=|#metalink=|; s|^#baseurl=https\?://download.*/epel/|baseurl=http://mirror.local.versatushpc.com.br/epel/|' /etc/yum.repos.d/epel*.repo
+sed -i 's|^metalink=|#metalink=|; s|^#baseurl=.*|baseurl=http://mirror.local.versatushpc.com.br/epel/9/Everything/$basearch/|' /etc/yum.repos.d/epel.repo
 dnf clean metadata
 
 dnf install -y \
