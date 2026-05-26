@@ -29,6 +29,9 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      - name: Fix workspace ownership from previous sudo podman builds
+        run: sudo chown -R "$(id -u):$(id -g)" "${GITHUB_WORKSPACE}" 2>/dev/null || true
+
       - name: Checkout code
         uses: actions/checkout@v6
 
