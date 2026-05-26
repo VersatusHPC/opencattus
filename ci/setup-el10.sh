@@ -3,7 +3,6 @@ set -euxo pipefail
 
 dnf install -y epel-release dnf-plugins-core
 /usr/bin/crb enable
-sed -i 's|^metalink=|#metalink=|; s|^#baseurl=.*|baseurl=http://mirror.local.versatushpc.com.br/epel/10z/Everything/$basearch/|' /etc/yum.repos.d/epel.repo
 
 dnf install -y \
     git rpmdevtools rpm-build tar gzip \
