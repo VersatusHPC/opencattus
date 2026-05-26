@@ -73,7 +73,9 @@ jobs:
           cmake --build build-host --target opencattus OpenCATTUS-tests -j"$(nproc)"
 
       - name: Run fast test suite
-        run: ctest --test-dir build-host --output-on-failure
+        run: |
+          eval "$(dbus-launch --sh-syntax)" 2>/dev/null || true
+          ctest --test-dir build-host --output-on-failure
 
   rpm-build:
     name: RPM Build (${{ matrix.el }})
