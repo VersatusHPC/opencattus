@@ -3,6 +3,7 @@ set -euxo pipefail
 
 dnf install -y dnf-plugins-core epel-release
 dnf config-manager --set-enabled crb
+dnf clean metadata
 
 dnf install -y \
     git rpmdevtools rpm-build tar gzip \
