@@ -299,6 +299,7 @@ jobs:
   deb-build:
     name: DEB Build (Ubuntu 24.04)
     needs: [fast-tests, rpm-build]
+    if: always() && needs.fast-tests.result == 'success'
     runs-on:
       - self-hosted
       - Linux
