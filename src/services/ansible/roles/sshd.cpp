@@ -26,12 +26,20 @@ ScriptBuilder installScript(
                     "without-password\""
                     " /etc/ssh/sshd_config");
 
-    builder.addNewLine()
-        .addCommand("# Install ssh-keysign for host-based authentication")
-        .addPackage(
-            osinfo.getPackageType() == opencattus::models::OS::PackageType::RPM
-                ? "openssh-keysign"
-                : "openssh-client");
+    switch (osinfo.getPlatform()) {
+        case opencattus::models::OS::Platform::el10:
+            builder.addNewLine()
+                .addCommand("# ssh-keysign split into its own package on EL10")
+                .addPackage("openssh-keysign");
+            break;
+        case opencattus::models::OS::Platform::ubuntu2404:
+            builder.addNewLine()
+                .addCommand("# ssh-keysign lives in openssh-client on Ubuntu")
+                .addPackage("openssh-client");
+            break;
+        default:
+            break;
+    }
 
     builder.addNewLine()
         .addCommand("# Enable host-based authentication in sshd")
