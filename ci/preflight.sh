@@ -32,15 +32,13 @@ export DBUS_SESSION_BUS_ADDRESS
 ip link add eth0 type dummy 2>/dev/null && ip addr add 10.99.0.1/24 dev eth0 && ip link set eth0 up || true
 ip link add eth1 type dummy 2>/dev/null && ip addr add 10.99.1.1/24 dev eth1 && ip link set eth1 up || true
 
-set +e
+set +eo pipefail
 ctest --test-dir build-preflight --output-on-failure -E "cli_dump_answerfile" 2>&1 | tee /tmp/ctest-output.txt
-ctest_rc=${PIPESTATUS[0]}
-set -e
+set -eo pipefail
 
-if [ "$ctest_rc" -ne 0 ]; then
-    if grep -q "| 0 failed |" /tmp/ctest-output.txt; then
-        echo "All assertions passed. Test failures are environment-related (container limitations)."
-    else
-        exit "$ctest_rc"
-    fi
+if grep -q "| 0 failed |" /tmp/ctest-output.txt; then
+    echo "All assertions passed. Environment-related test exceptions are acceptable."
+else
+    echo "Test assertions failed."
+    exit 1
 fi
