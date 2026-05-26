@@ -1,23 +1,23 @@
 languages: [cpp]
 
 preflight:
-  image: docker.io/library/almalinux:10
+  image: quay.io/almalinuxorg/almalinux:10
 
 container_builds:
   - name: EL8
-    image: docker.io/library/almalinux:8
+    image: quay.io/almalinuxorg/almalinux:8
     arch: x86_64
     script: ./ci/build.sh
     args: [el8, x86_64]
     artifacts: "out/rpm/el8/*.rpm"
   - name: EL9
-    image: docker.io/library/almalinux:9
+    image: quay.io/almalinuxorg/almalinux:9
     arch: x86_64
     script: ./ci/build.sh
     args: [el9, x86_64]
     artifacts: "out/rpm/el9/*.rpm"
   - name: EL10
-    image: docker.io/library/almalinux:10
+    image: quay.io/almalinuxorg/almalinux:10
     arch: x86_64
     script: ./ci/build.sh
     args: [el10, x86_64]
