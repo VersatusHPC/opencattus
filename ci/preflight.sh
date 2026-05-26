@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 source "${SCRIPT_DIR}/setup-el10.sh"
 
-dnf install -y dbus-daemon
+dnf install -y dbus-daemon dbus-tools
 
 python3 -m venv /tmp/conan-venv
 /tmp/conan-venv/bin/pip install conan
@@ -26,8 +26,9 @@ cmake --build build-preflight --target opencattus OpenCATTUS-tests -j"$(nproc)"
 
 mkdir -p /run/dbus
 dbus-daemon --system --fork 2>/dev/null || true
-eval "$(dbus-launch --sh-syntax)"
+eval "$(dbus-launch --sh-syntax)" || true
 export DBUS_SESSION_BUS_ADDRESS
 
-ctest --test-dir build-preflight --output-on-failure \
-    --exclude-regex "cli_dump_answerfile"
+ip link add dummy0 type dummy 2>/dev/null && ip addr add 10.99.0.1/24 dev dummy0 && ip link set dummy0 up || true
+
+ctest --test-dir build-preflight --output-on-failure
