@@ -14,20 +14,20 @@ if ! command -v "clang-format-${REQUIRED_VERSION}" >/dev/null 2>&1; then
     fi
 fi
 
-if git rev-parse --verify origin/master >/dev/null 2>&1; then
-    exec ./format-changed.sh --check origin/master
-fi
-
-echo "origin/master not available; checking all source files"
 CLANG_FORMAT_BIN="$(command -v "clang-format-${REQUIRED_VERSION}" 2>/dev/null || command -v clang-format)"
 export CLANG_FORMAT_BIN
 
+actual_version=$("${CLANG_FORMAT_BIN}" --version | grep -oP '[0-9]+' | head -1)
+if [ "${actual_version}" != "${REQUIRED_VERSION}" ]; then
+    echo "clang-format version mismatch: got ${actual_version}, need ${REQUIRED_VERSION}" >&2
+    exit 1
+fi
+
 failed=0
 while IFS= read -r -d '' file; do
-    if ! "${CLANG_FORMAT_BIN}" --dry-run --Werror "$file" 2>/dev/null; then
-        echo "Format error: $file" >&2
+    if ! "${CLANG_FORMAT_BIN}" --dry-run --Werror "$file"; then
         failed=1
     fi
-done < <(find include src -type f \( -name '*.cpp' -o -name '*.hpp' -o -name '*.h' \) -print0)
+done < <(find include src test fuzz_test -type f \( -name '*.cpp' -o -name '*.hpp' -o -name '*.h' \) -print0)
 
 exit "$failed"
