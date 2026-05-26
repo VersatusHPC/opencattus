@@ -2,6 +2,7 @@
 set -euxo pipefail
 
 dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
+/usr/bin/crb enable 2>/dev/null || true
 sed -i 's|^metalink=|#metalink=|; s|^#baseurl=.*|baseurl=http://mirror.local.versatushpc.com.br/epel/10z/Everything/$basearch/|' /etc/yum.repos.d/epel.repo
 
 dnf install -y \
