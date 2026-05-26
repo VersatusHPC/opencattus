@@ -1075,6 +1075,8 @@ rm -rf $scratchdir || :
                 .to_string(),
             cluster()->getHeadnode().getFQDN(),
             cluster()->getHeadnode().getHostname()));
+
+    runner::shell::cmd("osdeploy initialize -l");
 }
 
 }
