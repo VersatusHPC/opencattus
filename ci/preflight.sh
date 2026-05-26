@@ -34,11 +34,17 @@ ip link add eth1 type dummy 2>/dev/null && ip addr add 10.99.1.1/24 dev eth1 && 
 
 set +eo pipefail
 ctest --test-dir build-preflight --output-on-failure -E "cli_dump_answerfile" 2>&1 | tee /tmp/ctest-output.txt
+ctest_rc=${PIPESTATUS[0]}
 set -eo pipefail
 
-if grep -q "| 0 failed |" /tmp/ctest-output.txt; then
-    echo "All assertions passed. Environment-related test exceptions are acceptable."
-else
-    echo "Test assertions failed."
+failed_count=$(grep -oP '\| \K[0-9]+(?= failed)' /tmp/ctest-output.txt | tail -1)
+
+if [ -z "${failed_count}" ]; then
+    echo "Could not parse test results from ctest output."
     exit 1
+elif [ "${failed_count}" -ne 0 ]; then
+    echo "Test assertions failed: ${failed_count} failures."
+    exit 1
+else
+    echo "All assertions passed (ctest exit code: ${ctest_rc})."
 fi
