@@ -29,8 +29,15 @@ void enableHostbasedAuthentication()
 {
     LOG_INFO("Enabling host-based authentication (SSH)")
 
-    if (::os().getPackageType() == opencattus::models::OS::PackageType::RPM) {
-        ::runner()->executeCommand("dnf install -y openssh-keysign || true");
+    switch (::os().getPackageType()) {
+        case opencattus::models::OS::PackageType::RPM:
+            ::runner()->executeCommand(
+                "dnf install -y openssh-keysign || true");
+            break;
+        case opencattus::models::OS::PackageType::DEB:
+            ::runner()->executeCommand(
+                "apt-get install -y openssh-client || true");
+            break;
     }
 
     ::runner()->executeCommand(
