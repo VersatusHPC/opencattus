@@ -90,6 +90,7 @@ jobs:
     timeout-minutes: 60
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - el: EL8
@@ -297,7 +298,8 @@ jobs:
 
   deb-build:
     name: DEB Build (Ubuntu 24.04)
-    needs: fast-tests
+    needs: [fast-tests, rpm-build]
+    if: always() && needs.fast-tests.result == 'success'
     runs-on:
       - self-hosted
       - Linux
