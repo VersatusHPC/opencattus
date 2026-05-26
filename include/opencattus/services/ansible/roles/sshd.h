@@ -6,8 +6,9 @@
 
 namespace opencattus::services::ansible::roles::sshd {
 
-void run(const Role& role);
+ScriptBuilder installScript(
+    const Role& role, const opencattus::models::OS& osinfo);
 
-};
+} // namespace opencattus::services::ansible::roles::sshd
 
 #endif

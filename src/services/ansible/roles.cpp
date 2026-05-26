@@ -74,7 +74,7 @@ RoleRunnable getRunnable(const Role& role, const models::OS& osinfo)
         case Roles::NETWORK:
             return network::run;
         case Roles::SSHD:
-            return sshd::run;
+            return wrap(sshd::installScript(role, osinfo));
         case Roles::OFED:
             return ofed::run;
         case Roles::DUMP:
