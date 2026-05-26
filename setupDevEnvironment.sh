@@ -196,7 +196,7 @@ case "$os_family" in
       libglibmm-2.4-dev libnewt-dev libsystemd-dev
     ;;
   el)
-    dnf -y install rsync git gcc-c++ gdb cmake ccache llvm-toolset \
+    dnf -y install rsync git gcc-c++ gdb cmake ninja-build ccache llvm-toolset \
       lldb compiler-rt
 
     case "$os_version" in
