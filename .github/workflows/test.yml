@@ -149,8 +149,8 @@ jobs:
           # Self-hosted runners occasionally keep stale rootless Podman state
           # after reboots or package updates. Try the recommended repair first
           # so container-based jobs can recover without manual intervention.
-          podman system migrate || true
-          podman info >/dev/null
+          sudo podman system migrate || true
+          sudo podman info >/dev/null
 
       - name: Prepare Conan cache
         run: |
@@ -162,7 +162,7 @@ jobs:
       - name: Build RPM in ${{ matrix.el }} container
         run: |
           set -euo pipefail
-          podman run --rm \
+          sudo podman run --rm \
             -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:z" \
             -v "${HOME}/.cache/opencattus/conan/${{ matrix.el }}:/root/.conan2:z" \
             -v "${HOME}/.cache/opencattus/cpm/${{ matrix.el }}:/root/.cache/CPM:z" \
@@ -325,8 +325,8 @@ jobs:
             exit 1
           }
 
-          podman system migrate || true
-          podman info >/dev/null
+          sudo podman system migrate || true
+          sudo podman info >/dev/null
 
       - name: Prepare Conan cache
         run: |
@@ -338,7 +338,7 @@ jobs:
       - name: Build DEB in Ubuntu 24.04 container
         run: |
           set -euo pipefail
-          podman run --rm \
+          sudo podman run --rm \
             -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:z" \
             -v "${HOME}/.cache/opencattus/conan/ubuntu2404:/root/.conan2:z" \
             -v "${HOME}/.cache/opencattus/cpm/ubuntu2404:/root/.cache/CPM:z" \
