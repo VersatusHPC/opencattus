@@ -31,7 +31,7 @@ protected:
     OS m_os;
     CPU m_cpu;
     std::list<Connection> m_connection;
-    std::optional<BMC> m_bmc {};
+    std::optional<BMC> m_bmc { };
     std::string m_fqdn; // TODO: Remove?
 
 protected:

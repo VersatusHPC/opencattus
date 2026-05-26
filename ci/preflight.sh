@@ -18,7 +18,7 @@ export OPENCATTUS_SOURCE_CACHE="${OPENCATTUS_SOURCE_CACHE:-/root/.cache/opencatt
 mkdir -p "${OPENCATTUS_SOURCE_CACHE}"
 
 if [ -x ./ci/check-format.sh ]; then
-    ./ci/check-format.sh || echo "WARNING: format check failed (non-fatal during pipeline validation)"
+    ./ci/check-format.sh
 fi
 
 cmake -S . -B build-preflight -G Ninja -DBUILD_TESTING=ON

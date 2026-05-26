@@ -117,7 +117,7 @@ auto suggestedNodeStartIP(opencattus::models::Cluster& model) -> std::string
         return candidate->to_string();
     }
 
-    return {};
+    return { };
 }
 
 auto suggestedBMCStartIP(opencattus::models::Cluster& model)
@@ -140,7 +140,7 @@ PresenterNodes::PresenterNodes(
     const auto suggestedBmcStartText = suggestedBmcStart.has_value()
             && suggestedBmcStart->to_string() != suggestedNodeStart
         ? suggestedBmcStart->to_string()
-        : std::string {};
+        : std::string { };
     m_view->message(Messages::title, Messages::message);
 
     auto fields = std::to_array<std::pair<std::string, std::string>>({
@@ -304,7 +304,7 @@ retry:
                 parsedBmcStartIp.has_value()
                     ? offsetIPv4Address(parsedBmcStartIp.value(), node - 1)
                           .to_string()
-                    : std::string {} },
+                    : std::string { } },
         });
         const auto nodeQuestion
             = fmt::format("{}: {}", Messages::NodeEntry::question, nodeName);

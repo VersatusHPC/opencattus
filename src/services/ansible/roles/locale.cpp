@@ -47,7 +47,7 @@ public:
         const std::string& cmd, opencattus::services::Stream /*out*/) override
     {
         m_commands.push_back(cmd);
-        return opencattus::services::CommandProxy {};
+        return opencattus::services::CommandProxy { };
     }
 
     void checkCommand(const std::string& cmd) override
@@ -58,7 +58,7 @@ public:
     std::vector<std::string> checkOutput(const std::string& cmd) override
     {
         m_commands.push_back(cmd);
-        return {};
+        return { };
     }
 
     int downloadFile(const std::string& url, const std::string& file) override

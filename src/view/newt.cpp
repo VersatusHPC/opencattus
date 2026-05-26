@@ -227,7 +227,7 @@ bool Newt::allowsEmptyField(const struct newtWinEntry& entry)
 bool Newt::hasEmptyField(const struct newtWinEntry* entries)
 {
     /* This may result in a buffer overflow if the string is > 63 chars */
-    char message[63] = {};
+    char message[63] = { };
 
     /* This for loop will check for empty values on the entries, and it will
      * return true if any value is empty based on the length of the string.
@@ -314,7 +314,7 @@ bool Newt::progressMenu(const char* title, const char* message,
 
     newtTextboxSetText(label, dmessage);
 
-    newtExitStruct es = {};
+    newtExitStruct es = { };
     newtFormRun(form, &es);
     while (es.reason == 2) {
         auto last_value = fPercent(cmd);

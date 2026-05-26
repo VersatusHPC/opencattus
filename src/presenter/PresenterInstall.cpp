@@ -230,7 +230,7 @@ PresenterInstall::PresenterInstall(std::unique_ptr<Cluster>& model,
         { "preflight", [&]() { Call<PresenterPreflight>(); } },
     };
 
-    auto completedHistory = std::vector<std::string> {};
+    auto completedHistory = std::vector<std::string> { };
     std::size_t startIndex = 0;
     for (; startIndex < steps.size(); ++startIndex) {
         if (!completedSteps.contains(steps[startIndex].first)) {

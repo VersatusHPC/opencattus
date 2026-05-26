@@ -133,10 +133,10 @@ std::string Newt::listMenuImpl(const char* title, const char* message,
     newtGridAddComponentsToForm(grid, form, 1);
     newtRefresh();
 
-    auto selected = std::optional<std::string> {};
+    auto selected = std::optional<std::string> { };
     auto stopRequested = false;
     while (!selected && !stopRequested) {
-        newtExitStruct es = {};
+        newtExitStruct es = { };
         newtFormRun(form, &es);
 
         while (es.reason == newtExitStruct::NEWT_EXIT_FDREADY) {
@@ -220,7 +220,7 @@ std::pair<int, std::vector<std::string>> Newt::checkboxSelectionMenu(
     CheckboxListState checkboxState {
         .list = list,
         .items = &items,
-        .labels = {},
+        .labels = { },
     };
     checkboxState.labels.reserve(items.size());
     for (const auto& [key, item, enabled] : items) {
@@ -258,7 +258,7 @@ std::pair<int, std::vector<std::string>> Newt::checkboxSelectionMenu(
     int retval = 0;
 
     while (retval == 0) {
-        newtExitStruct es = {};
+        newtExitStruct es = { };
         newtFormRun(form, &es);
 
         while (es.reason == newtExitStruct::NEWT_EXIT_FDREADY) {

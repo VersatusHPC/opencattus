@@ -233,7 +233,7 @@ PresenterLocale::PresenterLocale(
     std::vector<std::string> languageChoices;
     languageChoices.reserve(localeGroups.size() + 1);
     for (auto& [language, locales] : localeGroups) {
-        std::ranges::sort(locales, {}, &LocaleChoice::label);
+        std::ranges::sort(locales, { }, &LocaleChoice::label);
         languageChoices.push_back(language);
     }
     if (!legacyLocales.empty()) {

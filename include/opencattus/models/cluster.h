@@ -66,8 +66,8 @@ private:
     std::optional<OFED> m_ofed;
     std::optional<std::vector<std::string>> m_enabledRepositories;
     std::optional<std::vector<std::string>> m_enabledOpenHPCBundles;
-    std::optional<std::unique_ptr<QueueSystem>> m_queueSystem {};
-    std::optional<services::Postfix> m_mailSystem {};
+    std::optional<std::unique_ptr<QueueSystem>> m_queueSystem { };
+    std::optional<services::Postfix> m_mailSystem { };
     std::vector<Node> m_nodes;
 
     bool m_firewall { false };

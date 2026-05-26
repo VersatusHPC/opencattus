@@ -152,7 +152,7 @@ void appendNetworkDetails(std::vector<std::string>& rows, Cluster& model)
 auto repositorySummary(const Cluster& model) -> std::string
 {
     auto repositories
-        = model.getEnabledRepositories().value_or(std::vector<std::string> {});
+        = model.getEnabledRepositories().value_or(std::vector<std::string> { });
     auto impliedOneApi = false;
     if (const auto& bundles = model.getEnabledOpenHPCBundles();
         bundles.has_value()
@@ -275,7 +275,7 @@ auto bmcAddressSummary(const opencattus::models::Node& node) -> std::string
 auto fitColumn(std::string_view value, std::size_t width) -> std::string
 {
     if (width == 0) {
-        return {};
+        return { };
     }
 
     if (value.size() <= width) {
