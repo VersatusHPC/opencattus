@@ -31,9 +31,13 @@ case "${ID:-}" in
   ubuntu|debian)
     os_family=debian
     ;;
-  *)
+  rhel|rocky|almalinux|ol)
     os_family=el
-    os_version=$(rpm -E %rhel 2>/dev/null || echo 0)
+    os_version=$(rpm -E %rhel)
+    ;;
+  *)
+    echo "Unsupported distribution: ${ID:-unknown}. Supported: RHEL, Rocky, AlmaLinux, Oracle Linux, Ubuntu, Debian."
+    exit 2
     ;;
 esac
 
