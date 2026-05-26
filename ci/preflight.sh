@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 source "${SCRIPT_DIR}/setup-el10.sh"
 
-dnf install -y dbus-daemon dbus-tools
+dnf install -y dbus-daemon dbus-tools iproute
 
 python3 -m venv /tmp/conan-venv
 /tmp/conan-venv/bin/pip install conan
