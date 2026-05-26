@@ -29,7 +29,8 @@ void enableHostbasedAuthentication()
     LOG_INFO("Enabling host-based authentication (SSH)")
 
     ::runner()->executeCommand(
-        "sed -i \"/^#\\?HostbasedAuthentication/c\\HostbasedAuthentication yes\""
+        "sed -i \"/^#\\?HostbasedAuthentication/c\\HostbasedAuthentication "
+        "yes\""
         " /etc/ssh/sshd_config");
 
     ::runner()->executeCommand(
