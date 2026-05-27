@@ -96,8 +96,6 @@ void touchFile(const std::filesystem::path& path)
 
 void createDirectory(const std::filesystem::path& path)
 {
-    opencattus::services::initializeSingletonsOptions(
-        std::make_unique<opencattus::services::Options>());
     auto opts = opencattus::utils::singleton::options();
     if (opts->dryRun) {
         LOG_INFO("Dry Run: Would create directory {}", path.string())
@@ -111,8 +109,8 @@ void createDirectory(const std::filesystem::path& path)
 TEST_CASE("createDirectory - recursive creation and idempotency")
 {
     using opencattus::services::Options;
-    opencattus::Singleton<Options>::init(
-        std::make_unique<Options>(Options { }));
+    opencattus::Singleton<const Options>::init(
+        std::make_unique<const Options>(Options { }));
     const std::filesystem::path testBaseDir = "test/output/functions";
     const std::filesystem::path targetDir = testBaseDir / "foo" / "bar" / "tar";
 

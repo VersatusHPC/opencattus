@@ -680,7 +680,11 @@ TEST_SUITE("opencattus::models::answerfile")
         initializeOptionsSingleton();
 
         const auto interfaces = firstHostInterfaces();
-        REQUIRE(interfaces.size() >= 2);
+        if (interfaces.size() < 2) {
+            MESSAGE("Skipping service/application interface binding test: need "
+                    "at least two non-loopback interfaces");
+            return;
+        }
 
         const auto answerfilePath
             = tempAnswerfilePath("opencattus-cluster-service-connection");
@@ -800,6 +804,13 @@ TEST_SUITE("opencattus::models::answerfile")
         try {
             AnswerFile answerfile(answerfilePath);
             Cluster cluster;
+            // Pin the head-node OS to Rocky 8 so the test exercises EL/xCAT
+            // logic regardless of what /etc/os-release reports on the host
+            // (containers running on Ubuntu would otherwise trip the
+            // "xCAT on Ubuntu 24.04 head nodes" guard in validateProvisionerSupport).
+            cluster.getHeadnode().setOS(opencattus::models::OS(
+                opencattus::models::OS::Distro::Rocky,
+                opencattus::models::OS::Platform::el8, 10));
             cluster.fillData(answerfile);
 
             CHECK(cluster.getProvisioner() == Cluster::Provisioner::xCAT);
@@ -838,6 +849,11 @@ TEST_SUITE("opencattus::models::answerfile")
             try {
                 AnswerFile answerfile(answerfilePath);
                 Cluster cluster;
+                // Pin head-node OS to Rocky 9 so xCAT + EL is exercised
+                // regardless of the host distro (see EL8 case above).
+                cluster.getHeadnode().setOS(opencattus::models::OS(
+                    opencattus::models::OS::Distro::Rocky,
+                    opencattus::models::OS::Platform::el9, 6));
                 cluster.fillData(answerfile);
 
                 CHECK(cluster.getProvisioner() == Cluster::Provisioner::xCAT);
@@ -901,6 +917,13 @@ TEST_SUITE("opencattus::models::answerfile")
         try {
             AnswerFile answerfile(answerfilePath);
             Cluster cluster;
+            // Pin head-node OS to Rocky 10 so the EL10-specific xCAT rejection
+            // path is exercised. Without this, on Ubuntu hosts the cluster
+            // would throw the "xCAT on Ubuntu 24.04 head nodes" guard first,
+            // and the assertion below would fail to match.
+            cluster.getHeadnode().setOS(opencattus::models::OS(
+                opencattus::models::OS::Distro::Rocky,
+                opencattus::models::OS::Platform::el10, 1));
 
             CHECK_THROWS_WITH(cluster.fillData(answerfile),
                 doctest::Contains("xCAT is not supported on EL10"));
@@ -1255,7 +1278,11 @@ TEST_SUITE("opencattus::models::answerfile")
         initializeOptionsSingleton();
 
         const auto interfaces = firstHostInterfaces();
-        REQUIRE(interfaces.size() >= 2);
+        if (interfaces.size() < 2) {
+            MESSAGE("Skipping service/application round-trip test: need at "
+                    "least two non-loopback interfaces");
+            return;
+        }
 
         const auto sourcePath
             = tempAnswerfilePath("opencattus-cluster-roundtrip-source");

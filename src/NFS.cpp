@@ -25,6 +25,12 @@ using opencattus::models::OS;
 #include <doctest/doctest.h>
 #endif
 
+// TEST_CASE bodies below reference opencattus::testing::initializeSingletonsForTest.
+// Even when DOCTEST_CONFIG_DISABLE is in effect, doctest still parses the test
+// bodies as uninstantiated function templates, so non-dependent names must
+// resolve at parse time. Include the helper unconditionally.
+#include <testing/test_message_bus.h>
+
 namespace opencattus::services {
 NFS::NFS(const std::string& directoryName, const std::string& directoryPath,
     const boost::asio::ip::address& address, const std::string& permissions)
@@ -140,7 +146,7 @@ TEST_CASE("installScript")
 {
     const OS osinfo
         = opencattus::models::OS(OS::Distro::Rocky, OS::Platform::el9, 5);
-    opencattus::services::initializeSingletonsOptions(
+    opencattus::testing::initializeSingletonsForTest(
         std::make_unique<const Options>());
     opencattus::Singleton<const models::AnswerFile>::init(
         []() -> std::unique_ptr<const models::AnswerFile> {
@@ -218,7 +224,7 @@ TEST_CASE("installScript uses Debian NFS server package names on Ubuntu")
 {
     const OS osinfo = opencattus::models::OS(
         OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
-    opencattus::services::initializeSingletonsOptions(
+    opencattus::testing::initializeSingletonsForTest(
         std::make_unique<const Options>());
     opencattus::Singleton<const models::AnswerFile>::init(
         []() -> std::unique_ptr<const models::AnswerFile> {

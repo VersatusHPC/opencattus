@@ -2183,9 +2183,15 @@ TEST_SUITE("opencattus::presenter::tui")
         initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         const auto interfaces = usableHostInterfaces();
-        if (interfaces.empty()) {
-            MESSAGE("Skipping PresenterInstall abort test: need at least one "
-                    "interface");
+        // PresenterNetwork bails out with a fatalMessage("Not enough
+        // interfaces!") when fewer than two NICs are available, which throws a
+        // plain runtime_error that PresenterInstall catches and logs instead
+        // of propagating. The scripted abortSelection() therefore never fires
+        // and the flow keeps walking into the service-network question. Skip
+        // when we cannot reach the abort path (single-NIC containers).
+        if (interfaces.size() < 2) {
+            MESSAGE("Skipping PresenterInstall abort test: need at least two "
+                    "interfaces to reach the network abort prompt");
             return;
         }
 
