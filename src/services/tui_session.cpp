@@ -725,7 +725,7 @@ TEST_CASE("TUI draft state reads metadata without loading answerfile sections")
 
 TEST_CASE("TUI draft path defaults to the current directory")
 {
-    Options options {};
+    Options options { };
 
     CHECK(defaultDraftPath(options)
         == std::filesystem::current_path() / "opencattus-tui.ini.draft");
@@ -733,7 +733,7 @@ TEST_CASE("TUI draft path defaults to the current directory")
 
 TEST_CASE("TUI answerfile path defaults to the current directory")
 {
-    Options options {};
+    Options options { };
 
     CHECK(defaultAnswerfilePath(options)
         == std::filesystem::current_path() / "opencattus-tui.ini");
@@ -741,7 +741,7 @@ TEST_CASE("TUI answerfile path defaults to the current directory")
 
 TEST_CASE("TUI draft path follows the dump answerfile path")
 {
-    Options options {};
+    Options options { };
     options.dumpAnswerfile = "opencattus-tui.ini";
 
     CHECK(defaultDraftPath(options)
@@ -750,7 +750,7 @@ TEST_CASE("TUI draft path follows the dump answerfile path")
 
 TEST_CASE("TUI answerfile path follows the dump answerfile path")
 {
-    Options options {};
+    Options options { };
     options.dumpAnswerfile = "custom.ini";
 
     CHECK(

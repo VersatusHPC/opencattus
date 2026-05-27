@@ -316,8 +316,8 @@ std::string getHttpStatus(const auto& url, const std::size_t maxRetries = 3)
             LOG_DEBUG("HTTP internal server error {}, retrying {}/{}", header,
                 i + 1, maxRetries);
         } else {
-            LOG_DEBUG("HTTP {} error, retrying {}/{}", header, i + 1,
-                maxRetries);
+            LOG_DEBUG(
+                "HTTP {} error, retrying {}/{}", header, i + 1, maxRetries);
         }
     }
     return header;
@@ -340,14 +340,14 @@ TEST_CASE("getHttpStatus retries until success")
         services::CommandProxy executeCommandIter(
             const std::string&, services::Stream) override
         {
-            return {};
+            return { };
         }
         void checkCommand(const std::string&) override { }
         std::vector<std::string> checkOutput(const std::string& cmd) override
         {
             m_commands.emplace_back(cmd);
             if (m_index >= m_responses.size()) {
-                return {};
+                return { };
             }
             return { m_responses[m_index++] };
         }
@@ -369,11 +369,10 @@ TEST_CASE("getHttpStatus retries until success")
     };
 
     Singleton<const services::Options>::init(
-        std::make_unique<const services::Options>(services::Options {}));
+        std::make_unique<const services::Options>(services::Options { }));
 
-    auto runner
-        = std::make_unique<SequencedRunner>(std::vector<std::string> { "404",
-            "200" });
+    auto runner = std::make_unique<SequencedRunner>(
+        std::vector<std::string> { "404", "200" });
     auto* runnerPtr = runner.get();
     std::unique_ptr<IRunner> runnerBase = std::move(runner);
     Singleton<IRunner>::init(std::move(runnerBase));

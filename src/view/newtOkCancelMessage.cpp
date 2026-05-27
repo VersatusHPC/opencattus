@@ -36,10 +36,10 @@ auto wrapLine(std::string_view line, std::size_t width) -> std::string
         out += remaining.substr(0, split);
         out += '\n';
         remaining = split + 1 < remaining.size() ? remaining.substr(split + 1)
-                                                 : std::string {};
+                                                 : std::string { };
         const auto firstText = remaining.find_first_not_of(' ');
         remaining = firstText == std::string::npos
-            ? std::string {}
+            ? std::string { }
             : remaining.substr(firstText);
         remaining = continuationIndent + remaining;
     }
@@ -160,7 +160,7 @@ void Newt::scrollableMessage(const char* title, const char* message,
     newtRefresh();
 
     while (true) {
-        newtExitStruct es = {};
+        newtExitStruct es = { };
         newtFormRun(form, &es);
 
         while (es.reason == newtExitStruct::NEWT_EXIT_FDREADY) {

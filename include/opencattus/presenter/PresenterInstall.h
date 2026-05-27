@@ -22,8 +22,8 @@ public:
         = std::function<void(const std::vector<std::string>&)>;
 
     PresenterInstall(std::unique_ptr<Cluster>& model,
-        std::unique_ptr<View>& view, StepStateCallback onStepComplete = {},
-        std::set<std::string> completedSteps = {});
+        std::unique_ptr<View>& view, StepStateCallback onStepComplete = { },
+        std::set<std::string> completedSteps = { });
 };
 }
 

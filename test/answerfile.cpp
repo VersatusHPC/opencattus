@@ -999,8 +999,8 @@ TEST_SUITE("opencattus::models::answerfile")
 
         const auto answerfilePath = tempAnswerfilePath(
             "opencattus-cluster-provisioner-ubuntu2404-confluent");
-        const auto diskImagePath
-            = tempIsoPath("opencattus-cluster-provisioner-ubuntu2404-confluent");
+        const auto diskImagePath = tempIsoPath(
+            "opencattus-cluster-provisioner-ubuntu2404-confluent");
         std::ofstream(diskImagePath).close();
         writeAnswerfile(answerfilePath, diskImagePath, interfaces.front(),
             interfaces.front(), std::nullopt, true, "confluent", std::nullopt,
