@@ -32,10 +32,13 @@ export DBUS_SESSION_BUS_ADDRESS
 ip link add eth0 type dummy 2>/dev/null && ip addr add 10.99.0.1/24 dev eth0 && ip link set eth0 up || true
 ip link add eth1 type dummy 2>/dev/null && ip addr add 10.99.1.1/24 dev eth1 && ip link set eth1 up || true
 
-# Run ctest and capture output. ctest exit code is non-zero when test
-# cases throw exceptions (e.g. missing D-Bus, dummy NICs) even when all
-# doctest assertions pass. We parse the doctest assertion summary to
-# distinguish real failures from container environment limitations.
+# Run all ctest targets. No test exclusions — the assertion-count
+# approach below handles tests that throw environment exceptions
+# (e.g. presenter_tui needing real NICs, cli_dump_answerfile needing
+# multiple interfaces) without needing per-test skip lists.
+#
+# ctest exit code is non-zero when test cases throw exceptions even
+# when all doctest assertions pass, so we parse the summary instead.
 ctest --test-dir build-preflight --output-on-failure 2>&1 | tee /tmp/ctest-output.txt || true
 
 # Extract the assertion failure count from doctest output.
@@ -46,7 +49,7 @@ if [ -z "${assertion_line}" ]; then
     exit 1
 fi
 
-failed_assertions=$(echo "${assertion_line}" | grep -oP '\| \K[0-9]+(?= failed)')
+failed_assertions=$(echo "${assertion_line}" | sed -n 's/.*| \([0-9]*\) failed.*/\1/p')
 if [ -z "${failed_assertions}" ]; then
     echo "Could not parse assertion failure count from: ${assertion_line}"
     exit 1
