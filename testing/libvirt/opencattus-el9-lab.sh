@@ -292,6 +292,19 @@ load_defaults() {
     COMPUTE_MEMORY_MB=${COMPUTE_MEMORY_MB:-8192}
     COMPUTE_VCPUS=${COMPUTE_VCPUS:-2}
 
+    # Per-node boot mode: space-separated, one per compute node.
+    # Values: bios | uefi. Shorter lists repeat the last value.
+    COMPUTE_BOOT_MODES=${COMPUTE_BOOT_MODES:-bios}
+
+    # Per-node provision type: space-separated, one per compute node.
+    # Values: stateless | stateful. Shorter lists repeat the last value.
+    COMPUTE_PROVISION_TYPES=${COMPUTE_PROVISION_TYPES:-stateless}
+
+    # Disk size for stateful compute nodes (ignored for stateless).
+    COMPUTE_STATEFUL_DISK_GB=${COMPUTE_STATEFUL_DISK_GB:-100}
+
+    OVMF_CODE_PATH=${OVMF_CODE_PATH:-/usr/share/edk2/ovmf/OVMF_CODE.fd}
+
     CLUSTER_NAME=${CLUSTER_NAME:-opencattus}
     COMPANY_NAME=${COMPANY_NAME:-opencattus-enterprises}
     ADMIN_EMAIL=${ADMIN_EMAIL:-foo@example.com}
@@ -386,6 +399,27 @@ remote_host() {
 node_domain_name() {
     local index=$1
     printf '%s-compute%02d' "${LAB_NAME}" "${index}"
+}
+
+node_boot_mode() {
+    local index=$1
+    local -a modes
+    read -ra modes <<< "${COMPUTE_BOOT_MODES}"
+    local last="${modes[${#modes[@]}-1]}"
+    printf '%s' "${modes[$((index-1))]:-${last}}"
+}
+
+node_provision_type() {
+    local index=$1
+    local -a types
+    read -ra types <<< "${COMPUTE_PROVISION_TYPES}"
+    local last="${types[${#types[@]}-1]}"
+    printf '%s' "${types[$((index-1))]:-${last}}"
+}
+
+node_disk_path() {
+    local index=$1
+    printf '%s/%s-disk.qcow2' "${IMAGE_ROOT}" "$(node_domain_name "${index}")"
 }
 
 node_name() {
@@ -1218,9 +1252,38 @@ write_compute_domain_xml() {
     local index=$1
     local domain
     local xml_path
+    local boot_mode
+    local prov_type
+    local os_block
+    local disk_block=""
 
     domain=$(node_domain_name "${index}")
     xml_path="${LAB_DIR}/${domain}.xml"
+    boot_mode=$(node_boot_mode "${index}")
+    prov_type=$(node_provision_type "${index}")
+
+    if [[ "${boot_mode}" == "uefi" ]]; then
+        os_block="  <os firmware='efi'>
+    <type arch='x86_64'>hvm</type>
+    <boot dev='network'/>
+  </os>"
+    else
+        os_block="  <os>
+    <type arch='x86_64'>hvm</type>
+    <boot dev='network'/>
+  </os>"
+    fi
+
+    if [[ "${prov_type}" == "stateful" ]]; then
+        local disk_path
+        disk_path=$(node_disk_path "${index}")
+        as_root qemu-img create -f qcow2 "${disk_path}" "${COMPUTE_STATEFUL_DISK_GB}G" >/dev/null
+        disk_block="    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='${disk_path}'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>"
+    fi
 
     cat >"${xml_path}" <<EOF
 <domain type='kvm'>
@@ -1228,10 +1291,7 @@ write_compute_domain_xml() {
   <memory unit='MiB'>${COMPUTE_MEMORY_MB}</memory>
   <currentMemory unit='MiB'>${COMPUTE_MEMORY_MB}</currentMemory>
   <vcpu placement='static'>${COMPUTE_VCPUS}</vcpu>
-  <os>
-    <type arch='x86_64'>hvm</type>
-    <boot dev='network'/>
-  </os>
+${os_block}
   <features>
     <acpi/>
     <apic/>
@@ -1244,6 +1304,7 @@ write_compute_domain_xml() {
   <on_reboot>restart</on_reboot>
   <on_crash>restart</on_crash>
   <devices>
+${disk_block}
     <interface type='network'>
       <mac address='$(node_mac "${index}")'/>
       <source network='${MANAGEMENT_NETWORK_NAME}'/>
@@ -1261,6 +1322,8 @@ write_compute_domain_xml() {
   </devices>
 </domain>
 EOF
+
+    log "Compute node ${domain}: boot_mode=${boot_mode} provision_type=${prov_type}"
 }
 
 define_compute_nodes() {
