@@ -3,7 +3,11 @@ set -euxo pipefail
 
 dnf install -y dnf-plugins-core epel-release
 dnf config-manager --set-enabled crb
-sed -i 's|^metalink=|#metalink=|; s|^#baseurl=.*|baseurl=http://mirror.local.versatushpc.com.br/epel/9/Everything/$basearch/|' /etc/yum.repos.d/epel.repo
+
+if [ -n "${OPENCATTUS_EPEL_MIRROR:-}" ]; then
+    sed -i "s|^metalink=|#metalink=|; s|^#baseurl=.*|baseurl=${OPENCATTUS_EPEL_MIRROR}/9/Everything/\$basearch/|" /etc/yum.repos.d/epel.repo
+fi
+
 dnf clean metadata
 
 dnf install -y \

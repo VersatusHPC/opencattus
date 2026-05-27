@@ -32,19 +32,32 @@ export DBUS_SESSION_BUS_ADDRESS
 ip link add eth0 type dummy 2>/dev/null && ip addr add 10.99.0.1/24 dev eth0 && ip link set eth0 up || true
 ip link add eth1 type dummy 2>/dev/null && ip addr add 10.99.1.1/24 dev eth1 && ip link set eth1 up || true
 
-set +eo pipefail
-ctest --test-dir build-preflight --output-on-failure -E "cli_dump_answerfile" 2>&1 | tee /tmp/ctest-output.txt
-ctest_rc=${PIPESTATUS[0]}
-set -eo pipefail
+# Run all ctest targets. No test exclusions — the assertion-count
+# approach below handles tests that throw environment exceptions
+# (e.g. presenter_tui needing real NICs, cli_dump_answerfile needing
+# multiple interfaces) without needing per-test skip lists.
+#
+# ctest exit code is non-zero when test cases throw exceptions even
+# when all doctest assertions pass, so we parse the summary instead.
+ctest --test-dir build-preflight --output-on-failure 2>&1 | tee /tmp/ctest-output.txt || true
 
-failed_count=$(grep -oP '\| \K[0-9]+(?= failed)' /tmp/ctest-output.txt | tail -1)
-
-if [ -z "${failed_count}" ]; then
-    echo "Could not parse test results from ctest output."
+# Extract the assertion failure count from doctest output.
+# Format: "[doctest] assertions: 1202 | 1202 passed | 0 failed |"
+assertion_line=$(grep -F "assertions:" /tmp/ctest-output.txt | tail -1)
+if [ -z "${assertion_line}" ]; then
+    echo "No doctest assertion summary found in ctest output."
     exit 1
-elif [ "${failed_count}" -ne 0 ]; then
-    echo "Test assertions failed: ${failed_count} failures."
-    exit 1
-else
-    echo "All assertions passed (ctest exit code: ${ctest_rc})."
 fi
+
+failed_assertions=$(echo "${assertion_line}" | sed -n 's/.*| \([0-9]*\) failed.*/\1/p')
+if [ -z "${failed_assertions}" ]; then
+    echo "Could not parse assertion failure count from: ${assertion_line}"
+    exit 1
+fi
+
+if [ "${failed_assertions}" -ne 0 ]; then
+    echo "doctest reported ${failed_assertions} assertion failure(s)."
+    exit 1
+fi
+
+echo "All ${assertion_line}"

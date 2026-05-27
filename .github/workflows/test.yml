@@ -1,5 +1,8 @@
 name: Self-Hosted CI
 
+# Disabled: replaced by Jenkins CI (see Jenkinsfile + ci/project.yaml).
+# Kept as manual fallback via workflow_dispatch. Remove once Jenkins
+# pipeline is validated for release publishing.
 on: workflow_dispatch
 
 concurrency:
