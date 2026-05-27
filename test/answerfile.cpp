@@ -679,12 +679,17 @@ TEST_SUITE("opencattus::models::answerfile")
     {
         initializeOptionsSingleton();
 
-        const auto interfaces = firstHostInterfaces();
-        if (interfaces.size() < 2) {
-            MESSAGE("Skipping service/application interface binding test: need "
-                    "at least two non-loopback interfaces");
-            return;
-        }
+        // Inject synthetic interfaces so the test runs regardless of how many
+        // NICs the host actually has. Containers in CI typically expose only
+        // eth0, which would not exercise the service-vs-application binding
+        // this test is about. Connection::setInterface() validates against
+        // this override instead of querying the kernel.
+        Connection::ScopedTestInterfaces ifaces({
+            "opencattus-test-eth0",
+            "opencattus-test-eth1",
+        });
+        const std::vector<std::string> interfaces = Connection::fetchInterfaces();
+        REQUIRE(interfaces.size() == 2);
 
         const auto answerfilePath
             = tempAnswerfilePath("opencattus-cluster-service-connection");
@@ -1277,12 +1282,15 @@ TEST_SUITE("opencattus::models::answerfile")
     {
         initializeOptionsSingleton();
 
-        const auto interfaces = firstHostInterfaces();
-        if (interfaces.size() < 2) {
-            MESSAGE("Skipping service/application round-trip test: need at "
-                    "least two non-loopback interfaces");
-            return;
-        }
+        // See "fillData keeps the service connection bound..." above: inject
+        // synthetic interfaces so this exercises the service+application
+        // round-trip on hosts (containers) that only have one real NIC.
+        Connection::ScopedTestInterfaces ifaces({
+            "opencattus-test-eth0",
+            "opencattus-test-eth1",
+        });
+        const std::vector<std::string> interfaces = Connection::fetchInterfaces();
+        REQUIRE(interfaces.size() == 2);
 
         const auto sourcePath
             = tempAnswerfilePath("opencattus-cluster-roundtrip-source");

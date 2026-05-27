@@ -2182,18 +2182,22 @@ TEST_SUITE("opencattus::presenter::tui")
     {
         initializePresenterTestEnvironment(defaultRunnerOutputs());
 
-        const auto interfaces = usableHostInterfaces();
-        // PresenterNetwork bails out with a fatalMessage("Not enough
-        // interfaces!") when fewer than two NICs are available, which throws a
-        // plain runtime_error that PresenterInstall catches and logs instead
-        // of propagating. The scripted abortSelection() therefore never fires
-        // and the flow keeps walking into the service-network question. Skip
-        // when we cannot reach the abort path (single-NIC containers).
-        if (interfaces.size() < 2) {
-            MESSAGE("Skipping PresenterInstall abort test: need at least two "
-                    "interfaces to reach the network abort prompt");
-            return;
-        }
+        // Inject two synthetic interfaces so PresenterNetwork does not bail
+        // out via fatalMessage("Not enough interfaces!") on single-NIC hosts
+        // (typical CI containers). With the override, fetchInterfaces() and
+        // setInterface() both honor these names; the optional helpers
+        // (fetchOptionalAddress / fetchOptionalSubnetMask) already tolerate
+        // interfaces without configured IPs and return blank prefills.
+        // Note: we deliberately use Connection::fetchInterfaces() directly
+        // rather than usableHostInterfaces() because the local helper still
+        // requires the interface to have a real IPv4 address (a legacy of the
+        // pre-1a1b963 filter); the production PresenterNetwork no longer does.
+        Connection::ScopedTestInterfaces ifaces({
+            "opencattus-test-eth0",
+            "opencattus-test-eth1",
+        });
+        const std::vector<std::string> interfaces = Connection::fetchInterfaces();
+        REQUIRE(interfaces.size() == 2);
 
         auto model = std::make_unique<Cluster>();
         auto state = std::make_shared<ScriptedViewState>();
