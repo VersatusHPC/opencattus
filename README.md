@@ -189,7 +189,31 @@ damage the running OS if they run as **root**. Be advised.
 
 To run tests you need to run `ctest` inside the build directory.
 
-For end-to-end EL9 cluster validation on a real KVM host, use the libvirt harness in `testing/libvirt`.
+For end-to-end cluster validation on a real KVM host, use the libvirt harness in `testing/libvirt`.
+
+# CI/CD Pipeline
+
+CI runs on Jenkins via the
+[company-ci shared library](https://github.com/VersatusHPC/jenkins).
+The `Jenkinsfile` delegates to `companyPipeline()` which reads
+`ci/project.yaml` for configuration.
+
+| Trigger | Stages | Time |
+|---------|--------|------|
+| PR / branch push | Preflight (format + compile + unit tests) | ~2 min |
+| Master push | Preflight + multi-distro package builds (EL8/EL9/EL10/Ubuntu) | ~10 min |
+| Tag push | Preflight + builds + integration labs (6 labs) + GitHub Release | ~4 hours |
+
+Pipeline stages on tag push:
+
+1. **Classify changes** + validate tag matches `CMakeLists.txt` VERSION
+2. **Preflight**: clang-format 22 + cmake + 271 doctest tests (AlmaLinux 10)
+3. **Container builds**: RPM (EL8/EL9/EL10) + DEB (Ubuntu 24.04) via Podman
+4. **Integration lab**: 3 distros x 2 provisioners x 4 compute nodes (BIOS/UEFI, stateless/stateful)
+5. **Upload to GitHub Release**: attaches all RPM/DEB packages
+
+Build scripts live in `ci/`. Per-distro setup in `ci/setup-*.sh`.
+Lab configs in `ci/lab/*.env`.
 
 # Open Source Apache License
 

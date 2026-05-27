@@ -57,10 +57,23 @@ git config --global --add safe.directory "$(pwd)"
 
 cmake -S . -B "build-${DISTRO}" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_TESTING=OFF
+    -DBUILD_TESTING=ON
 
-cmake --build "build-${DISTRO}" \
-    --target opencattus -j"$(nproc)"
+cmake --build "build-${DISTRO}" -j"$(nproc)"
+
+ctest --test-dir "build-${DISTRO}" --output-on-failure --output-junit "/tmp/ctest-${DISTRO}.xml" || true
+
+test_failures=$(python3 -c "
+import xml.etree.ElementTree as ET
+tree = ET.parse('/tmp/ctest-${DISTRO}.xml')
+failed = sum(1 for tc in tree.iter('testcase')
+             for _ in tc.iter('failure'))
+print(failed)
+")
+if [ "${test_failures}" -ne 0 ]; then
+    echo "Tests failed on ${DISTRO}: ${test_failures} failure(s)."
+    exit 1
+fi
 
 if [[ "${DISTRO}" == el* || "${DISTRO}" == ubi* ]]; then
     mkdir -p "out/rpm/${DISTRO}"

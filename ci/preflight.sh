@@ -32,19 +32,30 @@ export DBUS_SESSION_BUS_ADDRESS
 ip link add eth0 type dummy 2>/dev/null && ip addr add 10.99.0.1/24 dev eth0 && ip link set eth0 up || true
 ip link add eth1 type dummy 2>/dev/null && ip addr add 10.99.1.1/24 dev eth1 && ip link set eth1 up || true
 
-set +eo pipefail
-ctest --test-dir build-preflight --output-on-failure -E "cli_dump_answerfile" 2>&1 | tee /tmp/ctest-output.txt
-ctest_rc=${PIPESTATUS[0]}
-set -eo pipefail
+# Run ctest and capture the XML result for reliable parsing.
+# ctest exit code is non-zero when test cases throw exceptions even if
+# all assertions pass, so we parse the doctest output explicitly.
+ctest --test-dir build-preflight --output-on-failure --output-junit /tmp/ctest-results.xml || true
 
-failed_count=$(grep -oP '\| \K[0-9]+(?= failed)' /tmp/ctest-output.txt | tail -1)
-
-if [ -z "${failed_count}" ]; then
-    echo "Could not parse test results from ctest output."
+# Parse doctest assertion count from stdout. The format is:
+#   [doctest] assertions: 1202 | 1202 passed | 0 failed |
+# If doctest output is missing or unparseable, fail hard.
+if [ ! -f /tmp/ctest-results.xml ]; then
+    echo "ctest did not produce results XML."
     exit 1
-elif [ "${failed_count}" -ne 0 ]; then
-    echo "Test assertions failed: ${failed_count} failures."
-    exit 1
-else
-    echo "All assertions passed (ctest exit code: ${ctest_rc})."
 fi
+
+test_failures=$(python3 -c "
+import xml.etree.ElementTree as ET
+tree = ET.parse('/tmp/ctest-results.xml')
+failed = sum(1 for tc in tree.iter('testcase')
+             for _ in tc.iter('failure'))
+print(failed)
+")
+
+if [ "${test_failures}" -ne 0 ]; then
+    echo "ctest reported ${test_failures} test failure(s)."
+    exit 1
+fi
+
+echo "All tests passed."

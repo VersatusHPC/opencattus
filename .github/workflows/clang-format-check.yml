@@ -1,5 +1,7 @@
 name: Clang Format Check
 
+# Disabled: replaced by Jenkins CI preflight (ci/check-format.sh).
+# Kept as manual fallback via workflow_dispatch.
 on: workflow_dispatch
 
 concurrency:

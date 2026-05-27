@@ -10,12 +10,16 @@ container_builds:
     script: ./ci/build.sh
     args: [el8, x86_64]
     artifacts: "out/rpm/el8/*.rpm"
+    env:
+      OPENCATTUS_EPEL_MIRROR: "http://mirror.local.versatushpc.com.br/epel"
   - name: EL9
     image: quay.io/almalinuxorg/almalinux:9
     arch: x86_64
     script: ./ci/build.sh
     args: [el9, x86_64]
     artifacts: "out/rpm/el9/*.rpm"
+    env:
+      OPENCATTUS_EPEL_MIRROR: "http://mirror.local.versatushpc.com.br/epel"
   - name: EL10
     image: quay.io/almalinuxorg/almalinux:10
     arch: x86_64
