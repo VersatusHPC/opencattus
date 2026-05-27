@@ -1263,8 +1263,9 @@ write_compute_domain_xml() {
     prov_type=$(node_provision_type "${index}")
 
     if [[ "${boot_mode}" == "uefi" ]]; then
-        os_block="  <os firmware='efi'>
+        os_block="  <os>
     <type arch='x86_64'>hvm</type>
+    <loader readonly='yes' type='pflash'>${OVMF_CODE_PATH}</loader>
     <boot dev='network'/>
   </os>"
     else
