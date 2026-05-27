@@ -61,19 +61,29 @@ cmake -S . -B "build-${DISTRO}" -G Ninja \
 
 cmake --build "build-${DISTRO}" -j"$(nproc)"
 
-ctest --test-dir "build-${DISTRO}" --output-on-failure --output-junit "/tmp/ctest-${DISTRO}.xml" || true
+# ctest exit code is non-zero when test cases throw exceptions (e.g.
+# missing D-Bus in containers) even if all doctest assertions pass.
+# We parse the doctest assertion summary instead of trusting the exit code.
+ctest --test-dir "build-${DISTRO}" --output-on-failure 2>&1 | tee "/tmp/ctest-${DISTRO}.txt" || true
 
-test_failures=$(python3 << PYEOF
-import xml.etree.ElementTree as ET
-tree = ET.parse("/tmp/ctest-${DISTRO}.xml")
-failed = sum(1 for tc in tree.iter("testcase") for _ in tc.iter("failure"))
-print(failed)
-PYEOF
-)
-if [ "${test_failures}" -ne 0 ]; then
-    echo "Tests failed on ${DISTRO}: ${test_failures} failure(s)."
+assertion_line=$(grep -F "assertions:" "/tmp/ctest-${DISTRO}.txt" | tail -1)
+if [ -z "${assertion_line}" ]; then
+    echo "No doctest assertion summary found in ctest output for ${DISTRO}."
     exit 1
 fi
+
+failed_assertions=$(echo "${assertion_line}" | grep -oP '\| \K[0-9]+(?= failed)')
+if [ -z "${failed_assertions}" ]; then
+    echo "Could not parse assertion failure count from: ${assertion_line}"
+    exit 1
+fi
+
+if [ "${failed_assertions}" -ne 0 ]; then
+    echo "Tests failed on ${DISTRO}: ${failed_assertions} assertion failure(s)."
+    exit 1
+fi
+
+echo "All ${assertion_line}"
 
 if [[ "${DISTRO}" == el* || "${DISTRO}" == ubi* ]]; then
     mkdir -p "out/rpm/${DISTRO}"
