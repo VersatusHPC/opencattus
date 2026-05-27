@@ -49,7 +49,7 @@ if [ -z "${assertion_line}" ]; then
     exit 1
 fi
 
-failed_assertions=$(echo "${assertion_line}" | sed -n 's/.*| \([0-9]*\) failed.*/\1/p')
+failed_assertions=$(echo "${assertion_line}" | sed -n 's/.*| *\([0-9]*\) failed.*/\1/p')
 if [ -z "${failed_assertions}" ]; then
     echo "Could not parse assertion failure count from: ${assertion_line}"
     exit 1
