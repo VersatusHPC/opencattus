@@ -63,13 +63,13 @@ cmake --build "build-${DISTRO}" -j"$(nproc)"
 
 ctest --test-dir "build-${DISTRO}" --output-on-failure --output-junit "/tmp/ctest-${DISTRO}.xml" || true
 
-test_failures=$(python3 -c "
+test_failures=$(python3 << PYEOF
 import xml.etree.ElementTree as ET
-tree = ET.parse('/tmp/ctest-${DISTRO}.xml')
-failed = sum(1 for tc in tree.iter('testcase')
-             for _ in tc.iter('failure'))
+tree = ET.parse("/tmp/ctest-${DISTRO}.xml")
+failed = sum(1 for tc in tree.iter("testcase") for _ in tc.iter("failure"))
 print(failed)
-")
+PYEOF
+)
 if [ "${test_failures}" -ne 0 ]; then
     echo "Tests failed on ${DISTRO}: ${test_failures} failure(s)."
     exit 1

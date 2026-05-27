@@ -34,24 +34,21 @@ ip link add eth1 type dummy 2>/dev/null && ip addr add 10.99.1.1/24 dev eth1 && 
 
 # Run ctest and capture the XML result for reliable parsing.
 # ctest exit code is non-zero when test cases throw exceptions even if
-# all assertions pass, so we parse the doctest output explicitly.
+# all assertions pass, so we parse the JUnit XML output.
 ctest --test-dir build-preflight --output-on-failure --output-junit /tmp/ctest-results.xml || true
 
-# Parse doctest assertion count from stdout. The format is:
-#   [doctest] assertions: 1202 | 1202 passed | 0 failed |
-# If doctest output is missing or unparseable, fail hard.
 if [ ! -f /tmp/ctest-results.xml ]; then
     echo "ctest did not produce results XML."
     exit 1
 fi
 
-test_failures=$(python3 -c "
+test_failures=$(python3 << 'PYEOF'
 import xml.etree.ElementTree as ET
-tree = ET.parse('/tmp/ctest-results.xml')
-failed = sum(1 for tc in tree.iter('testcase')
-             for _ in tc.iter('failure'))
+tree = ET.parse("/tmp/ctest-results.xml")
+failed = sum(1 for tc in tree.iter("testcase") for _ in tc.iter("failure"))
 print(failed)
-")
+PYEOF
+)
 
 if [ "${test_failures}" -ne 0 ]; then
     echo "ctest reported ${test_failures} test failure(s)."
