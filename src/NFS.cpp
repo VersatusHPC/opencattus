@@ -25,10 +25,11 @@ using opencattus::models::OS;
 #include <doctest/doctest.h>
 #endif
 
-// TEST_CASE bodies below reference opencattus::testing::initializeSingletonsForTest.
-// Even when DOCTEST_CONFIG_DISABLE is in effect, doctest still parses the test
-// bodies as uninstantiated function templates, so non-dependent names must
-// resolve at parse time. Include the helper unconditionally.
+// TEST_CASE bodies below reference
+// opencattus::testing::initializeSingletonsForTest. Even when
+// DOCTEST_CONFIG_DISABLE is in effect, doctest still parses the test bodies as
+// uninstantiated function templates, so non-dependent names must resolve at
+// parse time. Include the helper unconditionally.
 #include <testing/test_message_bus.h>
 
 namespace opencattus::services {

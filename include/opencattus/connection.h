@@ -111,7 +111,10 @@ public:
         ScopedTestInterfaces& operator=(const ScopedTestInterfaces&) = delete;
         ScopedTestInterfaces(ScopedTestInterfaces&&) = delete;
         ScopedTestInterfaces& operator=(ScopedTestInterfaces&&) = delete;
-        ~ScopedTestInterfaces() { s_testInterfaceOverride = std::move(m_previous); }
+        ~ScopedTestInterfaces()
+        {
+            s_testInterfaceOverride = std::move(m_previous);
+        }
 
     private:
         std::optional<std::vector<std::string>> m_previous;

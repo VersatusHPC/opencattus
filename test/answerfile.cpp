@@ -688,7 +688,8 @@ TEST_SUITE("opencattus::models::answerfile")
             "opencattus-test-eth0",
             "opencattus-test-eth1",
         });
-        const std::vector<std::string> interfaces = Connection::fetchInterfaces();
+        const std::vector<std::string> interfaces
+            = Connection::fetchInterfaces();
         REQUIRE(interfaces.size() == 2);
 
         const auto answerfilePath
@@ -812,10 +813,11 @@ TEST_SUITE("opencattus::models::answerfile")
             // Pin the head-node OS to Rocky 8 so the test exercises EL/xCAT
             // logic regardless of what /etc/os-release reports on the host
             // (containers running on Ubuntu would otherwise trip the
-            // "xCAT on Ubuntu 24.04 head nodes" guard in validateProvisionerSupport).
-            cluster.getHeadnode().setOS(opencattus::models::OS(
-                opencattus::models::OS::Distro::Rocky,
-                opencattus::models::OS::Platform::el8, 10));
+            // "xCAT on Ubuntu 24.04 head nodes" guard in
+            // validateProvisionerSupport).
+            cluster.getHeadnode().setOS(
+                opencattus::models::OS(opencattus::models::OS::Distro::Rocky,
+                    opencattus::models::OS::Platform::el8, 10));
             cluster.fillData(answerfile);
 
             CHECK(cluster.getProvisioner() == Cluster::Provisioner::xCAT);
@@ -926,9 +928,9 @@ TEST_SUITE("opencattus::models::answerfile")
             // path is exercised. Without this, on Ubuntu hosts the cluster
             // would throw the "xCAT on Ubuntu 24.04 head nodes" guard first,
             // and the assertion below would fail to match.
-            cluster.getHeadnode().setOS(opencattus::models::OS(
-                opencattus::models::OS::Distro::Rocky,
-                opencattus::models::OS::Platform::el10, 1));
+            cluster.getHeadnode().setOS(
+                opencattus::models::OS(opencattus::models::OS::Distro::Rocky,
+                    opencattus::models::OS::Platform::el10, 1));
 
             CHECK_THROWS_WITH(cluster.fillData(answerfile),
                 doctest::Contains("xCAT is not supported on EL10"));
@@ -1289,7 +1291,8 @@ TEST_SUITE("opencattus::models::answerfile")
             "opencattus-test-eth0",
             "opencattus-test-eth1",
         });
-        const std::vector<std::string> interfaces = Connection::fetchInterfaces();
+        const std::vector<std::string> interfaces
+            = Connection::fetchInterfaces();
         REQUIRE(interfaces.size() == 2);
 
         const auto sourcePath

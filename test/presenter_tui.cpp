@@ -2196,7 +2196,8 @@ TEST_SUITE("opencattus::presenter::tui")
             "opencattus-test-eth0",
             "opencattus-test-eth1",
         });
-        const std::vector<std::string> interfaces = Connection::fetchInterfaces();
+        const std::vector<std::string> interfaces
+            = Connection::fetchInterfaces();
         REQUIRE(interfaces.size() == 2);
 
         auto model = std::make_unique<Cluster>();

@@ -232,9 +232,10 @@ void removeFilesWithExtension(const auto& path, const auto& extension)
 
 TEST_CASE("removeFilesWithExtension")
 {
-    // createDirectory reads Singleton<const Options> via utils::singleton::options().
-    // Pin dryRun=false so the directory is actually created regardless of
-    // whatever earlier tests in the suite left in the singleton.
+    // createDirectory reads Singleton<const Options> via
+    // utils::singleton::options(). Pin dryRun=false so the directory is
+    // actually created regardless of whatever earlier tests in the suite left
+    // in the singleton.
     opencattus::Singleton<const services::Options>::init(
         std::make_unique<const services::Options>(services::Options { }));
 
