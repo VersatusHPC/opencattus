@@ -203,6 +203,20 @@ void Connection::setInterface(std::string_view interface)
     if (interface == "lo")
         throw std::runtime_error("Cannot use the loopback interface");
 
+#ifdef BUILD_TESTING
+    if (s_testInterfaceOverride.has_value()) {
+        for (const auto& name : *s_testInterfaceOverride) {
+            if (interface == name) {
+                m_interface = interface;
+                return;
+            }
+        }
+        throw std::runtime_error(fmt::format(
+            "Cannot find network interface {} (test override active)",
+            interface));
+    }
+#endif
+
     ifaddrslist ifaddr;
 
     for (const auto& ifa : ifaddr) {
@@ -258,6 +272,12 @@ std::vector<std::string> Connection::fetchInterfaces()
 //   interfaces may not yet exist in the operating system?
 std::vector<std::string> Connection::fetchInterfaces()
 {
+#ifdef BUILD_TESTING
+    if (s_testInterfaceOverride.has_value()) {
+        return *s_testInterfaceOverride;
+    }
+#endif
+
     ifaddrslist ifaddr;
 
     std::unordered_set<std::string> interfaces;
@@ -274,6 +294,10 @@ std::vector<std::string> Connection::fetchInterfaces()
     return interfaces
         | opencattus::utils::ranges::to<std::vector<std::string>>();
 }
+
+#ifdef BUILD_TESTING
+std::optional<std::vector<std::string>> Connection::s_testInterfaceOverride;
+#endif
 
 std::optional<std::string_view> Connection::getMAC() const { return m_mac; }
 

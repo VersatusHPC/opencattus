@@ -232,6 +232,13 @@ void removeFilesWithExtension(const auto& path, const auto& extension)
 
 TEST_CASE("removeFilesWithExtension")
 {
+    // createDirectory reads Singleton<const Options> via
+    // utils::singleton::options(). Pin dryRun=false so the directory is
+    // actually created regardless of whatever earlier tests in the suite left
+    // in the singleton.
+    opencattus::Singleton<const services::Options>::init(
+        std::make_unique<const services::Options>(services::Options { }));
+
     const std::filesystem::path path
         = "test/output/utils/removeFilesWithExtension";
     createDirectory(path);
@@ -255,6 +262,11 @@ void copyFilesWithExtension(
 
 TEST_CASE("copyFileWithExtension")
 {
+    // Same Options pin as removeFilesWithExtension above: keep dryRun=false so
+    // createDirectory actually creates the dirs the rest of the test inspects.
+    opencattus::Singleton<const services::Options>::init(
+        std::make_unique<const services::Options>(services::Options { }));
+
     const std::filesystem::path source
         = "test/output/utils/copyFilesWithExtension/src";
     const std::filesystem::path destination

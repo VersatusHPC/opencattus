@@ -90,6 +90,37 @@ public:
      */
     [[nodiscard]] static std::vector<std::string> fetchInterfaces();
 
+#ifdef BUILD_TESTING
+    // Test-only seam: when set, fetchInterfaces() returns the override and
+    // setInterface() validates against it instead of querying the real kernel
+    // via getifaddrs(). Container CI hosts that lack the NICs the test expects
+    // (typical single-NIC Podman environment) use this to inject synthetic
+    // interface names so tests can still exercise the multi-network paths.
+    // Use Connection::ScopedTestInterfaces for RAII teardown rather than
+    // poking this directly.
+    static std::optional<std::vector<std::string>> s_testInterfaceOverride;
+
+    class ScopedTestInterfaces {
+    public:
+        explicit ScopedTestInterfaces(std::vector<std::string> interfaces)
+            : m_previous(std::move(s_testInterfaceOverride))
+        {
+            s_testInterfaceOverride = std::move(interfaces);
+        }
+        ScopedTestInterfaces(const ScopedTestInterfaces&) = delete;
+        ScopedTestInterfaces& operator=(const ScopedTestInterfaces&) = delete;
+        ScopedTestInterfaces(ScopedTestInterfaces&&) = delete;
+        ScopedTestInterfaces& operator=(ScopedTestInterfaces&&) = delete;
+        ~ScopedTestInterfaces()
+        {
+            s_testInterfaceOverride = std::move(m_previous);
+        }
+
+    private:
+        std::optional<std::vector<std::string>> m_previous;
+    };
+#endif
+
     [[nodiscard]] std::optional<std::string_view> getMAC() const;
     void setMAC(std::string_view mac);
 
