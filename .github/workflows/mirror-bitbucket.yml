@@ -1,0 +1,53 @@
+name: Mirror to Bitbucket
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "**"
+  delete:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bitbucket-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    if: github.repository == 'VersatusHPC/opencattus'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure SSH
+        env:
+          BITBUCKET_MIRROR_SSH_KEY: ${{ secrets.BITBUCKET_MIRROR_SSH_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${BITBUCKET_MIRROR_SSH_KEY}" ]; then
+            echo "BITBUCKET_MIRROR_SSH_KEY is not configured" >&2
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${BITBUCKET_MIRROR_SSH_KEY}" > ~/.ssh/bitbucket_mirror
+          chmod 600 ~/.ssh/bitbucket_mirror
+          ssh-keyscan bitbucket.org >> ~/.ssh/known_hosts
+
+      - name: Mirror branches and tags
+        run: |
+          set -euo pipefail
+
+          git clone --mirror "https://github.com/${GITHUB_REPOSITORY}.git" opencattus.git
+          cd opencattus.git
+
+          git remote add bitbucket "git@bitbucket.org:versatushpc/opencattus.git"
+          GIT_SSH_COMMAND='ssh -i ~/.ssh/bitbucket_mirror -o IdentitiesOnly=yes' \
+            git push --prune bitbucket \
+              '+refs/heads/*:refs/heads/*' \
+              '+refs/tags/*:refs/tags/*'
