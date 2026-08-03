@@ -18,11 +18,12 @@ private:
             = "Choose how the cluster nodes should be provisioned";
         static constexpr const auto help
             = "The provisioner imports node images, tracks compute nodes, and "
-              "drives network boot. xCAT is available on supported Enterprise "
-              "Linux releases; Confluent is required for EL10 today.";
+              "drives network boot. xCAT and Confluent are available on "
+              "supported Enterprise Linux releases and Ubuntu 24.04.";
 
-        static constexpr const auto confluentOnly
-            = "Confluent is currently required for EL10 installs";
+        static constexpr const auto singleProvisioner
+            = "Only one provisioner supports the selected operating systems; "
+              "it was selected automatically";
     };
 
 public:

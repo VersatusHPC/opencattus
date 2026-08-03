@@ -1339,6 +1339,16 @@ TEST_CASE("RepoConfigParser")
     REQUIRE(ohpcOpt.has_value() == true);
     CHECK(ohpcOpt->upstream.repo
         == "https://repos.openhpc.community/OpenHPC/4/EL_10/");
+
+    const auto xcatCoreOpt = el10Conf.find("xcat-core");
+    REQUIRE(xcatCoreOpt.has_value() == true);
+    CHECK(xcatCoreOpt->upstream.repo
+        == "https://xcat.org/files/xcat/repos/yum/latest/xcat-core/");
+    const auto xcatDepOpt = el10Conf.find("xcat-dep");
+    REQUIRE(xcatDepOpt.has_value() == true);
+    CHECK(xcatDepOpt->upstream.repo
+        == "https://xcat.org/files/xcat/repos/yum/latest/xcat-dep/rh10/"
+           "x86_64/");
 #endif
 }
 

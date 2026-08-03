@@ -567,16 +567,11 @@ void validateProvisionerSupport(
     }
 
     switch (nodeOS.getPlatform()) {
-        case OS::Platform::el10:
-            if (provisioner == Cluster::Provisioner::xCAT) {
-                throw std::runtime_error(fmt::format(
-                    "xCAT is not supported on EL{}; use confluent instead",
-                    nodeOS.getMajorVersion()));
-            }
-            return;
         case OS::Platform::el8:
             return;
         case OS::Platform::el9:
+            return;
+        case OS::Platform::el10:
             return;
         case OS::Platform::ubuntu2404:
             return;

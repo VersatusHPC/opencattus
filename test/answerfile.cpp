@@ -905,7 +905,7 @@ TEST_SUITE("opencattus::models::answerfile")
         std::filesystem::remove(diskImagePath);
     }
 
-    TEST_CASE("fillData rejects xcat on EL10")
+    TEST_CASE("fillData accepts xcat on Rocky Linux 10")
     {
         initializeOptionsSingleton();
 
@@ -924,20 +924,24 @@ TEST_SUITE("opencattus::models::answerfile")
         try {
             AnswerFile answerfile(answerfilePath);
             Cluster cluster;
-            // Pin head-node OS to Rocky 10 so the EL10-specific xCAT rejection
-            // path is exercised. Without this, on Ubuntu hosts the cluster
-            // would throw the "xCAT on Ubuntu 24.04 head nodes" guard first,
-            // and the assertion below would fail to match.
+            // Pin the head-node OS to Rocky 10 so the test exercises the
+            // EL10/xCAT path regardless of what /etc/os-release reports on
+            // the host (containers running on Ubuntu would otherwise trip the
+            // "xCAT on Ubuntu 24.04 head nodes" guard in
+            // validateProvisionerSupport).
             cluster.getHeadnode().setOS(
                 opencattus::models::OS(opencattus::models::OS::Distro::Rocky,
                     opencattus::models::OS::Platform::el10, 1));
+            cluster.fillData(answerfile);
 
-            CHECK_THROWS_WITH(cluster.fillData(answerfile),
-                doctest::Contains("xCAT is not supported on EL10"));
+            CHECK(cluster.getProvisioner() == Cluster::Provisioner::xCAT);
+            CHECK(cluster.getComputeNodeOS().getPlatform()
+                == opencattus::models::OS::Platform::el10);
         } catch (const std::exception& e) {
             FAIL(std::string(e.what()));
         } catch (...) {
-            FAIL("non-std exception while validating EL10 xCAT rejection");
+            FAIL("non-std exception while filling cluster for Rocky Linux 10 "
+                 "xCAT");
         }
 
         std::filesystem::remove(answerfilePath);

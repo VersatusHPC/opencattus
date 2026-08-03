@@ -77,6 +77,12 @@ case "${provisioner}" in
                 isc-dhcp-server
                 xcatd
             )
+        elif [[ "$(. /etc/os-release && printf '%s' "${VERSION_ID%%.*}")" -ge 10 ]]; then
+            # xCAT 2.18 provisions DHCP through Kea on EL10 headnodes.
+            provisioner_services=(
+                kea-dhcp4
+                xcatd
+            )
         else
             provisioner_services=(
                 dhcpd

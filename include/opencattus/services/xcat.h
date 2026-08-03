@@ -240,6 +240,11 @@ private:
     static void configureEL9();
 
     /**
+     * @brief Configures xCAT distro aliases for Enterprise Linux 10.
+     */
+    static void configureEL10();
+
+    /**
      * @brief Configures xCAT netboot templates for Ubuntu 24.04.
      */
     static void configureUbuntu24();

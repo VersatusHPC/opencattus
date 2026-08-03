@@ -19,7 +19,7 @@ The harness currently targets:
 * The EL9 service-network and DOCA 3.2 LTS Confluent recovery lanes.
 * One or more network-booted compute nodes.
 
-This is intentionally narrower than the full product matrix. The current recovery priority is to make one EL9 path trustworthy before attempting EL10 porting work.
+This is intentionally narrower than the full product matrix. The same harness also drives the EL8 and EL10 lanes through the ``opencattus-el8-lab.sh`` and ``opencattus-el10-lab.sh`` wrappers.
 
 Files
 -----
@@ -184,7 +184,7 @@ The libvirt/KVM harness keeps the control plane explicit: ``virsh``, ``virt-inst
 Known limits
 ------------
 
-* EL10 is out of scope for this harness. Get the EL9 path stable first.
+* EL10 runs through the ``opencattus-el10-lab.sh`` wrapper with both the Confluent and xCAT provisioners; see ``testing/libvirt/README.md`` for the currently validated EL10 lanes.
 * The currently validated multi-node EL9 topology is two compute nodes on external plus management networks.
 * Nested-virtualization CI is not realistic in the current GitHub workflow; this lab is meant for a real EL9 KVM host.
 * The DOCA lane is materially slower than the plain EL9 Confluent lanes because

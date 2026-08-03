@@ -13,10 +13,12 @@ Before you run the installer:
 2. Prepare the answerfile described in :ref:`assembling-an-answerfile`.
 3. Copy the ISO and the ``opencattus`` binary to the head node.
 
-The current validated recovery baseline is EL9, with the Rocky Linux 9.7 +
-xCAT and Rocky Linux 9.7 + Confluent paths tested end-to-end. Treat other
-combinations as unvalidated until they are explicitly covered by the recovery
-lab or release notes.
+The current validated baselines are Rocky Linux 8.10, Rocky Linux 9.7, and
+Rocky Linux 10.1, each with both the xCAT and Confluent paths tested
+end-to-end in the libvirt/KVM lab. See
+:doc:`System Requirements <../../overview/sys_os_requirements>` for the full
+per-release matrices. Treat other combinations as unvalidated until they are
+explicitly covered by the recovery lab or release notes.
 
 Show the full CLI help with:
 

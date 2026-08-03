@@ -28,10 +28,9 @@ auto supportedProvisionersFor(const OS& os) -> std::vector<Cluster::Provisioner>
                 Cluster::Provisioner::xCAT,
                 Cluster::Provisioner::Confluent,
             };
-        case OS::Platform::el10:
-            return { Cluster::Provisioner::Confluent };
         case OS::Platform::el8:
         case OS::Platform::el9:
+        case OS::Platform::el10:
             return {
                 Cluster::Provisioner::xCAT,
                 Cluster::Provisioner::Confluent,
@@ -44,12 +43,14 @@ auto supportedProvisionersFor(const OS& os) -> std::vector<Cluster::Provisioner>
 auto supportedProvisionersFor(const OS& headnodeOS, const OS& computeNodeOS)
     -> std::vector<Cluster::Provisioner>
 {
-    if (headnodeOS.getPlatform() == OS::Platform::el10
-        || computeNodeOS.getPlatform() == OS::Platform::el10) {
-        return { Cluster::Provisioner::Confluent };
-    }
+    const auto headnodeSupported = supportedProvisionersFor(headnodeOS);
+    auto supported = supportedProvisionersFor(computeNodeOS);
+    std::erase_if(supported, [&](const auto provisioner) {
+        return std::ranges::find(headnodeSupported, provisioner)
+            == headnodeSupported.end();
+    });
 
-    return supportedProvisionersFor(computeNodeOS);
+    return supported;
 }
 
 auto toProvisionerName(Cluster::Provisioner provisioner) -> std::string
@@ -76,7 +77,7 @@ PresenterProvisioner::PresenterProvisioner(
         m_model->getHeadnode().getOS(), m_model->getComputeNodeOS());
     if (supported.size() == 1) {
         m_model->setProvisioner(supported.front());
-        m_view->message(Messages::title, Messages::confluentOnly);
+        m_view->message(Messages::title, Messages::singleProvisioner);
         return;
     }
 
@@ -97,13 +98,14 @@ PresenterProvisioner::PresenterProvisioner(
 
 } // namespace opencattus::presenter
 
-TEST_CASE("supportedProvisionersFor keeps EL10 on confluent")
+TEST_CASE("supportedProvisionersFor keeps EL10 xcat and confluent available")
 {
     const auto supported = supportedProvisionersFor(
         OS(OS::Distro::Rocky, OS::Platform::el10, 1));
 
     CHECK(supported
         == std::vector<Cluster::Provisioner> {
+            Cluster::Provisioner::xCAT,
             Cluster::Provisioner::Confluent,
         });
 }
@@ -141,6 +143,7 @@ TEST_CASE("supportedProvisionersFor checks headnode and compute node releases")
 
     CHECK(supported
         == std::vector<Cluster::Provisioner> {
+            Cluster::Provisioner::xCAT,
             Cluster::Provisioner::Confluent,
         });
 }

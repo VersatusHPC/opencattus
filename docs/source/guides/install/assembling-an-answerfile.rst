@@ -24,6 +24,8 @@ Recommended starting points:
   Rocky Linux 10 + Confluent bootstrap path. The current validated Rocky 10
   baseline covers both the one-node smoke and the two-node MPI layout in the
   libvirt/KVM lab, plus the optional dedicated ``[network_service]`` path.
+- ``testing/libvirt/templates/rocky10-xcat.answerfile.ini`` for the validated
+  Rocky Linux 10 + xCAT path, which requires xCAT 2.18 or later.
 - ``test/sample/answerfile/`` for older examples and broader config shapes.
 
 Required sections
@@ -43,9 +45,10 @@ The current unattended path expects all of these sections:
 
 The ``[system]`` section must include ``provisioner=``.
 
-For the current EL10 bootstrap path, use ``distro=rocky`` with the exact
-EL10 minor version you are targeting and set ``provisioner=confluent``. The
-product now rejects ``provisioner=xcat`` on EL10 explicitly.
+On EL10 both ``provisioner=confluent`` and ``provisioner=xcat`` are
+supported. The xCAT path relies on xCAT 2.18, the first upstream release with
+EL10 support, and the currently validated EL10 lane uses ``distro=rocky``
+with the exact EL10 minor version you are targeting.
 
 Round-trip status
 ~~~~~~~~~~~~~~~~~
@@ -182,7 +185,7 @@ This section defines the installation ISO, distro, version, and provisioner.
     disk_image=/root/Rocky-8.10-x86_64-dvd.iso
     distro=rocky
     version=8.10
-    provisioner=confluent  # use xcat for the validated EL8 or EL9 xCAT paths
+    provisioner=confluent  # use xcat for the validated EL8, EL9, or EL10 xCAT paths
     # kernel is optional and mainly used for specialized flows
 
 Repositories
