@@ -1433,6 +1433,7 @@ prepare_headnode() {
                         ninja-build \
                         pkg-config \
                         python3-pip \
+                        python3-venv \
                         qemu-guest-agent \
                         rsync \
                         tar \
@@ -1782,7 +1783,8 @@ sudo DEBIAN_FRONTEND=noninteractive apt install -y \
     libnewt-dev \
     ninja-build \
     pkg-config \
-    python3-pip &&
+    python3-pip \
+    python3-venv &&
 python3 -m pip install --user --break-system-packages --upgrade pip conan &&
 EOF
 )
