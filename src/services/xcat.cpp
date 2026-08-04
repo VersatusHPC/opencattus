@@ -292,16 +292,26 @@ std::string xcatHttpServiceName(const OS& headnodeOS)
                                                                : "httpd";
 }
 
+// xCAT 2.18 defaults to the Kea DHCP backend on EL10 and Ubuntu >= 22.04
+// management nodes (xcat2/xcat-core#7710); older Enterprise Linux releases
+// keep ISC dhcpd. Ubuntu 24.04 is the only Ubuntu platform OpenCATTUS
+// supports.
+bool xcatUsesKeaDhcpBackend(const OS& headnodeOS)
+{
+    return headnodeOS.getPlatform() == OS::Platform::ubuntu2404
+        || headnodeOS.getPlatform() == OS::Platform::el10;
+}
+
 std::string xcatDhcpServiceName(const OS& headnodeOS)
 {
-    if (headnodeOS.getPackageType() == OS::PackageType::DEB) {
-        return "isc-dhcp-server";
+    if (!xcatUsesKeaDhcpBackend(headnodeOS)) {
+        return "dhcpd";
     }
 
-    // xCAT 2.18 defaults to the Kea DHCP backend on EL10 management nodes;
-    // older Enterprise Linux releases keep ISC dhcpd.
-    return headnodeOS.getPlatform() == OS::Platform::el10 ? "kea-dhcp4"
-                                                          : "dhcpd";
+    // Debian packaging names the Kea DHCPv4 service kea-dhcp4-server.
+    return headnodeOS.getPlatform() == OS::Platform::ubuntu2404
+        ? "kea-dhcp4-server"
+        : "kea-dhcp4";
 }
 
 struct XcatNodeNetworkCommand final {
@@ -315,7 +325,7 @@ std::vector<XcatNodeNetworkCommand> buildXcatAddNodesNetworkCommands(
     const OS& headnodeOS)
 {
     const auto dhcpService = xcatDhcpServiceName(headnodeOS);
-    if (dhcpService == "kea-dhcp4") {
+    if (xcatUsesKeaDhcpBackend(headnodeOS)) {
         // The Kea backend refuses to render a configuration until makedns
         // has created the DDNS key material, and it has no OMAPI path, so
         // node reservations must be published explicitly with makedhcp -a.
@@ -2295,7 +2305,7 @@ TEST_CASE("xCAT service helpers use Debian service names on Ubuntu")
     const auto ubuntu = OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0);
 
     CHECK(xcatHttpServiceName(ubuntu) == "apache2");
-    CHECK(xcatDhcpServiceName(ubuntu) == "isc-dhcp-server");
+    CHECK(xcatDhcpServiceName(ubuntu) == "kea-dhcp4-server");
 }
 
 TEST_CASE("xcatDhcpServiceName follows the xCAT DHCP backend per EL release")
@@ -2313,6 +2323,8 @@ TEST_CASE("buildXcatAddNodesNetworkCommands runs makedns before makedhcp on "
         OS(OS::Distro::Rocky, OS::Platform::el9, 7));
     const auto el10Commands = buildXcatAddNodesNetworkCommands(
         OS(OS::Distro::Rocky, OS::Platform::el10, 1));
+    const auto ubuntuCommands = buildXcatAddNodesNetworkCommands(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 4));
 
     CHECK(el9Commands
         == std::vector<XcatNodeNetworkCommand> {
@@ -2328,6 +2340,15 @@ TEST_CASE("buildXcatAddNodesNetworkCommands runs makedns before makedhcp on "
             { "makedns -n", true },
             { "makedhcp -n", true },
             { "systemctl restart kea-dhcp4", true },
+            { "makedhcp -a", true },
+            { "makegocons", false },
+        });
+    CHECK(ubuntuCommands
+        == std::vector<XcatNodeNetworkCommand> {
+            { "makehosts", false },
+            { "makedns -n", true },
+            { "makedhcp -n", true },
+            { "systemctl restart kea-dhcp4-server", true },
             { "makedhcp -a", true },
             { "makegocons", false },
         });
