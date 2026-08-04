@@ -20,13 +20,15 @@ The currently validated targets are `Rocky Linux 8.10 + xCAT`,
 `AlmaLinux 9.7 + xCAT`, `AlmaLinux 9.7 + Confluent`,
 `Oracle Linux 9.7 + xCAT`, `Oracle Linux 9.7 + Confluent`,
 `RHEL 9.6 + xCAT`, `RHEL 9.6 + Confluent`,
+`Rocky Linux 10.1 + xCAT`,
 `Rocky Linux 10.1 + Confluent`,
 `Rocky Linux 10.1 + Confluent + service network`,
 `AlmaLinux 10.1 + Confluent`,
 `RHEL 10.1 + Confluent`, and `Oracle Linux 10.1 + Confluent`.
 The current EL10 baseline is still narrower than the full EL9 recovery scope,
 and the EL8 baseline is narrower than EL9, but both now have real unattended
-lab coverage.
+lab coverage. The EL10 xCAT lane requires xCAT 2.18, the first upstream
+release with EL10 support.
 
 The expansion matrix still has runnable lab scaffolding for `AlmaLinux 8`,
 `Oracle Linux 8`, and `RHEL 8` with both `xCAT` and `Confluent`. Those EL8
@@ -68,7 +70,7 @@ Keep the cloud image and ISO under `/var/lib/libvirt/images`, ideally in a dedic
 1. Copy one of these environment templates, then set `BASE_IMAGE`,
    `CLUSTER_ISO`, and either `OPENCATTUS_BINARY` or `OPENCATTUS_SOURCE_DIR`:
 
-   - Rocky baselines: `testing/libvirt/config/rocky8-xcat.env.example`, `testing/libvirt/config/rocky8-confluent.env.example`, `testing/libvirt/config/rocky9-xcat.env.example`, `testing/libvirt/config/rocky9-confluent.env.example`, `testing/libvirt/config/rocky9-confluent-service.env.example`, `testing/libvirt/config/rocky9-confluent-doca-32lts.env.example`, `testing/libvirt/config/rocky10-confluent.env.example`, `testing/libvirt/config/rocky10-confluent-service.env.example`
+   - Rocky baselines: `testing/libvirt/config/rocky8-xcat.env.example`, `testing/libvirt/config/rocky8-confluent.env.example`, `testing/libvirt/config/rocky9-xcat.env.example`, `testing/libvirt/config/rocky9-confluent.env.example`, `testing/libvirt/config/rocky9-confluent-service.env.example`, `testing/libvirt/config/rocky9-confluent-doca-32lts.env.example`, `testing/libvirt/config/rocky10-xcat.env.example`, `testing/libvirt/config/rocky10-confluent.env.example`, `testing/libvirt/config/rocky10-confluent-service.env.example`
    - Validated EL10 Confluent lanes: `testing/libvirt/config/alma10-confluent.env.example`, `testing/libvirt/config/ol10-confluent.env.example`, `testing/libvirt/config/rhel10-confluent.env.example`
    - Validated EL9 expansion lanes: `testing/libvirt/config/{alma,ol,rhel}9-{xcat,confluent}.env.example`
    - Candidate EL8 expansion lanes: `testing/libvirt/config/{alma,ol,rhel}8-{xcat,confluent}.env.example`
@@ -132,10 +134,11 @@ That wrapper stores per-lane console logs under
 `/var/tmp/opencattus-el9-regression/<timestamp>/` and prints a final pass/fail
 summary when every lane finishes.
 
-For the validated EL10 Confluent sweep, use:
+For the validated EL10 sweep, use:
 
 ```bash
 testing/libvirt/run-el10-regression.sh -j 3 \
+  /path/to/rocky10-xcat.env \
   /path/to/rocky10-confluent.env \
   /path/to/rocky10-confluent-service.env \
   /path/to/alma10-confluent.env \
@@ -244,10 +247,10 @@ point the matching `rhel*.env` file at it.
 | AlmaLinux 9.7 | Validated | Validated | Verified in the unattended EL9 libvirt/KVM lab with headnode verification and MPI smoke. |
 | Oracle Linux 9.7 | Validated | Validated | Verified in the unattended EL9 libvirt/KVM lab; the xCAT lane repairs incomplete initial credentials with `xcatconfig -c` before the first `lsdef` probe. |
 | RHEL 9.6 | Validated | Validated | Verified against local entitled media plus repo access with the same headnode verification and MPI smoke flow as Rocky Linux 9.7. |
-| Rocky Linux 10.1 | Out of scope | Validated | Confluent-only EL10 bootstrap path. |
-| AlmaLinux 10.1 | Out of scope | Validated | Confluent-only EL10 cloud-image lane. Verified with the same headnode, deploy, and MPI smoke flow as Rocky Linux 10. |
-| RHEL 10.1 | Out of scope | Validated | Confluent-only EL10 mirror-backed lane. Uses a qcow2 headnode image plus local mirrored repos. |
-| Oracle Linux 10.1 | Out of scope | Validated | Confluent-only EL10 lane. Uses Oracle cloud media and forces the installed RHCK as the default kernel before reboot. |
+| Rocky Linux 10.1 | Validated | Validated | Current EL10 baseline. The xCAT lane requires xCAT 2.18 and was verified with the two-node unattended install, headnode verification, and MPI smoke flow. |
+| AlmaLinux 10.1 | Planned | Validated | Confluent-validated EL10 cloud-image lane. Verified with the same headnode, deploy, and MPI smoke flow as Rocky Linux 10. The xCAT lane is unblocked by xCAT 2.18 but not yet validated. |
+| RHEL 10.1 | Planned | Validated | Confluent-validated EL10 mirror-backed lane. Uses a qcow2 headnode image plus local mirrored repos. The xCAT lane is unblocked by xCAT 2.18 but not yet validated. |
+| Oracle Linux 10.1 | Planned | Validated | Confluent-validated EL10 lane. Uses Oracle cloud media and forces the installed RHCK as the default kernel before reboot. The xCAT lane is unblocked by xCAT 2.18 but not yet validated. |
 
 ## EL8 support matrix
 
@@ -283,30 +286,32 @@ but they have not completed these checks yet.
 | TUI-driven install | Not yet validated | Not yet validated | Recovery work has focused on unattended answerfile installs first. |
 | `--dump-answerfile` round-trip | Validated | Validated | Rocky Linux 9.7 now completes a full dump-regenerate-install cycle in the EL9 libvirt/KVM lab for both xCAT and Confluent. |
 
-## EL10 bootstrap target
+## EL10 target
 
 - First target distro: `Rocky Linux 10`
-- First provisioner: `Confluent`
+- Provisioners: `Confluent` and `xCAT` (xCAT requires the 2.18 release, the
+  first upstream release with EL10 support)
 - Install model: fresh install only
 - Current validated baseline: headnode install, one or two deployed compute
-  nodes, healthy `sinfo`, and MPI smoke tests for both the one-node and
-  two-node layouts
-- xCAT remains intentionally out of scope for this bootstrap path
+  nodes, healthy `sinfo`, and MPI smoke tests. The Confluent path covers both
+  the one-node and two-node layouts; the xCAT path covers the two-node layout.
+- On EL10 headnodes xCAT 2.18 provisions DHCP through Kea, so the xCAT lane
+  verifies `kea-dhcp4` instead of `dhcpd`.
 
 ## EL10 support matrix
 
-| Capability | Confluent | Notes |
-| --- | --- | --- |
-| Answerfile-driven unattended install | Validated | Verified from a clean Rocky 10.1 libvirt/KVM run. |
-| Headnode verification | Validated | `chronyd`, NFS, MariaDB, Munge, SLURM, and Confluent services checked after install. |
-| Single compute node boot and join | Validated | `sinfo -N` reaches `idle` on the deployed node. |
-| OpenHPC MPI hello world | Validated | Two MPI ranks run on the deployed Rocky 10 compute node through Slurm. |
-| External + management network topology | Validated | This is the current EL10 lab topology. |
-| Multi-node cluster | Validated | Two compute nodes boot, join the cluster, and complete the MPI smoke test across nodes. |
-| Dedicated service network | Validated | Rocky 10.1 + Confluent now completes the unattended install, verify, and MPI smoke path with a dedicated `oc-svc0` headnode NIC and a populated `[network_service]` section. |
-| Dedicated application network / OFED path | Not yet validated | Still outside the initial EL10 baseline. |
-| TUI-driven install | Not yet validated | EL10 work has focused on unattended answerfile installs first. |
-| `--dump-answerfile` round-trip | Validated | Rocky Linux 10.1 + Confluent now completes a full dump-regenerate-install cycle in the EL10 libvirt/KVM lab. |
+| Capability | xCAT | Confluent | Notes |
+| --- | --- | --- | --- |
+| Answerfile-driven unattended install | Validated | Validated | Verified from clean Rocky 10.1 libvirt/KVM runs for both provisioners. |
+| Headnode verification | Validated | Validated | `chronyd`, NFS, MariaDB, Munge, SLURM, and provisioner services checked after install. |
+| Single compute node boot and join | Validated | Validated | `sinfo -N` reaches `idle` on the deployed nodes. The xCAT lane was exercised in the two-node layout, where each node boots and joins individually. |
+| OpenHPC MPI hello world | Validated | Validated | Two MPI ranks run through Slurm. Confluent is validated in the one-node and two-node layouts; xCAT in the two-node layout. |
+| External + management network topology | Validated | Validated | This is the current EL10 lab topology. |
+| Multi-node cluster | Validated | Validated | Two compute nodes boot, join the cluster, and complete the MPI smoke test across nodes. |
+| Dedicated service network | Not yet validated | Validated | Rocky 10.1 + Confluent now completes the unattended install, verify, and MPI smoke path with a dedicated `oc-svc0` headnode NIC and a populated `[network_service]` section. |
+| Dedicated application network / OFED path | Not yet validated | Not yet validated | Still outside the EL10 baseline. |
+| TUI-driven install | Not yet validated | Not yet validated | EL10 work has focused on unattended answerfile installs first. |
+| `--dump-answerfile` round-trip | Not yet validated | Validated | Rocky Linux 10.1 + Confluent now completes a full dump-regenerate-install cycle in the EL10 libvirt/KVM lab. |
 
 ## Release validation workflow
 
@@ -447,19 +452,21 @@ testing/libvirt/opencattus-el9-lab.sh -c /path/to/rocky9-xcat.env destroy
 - The default compute VM topology now matches the answerfile's SLURM declaration: `2` vCPUs presented as `1` socket, `2` cores, `1` thread.
 - The validated EL8 paths can run a non-root OpenHPC MPI hello-world smoke test on the deployed compute node.
 - The validated EL9 paths can run an OpenHPC MPI hello-world smoke test across one or two compute nodes.
-- The validated EL8 xCAT and Confluent paths and the validated EL9 and EL10
-  Confluent paths can dump a fresh answerfile with ``--dump-answerfile`` and
+- The validated EL8 and EL9 xCAT and Confluent paths and the validated EL10
+  Confluent path can dump a fresh answerfile with ``--dump-answerfile`` and
   complete the unattended install from that dumped file.
 
 ## Current limits
 
-- The current EL10 validated matrix covers Rocky Linux 10.1, AlmaLinux 10.1,
-  Oracle Linux 10.1, and RHEL 10.1 on the plain Confluent path, plus the
-  Rocky Linux 10.1 dedicated service-network lane. The EL10 application
-  network / OFED path is still outside the validated baseline.
-- The `testing/libvirt/opencattus-el10-lab.sh` wrapper exists so the EL10
-  branch can reuse the same host-side lab orchestration while the product port
-  is still underway.
+- The current EL10 validated matrix covers Rocky Linux 10.1 with both xCAT
+  and Confluent, AlmaLinux 10.1, Oracle Linux 10.1, and RHEL 10.1 on the
+  plain Confluent path, plus the Rocky Linux 10.1 dedicated service-network
+  Confluent lane. The EL10 application network / OFED path is still outside
+  the validated baseline, and the AlmaLinux, Oracle Linux, and RHEL EL10
+  xCAT lanes are unblocked by xCAT 2.18 but not yet validated.
+- The `testing/libvirt/opencattus-el10-lab.sh` wrapper reuses the same
+  host-side lab orchestration as the EL9 script and defaults to the Confluent
+  provisioner; set `PROVISIONER=xcat` in the env file for the xCAT lane.
 - The currently validated multi-node EL9 topology is two compute nodes on
   external plus management networks across Rocky Linux 9.7, AlmaLinux 9.7,
   Oracle Linux 9.7, and RHEL 9.6. EL9 service-network coverage is validated on

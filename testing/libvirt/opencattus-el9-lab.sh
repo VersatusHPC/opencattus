@@ -38,7 +38,7 @@ Environment:
 The harness currently serves three purposes:
   * the validated EL8 recovery paths for xCAT and Confluent
   * the validated EL9 recovery paths for xCAT and Confluent
-  * the Rocky Linux 10 + Confluent bootstrap path for EL10 porting work
+  * the EL10 paths for xCAT and Confluent
 EOF
 }
 
@@ -946,10 +946,6 @@ check_config() {
     if [[ "${DISTRO_ID}" == "ubuntu" ]]; then
         is_distro_ubuntu2404 || die \
             "Ubuntu lab support is currently limited to Ubuntu 24.04"
-    fi
-    if is_distro_major_el10; then
-        [[ "${PROVISIONER}" == "confluent" ]] || die \
-            "EL10 bootstrap is Confluent-only; xCAT remains out of scope for this lab"
     fi
     [[ -n "${BASE_IMAGE}" ]] || die "BASE_IMAGE is required"
     [[ -n "${CLUSTER_ISO}" ]] || die "CLUSTER_ISO is required"

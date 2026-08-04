@@ -59,9 +59,10 @@ std::string getOSImageDistroVersion(const OS& nodeOS)
             }
             break;
         case OS::Distro::OL:
+            // xCAT 2.18 copycds strips the trailing ".0" that Oracle Linux
+            // media carry in .discinfo, so osimage names never include it.
             osimage += "ol";
             osimage += nodeOS.getVersion();
-            osimage += ".0";
             break;
         case OS::Distro::Rocky:
             osimage += "rocky";
@@ -293,9 +294,50 @@ std::string xcatHttpServiceName(const OS& headnodeOS)
 
 std::string xcatDhcpServiceName(const OS& headnodeOS)
 {
-    return headnodeOS.getPackageType() == OS::PackageType::DEB
-        ? "isc-dhcp-server"
-        : "dhcpd";
+    if (headnodeOS.getPackageType() == OS::PackageType::DEB) {
+        return "isc-dhcp-server";
+    }
+
+    // xCAT 2.18 defaults to the Kea DHCP backend on EL10 management nodes;
+    // older Enterprise Linux releases keep ISC dhcpd.
+    return headnodeOS.getPlatform() == OS::Platform::el10 ? "kea-dhcp4"
+                                                          : "dhcpd";
+}
+
+struct XcatNodeNetworkCommand final {
+    std::string command;
+    bool mustSucceed;
+
+    bool operator==(const XcatNodeNetworkCommand&) const = default;
+};
+
+std::vector<XcatNodeNetworkCommand> buildXcatAddNodesNetworkCommands(
+    const OS& headnodeOS)
+{
+    const auto dhcpService = xcatDhcpServiceName(headnodeOS);
+    if (dhcpService == "kea-dhcp4") {
+        // The Kea backend refuses to render a configuration until makedns
+        // has created the DDNS key material, and it has no OMAPI path, so
+        // node reservations must be published explicitly with makedhcp -a.
+        return {
+            { "makehosts", false },
+            { "makedns -n", true },
+            { "makedhcp -n", true },
+            { fmt::format("systemctl restart {}", dhcpService), true },
+            { "makedhcp -a", true },
+            { "makegocons", false },
+        };
+    }
+
+    // xCAT updates node DHCP state through OMAPI during `nodeset`; that fails
+    // unless dhcpd is already running with the regenerated configuration.
+    return {
+        { "makehosts", false },
+        { "makedhcp -n", false },
+        { fmt::format("systemctl restart {}", dhcpService), true },
+        { "makedns -n", false },
+        { "makegocons", false },
+    };
 }
 
 std::vector<std::string> buildXcatPackageInstallCommands(
@@ -329,8 +371,7 @@ std::string getEnterpriseLinuxTemplateVersion(const OS& nodeOS)
         case OS::Platform::el9:
             return "rhels9";
         case OS::Platform::el10:
-            throw std::invalid_argument(
-                "xCAT template aliases are not supported on EL10");
+            return "rhels10";
         default:
             std::unreachable();
     }
@@ -347,8 +388,8 @@ std::vector<std::pair<std::string, std::string>> getEnterpriseLinuxCloneAliases(
             return { { "rocky", "rocky9" }, { "ol", "ol9" },
                 { "alma", "alma9" } };
         case OS::Platform::el10:
-            throw std::invalid_argument(
-                "xCAT distro aliases are not supported on EL10");
+            return { { "rocky", "rocky10" }, { "ol", "ol10" },
+                { "alma", "alma10" } };
         default:
             std::unreachable();
     }
@@ -477,10 +518,8 @@ XcatInfinibandPlan buildXcatInfinibandPlan(const OFED& ofed, const OS& nodeOS,
             };
         case OS::Platform::el8:
         case OS::Platform::el9:
-            break;
         case OS::Platform::el10:
-            throw std::invalid_argument(
-                "xCAT compute-node OFED staging is unsupported on EL10");
+            break;
         default:
             std::unreachable();
     }
@@ -536,12 +575,10 @@ std::vector<std::string_view> buildXcatKernelPackageNames(const OS& nodeOS)
             return { "kernel", "kernel-devel", "kernel-headers", "kernel-core",
                 "kernel-modules", "kernel-modules-extra" };
         case OS::Platform::el9:
+        case OS::Platform::el10:
             return { "kernel", "kernel-devel", "kernel-headers", "kernel-core",
                 "kernel-modules", "kernel-modules-core",
                 "kernel-modules-extra" };
-        case OS::Platform::el10:
-            throw std::invalid_argument(
-                "xCAT kernel package staging is unsupported on EL10");
         default:
             std::unreachable();
     }
@@ -569,14 +606,12 @@ std::string_view rockyKernelPackageRepositoryComponent(
         case OS::Platform::el8:
             return "BaseOS";
         case OS::Platform::el9:
+        case OS::Platform::el10:
             if (packageName == "kernel-devel"
                 || packageName == "kernel-headers") {
                 return "AppStream";
             }
             return "BaseOS";
-        case OS::Platform::el10:
-            throw std::invalid_argument(
-                "xCAT Rocky kernel package URLs are unsupported on EL10");
         default:
             std::unreachable();
     }
@@ -1744,6 +1779,20 @@ void XCAT::configureEL9()
     }
 }
 
+/* xCAT 2.18 ships rhels10 install and netboot templates but no Rocky, Oracle
+ * or AlmaLinux equivalents, so EL10 keeps the same alias strategy as EL8 and
+ * EL9.
+ */
+void XCAT::configureEL10()
+{
+    auto runner = opencattus::utils::singleton::runner();
+    const auto nodeOS = cluster()->getNodes().front().getOS();
+    for (const auto& command :
+        buildEnterpriseLinuxTemplateAliasCommands(nodeOS)) {
+        runner->executeCommand(command);
+    }
+}
+
 void XCAT::configureUbuntu24()
 {
     auto runner = opencattus::utils::singleton::runner();
@@ -1809,8 +1858,8 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
             configureEL9();
             break;
         case OS::Platform::el10:
-            throw std::logic_error(
-                "xCAT image generation is unsupported on EL10");
+            configureEL10();
+            break;
         default:
             std::unreachable();
     }
@@ -1915,15 +1964,14 @@ void XCAT::addNodes() const
 
     auto runner = opencattus::utils::singleton::runner();
 
-    // TODO: Create separate functions
-    runner->executeCommand("makehosts");
-    runner->executeCommand("makedhcp -n");
-    // xCAT updates node DHCP state through OMAPI during `nodeset`; that fails
-    // unless dhcpd is already running with the regenerated configuration.
-    runner->checkCommand(fmt::format("systemctl restart {}",
-        xcatDhcpServiceName(cluster()->getHeadnode().getOS())));
-    runner->executeCommand("makedns -n");
-    runner->executeCommand("makegocons");
+    for (const auto& [command, mustSucceed] :
+        buildXcatAddNodesNetworkCommands(cluster()->getHeadnode().getOS())) {
+        if (mustSucceed) {
+            runner->checkCommand(command);
+        } else {
+            runner->executeCommand(command);
+        }
+    }
     setNodesImage();
 }
 
@@ -2139,13 +2187,22 @@ TEST_CASE("getOSImageDistroVersion uses node OS metadata")
     CHECK(getOSImageDistroVersion(OS(OS::Distro::RHEL, OS::Platform::el8, 10))
         == "rhels8.10");
     CHECK(getOSImageDistroVersion(OS(OS::Distro::OL, OS::Platform::el8, 10))
-        == "ol8.10.0");
+        == "ol8.10");
     CHECK(getOSImageDistroVersion(OS(OS::Distro::Rocky, OS::Platform::el9, 7))
         == "rocky9.7");
     CHECK(getOSImageDistroVersion(OS(OS::Distro::RHEL, OS::Platform::el9, 7))
         == "rhels9.7.0");
     CHECK(getOSImageDistroVersion(OS(OS::Distro::OL, OS::Platform::el9, 7))
-        == "ol9.7.0");
+        == "ol9.7");
+    CHECK(getOSImageDistroVersion(OS(OS::Distro::Rocky, OS::Platform::el10, 1))
+        == "rocky10.1");
+    CHECK(getOSImageDistroVersion(OS(OS::Distro::RHEL, OS::Platform::el10, 1))
+        == "rhels10.1");
+    CHECK(getOSImageDistroVersion(
+              OS(OS::Distro::AlmaLinux, OS::Platform::el10, 1))
+        == "alma10.1");
+    CHECK(getOSImageDistroVersion(OS(OS::Distro::OL, OS::Platform::el10, 1))
+        == "ol10.1");
     CHECK(getOSImageDistroVersion(
               OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0))
         == "ubuntu24.04");
@@ -2241,15 +2298,53 @@ TEST_CASE("xCAT service helpers use Debian service names on Ubuntu")
     CHECK(xcatDhcpServiceName(ubuntu) == "isc-dhcp-server");
 }
 
+TEST_CASE("xcatDhcpServiceName follows the xCAT DHCP backend per EL release")
+{
+    CHECK(xcatDhcpServiceName(OS(OS::Distro::Rocky, OS::Platform::el9, 7))
+        == "dhcpd");
+    CHECK(xcatDhcpServiceName(OS(OS::Distro::Rocky, OS::Platform::el10, 1))
+        == "kea-dhcp4");
+}
+
+TEST_CASE("buildXcatAddNodesNetworkCommands runs makedns before makedhcp on "
+          "the Kea backend")
+{
+    const auto el9Commands = buildXcatAddNodesNetworkCommands(
+        OS(OS::Distro::Rocky, OS::Platform::el9, 7));
+    const auto el10Commands = buildXcatAddNodesNetworkCommands(
+        OS(OS::Distro::Rocky, OS::Platform::el10, 1));
+
+    CHECK(el9Commands
+        == std::vector<XcatNodeNetworkCommand> {
+            { "makehosts", false },
+            { "makedhcp -n", false },
+            { "systemctl restart dhcpd", true },
+            { "makedns -n", false },
+            { "makegocons", false },
+        });
+    CHECK(el10Commands
+        == std::vector<XcatNodeNetworkCommand> {
+            { "makehosts", false },
+            { "makedns -n", true },
+            { "makedhcp -n", true },
+            { "systemctl restart kea-dhcp4", true },
+            { "makedhcp -a", true },
+            { "makegocons", false },
+        });
+}
+
 TEST_CASE("buildEnterpriseLinuxTemplateAliasCommands uses explicit EL releases")
 {
     const auto el8Commands = buildEnterpriseLinuxTemplateAliasCommands(
         OS(OS::Distro::Rocky, OS::Platform::el8, 10));
     const auto el9Commands = buildEnterpriseLinuxTemplateAliasCommands(
         OS(OS::Distro::Rocky, OS::Platform::el9, 7));
+    const auto el10Commands = buildEnterpriseLinuxTemplateAliasCommands(
+        OS(OS::Distro::Rocky, OS::Platform::el10, 1));
 
     CHECK_FALSE(el8Commands.empty());
     CHECK_FALSE(el9Commands.empty());
+    CHECK_FALSE(el10Commands.empty());
     CHECK(std::ranges::any_of(el8Commands, [](const auto& command) {
         return command.contains("compute.rhels8.x86_64.pkglist")
             && command.contains("compute.rocky8.x86_64.pkglist");
@@ -2257,6 +2352,10 @@ TEST_CASE("buildEnterpriseLinuxTemplateAliasCommands uses explicit EL releases")
     CHECK(std::ranges::any_of(el9Commands, [](const auto& command) {
         return command.contains("compute.rhels9.x86_64.pkglist")
             && command.contains("compute.rocky9.x86_64.pkglist");
+    }));
+    CHECK(std::ranges::any_of(el10Commands, [](const auto& command) {
+        return command.contains("compute.rhels10.x86_64.pkglist")
+            && command.contains("compute.rocky10.x86_64.pkglist");
     }));
 }
 
@@ -2494,6 +2593,41 @@ TEST_CASE("buildXcatKernelPackages includes kernel-modules-core on EL9")
            "kernel-modules-extra-5.14.0-611.41.1.el9_7.x86_64");
 }
 
+TEST_CASE("buildXcatKernelPackages includes kernel-modules-core on EL10")
+{
+    CHECK(buildXcatKernelPackages(
+              OS(OS::Distro::Rocky, OS::Platform::el10, 1, OS::Arch::x86_64),
+              "6.12.0-124.8.1.el10_1.x86_64")
+        == "kernel-6.12.0-124.8.1.el10_1.x86_64 "
+           "kernel-devel-6.12.0-124.8.1.el10_1.x86_64 "
+           "kernel-headers-6.12.0-124.8.1.el10_1.x86_64 "
+           "kernel-core-6.12.0-124.8.1.el10_1.x86_64 "
+           "kernel-modules-6.12.0-124.8.1.el10_1.x86_64 "
+           "kernel-modules-core-6.12.0-124.8.1.el10_1.x86_64 "
+           "kernel-modules-extra-6.12.0-124.8.1.el10_1.x86_64");
+}
+
+TEST_CASE(
+    "buildRockyXcatKernelDownloadFallbackCommand stages exact EL10 kernel RPMs")
+{
+    const auto fallbackCommand = buildRockyXcatKernelDownloadFallbackCommand(
+        OS(OS::Distro::Rocky, OS::Platform::el10, 1, OS::Arch::x86_64),
+        "6.12.0-124.8.1.el10_1.x86_64",
+        "/install/kernels/6.12.0-124.8.1.el10_1.x86_64");
+
+    REQUIRE(fallbackCommand.has_value());
+    CHECK(fallbackCommand->contains(
+        "kernel-6.12.0-124.8.1.el10_1.x86_64.rpm "
+        "https://download.rockylinux.org/pub/rocky/10.1/BaseOS/x86_64/os/"
+        "Packages/k/"
+        "kernel-6.12.0-124.8.1.el10_1.x86_64.rpm"));
+    CHECK(fallbackCommand->contains(
+        "kernel-devel-6.12.0-124.8.1.el10_1.x86_64.rpm "
+        "https://download.rockylinux.org/pub/rocky/10.1/AppStream/x86_64/os/"
+        "Packages/k/"
+        "kernel-devel-6.12.0-124.8.1.el10_1.x86_64.rpm"));
+}
+
 TEST_CASE(
     "buildRockyXcatKernelDownloadFallbackCommand stages exact EL9 kernel RPMs")
 {
@@ -2626,15 +2760,16 @@ TEST_CASE("shouldReuseExistingImage only skips genimage when copycds is active")
     CHECK_FALSE(opencattus::services::shouldReuseExistingImage(true, true));
 }
 
-TEST_CASE("buildXcatInfinibandPlan rejects EL10 compute-node staging")
+TEST_CASE("buildXcatInfinibandPlan stages DOCA kernels on EL10")
 {
-    CHECK_THROWS_WITH_AS(
-        [&] {
-            buildXcatInfinibandPlan(OFED(OFED::Kind::Doca, "latest"),
-                OS(OS::Distro::Rocky, OS::Platform::el10, 1, OS::Arch::x86_64),
-                std::nullopt, "6.12.0-65.el10_1.x86_64");
-        }(),
-        doctest::Contains("EL10"), std::invalid_argument);
+    const auto plan = buildXcatInfinibandPlan(OFED(OFED::Kind::Doca, "latest"),
+        OS(OS::Distro::Rocky, OS::Platform::el10, 1, OS::Arch::x86_64),
+        std::nullopt, "6.12.0-65.el10_1.x86_64");
+
+    REQUIRE(plan.kernelVersion.has_value());
+    CHECK(plan.kernelVersion.value() == "6.12.0-65.el10_1.x86_64");
+    REQUIRE(plan.localRepoName.has_value());
+    CHECK(plan.localRepoName.value() == "doca-kernel-6.12.0-65.el10_1.x86_64");
 }
 
 TEST_CASE("shellSingleQuote escapes single quotes")

@@ -6,7 +6,7 @@ System Requirements
 
 Before you attempt to run OpenCATTUS, make sure your head node matches the
 current validated baseline. The project now has validated unattended lab
-coverage on EL8, EL9, and an initial EL10 Confluent path, but the supported
+coverage on EL8, EL9, and EL10 with both provisioners, but the supported
 scope is not identical across those releases.
 
 Minimum Hardware Requirements
@@ -33,7 +33,8 @@ Compute nodes
 ^^^^^^^^^^^^^
 
 - PXE-bootable VMs or bare-metal nodes.
-- 8 GiB of RAM minimum for the current stateless EL9 xCAT path.
+- 8 GiB of RAM minimum for the stateless xCAT paths (EL8, EL9, and EL10);
+  smaller nodes fail while unpacking the root image during PXE boot.
 - CPU topology in the answerfile must match the virtual or physical node
   topology presented to the OS.
 
@@ -74,6 +75,12 @@ Current Recovery Status
        libvirt/KVM lab with one and two deployed compute-node layouts, healthy
        ``sinfo``, and OpenHPC MPI hello-world runs in both the one-node and
        two-node cases.
+   * - Rocky Linux 10.1 + xCAT
+     - Validated
+     - Enabled by xCAT 2.18, the first upstream release with EL10 support.
+       Verified unattended in the EL10 libvirt/KVM lab with two deployed
+       compute nodes, healthy ``sinfo``, and an OpenHPC MPI hello-world run
+       spanning them.
 
 Current EL8 Support Matrix
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -131,51 +138,71 @@ Current EL8 Support Matrix
      - Rocky Linux 8.10 now completes a full dump-regenerate-install cycle in
        the EL8 libvirt/KVM lab for both xCAT and Confluent.
 
-EL10 Bootstrap Matrix
-~~~~~~~~~~~~~~~~~~~~~
+Current EL10 Support Matrix
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+xCAT support on EL10 requires xCAT 2.18 or later, the first upstream release
+with EL10 support. OpenCATTUS installs xCAT from the stable release train on
+``xcat.org`` and provisions DHCP through Kea on EL10 headnodes, following the
+xCAT 2.18 backend selection.
 
 .. list-table::
-   :widths: 30 18 52
+   :widths: 30 18 18 34
    :header-rows: 1
 
    * - Capability
+     - xCAT
      - Confluent
      - Notes
    * - Answerfile-driven unattended install
      - Validated
-     - Verified from a clean Rocky Linux 10.1 libvirt/KVM run.
+     - Validated
+     - Verified from clean Rocky Linux 10.1 libvirt/KVM runs for both
+       provisioners.
    * - Headnode verification
      - Validated
-     - ``chronyd``, NFS, MariaDB, Munge, SLURM, and Confluent services
+     - Validated
+     - ``chronyd``, NFS, MariaDB, Munge, SLURM, and provisioner services
        checked after install.
    * - Single compute node boot and join
      - Validated
-     - ``sinfo -N`` reaches ``idle`` on the deployed node.
+     - Validated
+     - ``sinfo -N`` reaches ``idle`` on the deployed nodes. The xCAT lane
+       was exercised in the two-node layout, where each node boots and joins
+       individually.
    * - OpenHPC MPI hello world
      - Validated
-     - Two MPI ranks run through Slurm in both the one-node layout and the
-       two-node layout.
+     - Validated
+     - Two MPI ranks run through Slurm. The Confluent path is validated in
+       both the one-node and two-node layouts; the xCAT path is validated in
+       the two-node layout.
    * - External + management network topology
+     - Validated
      - Validated
      - This is the current EL10 lab topology.
    * - Multi-node cluster
      - Validated
+     - Validated
      - Two compute nodes boot, join the cluster, and complete the MPI smoke
        test across nodes.
    * - Dedicated service network
+     - Not yet validated
      - Validated
-     - Rocky Linux 10.1 + Confluent now completes the unattended install,
-       verify, and MPI smoke path with a dedicated headnode service NIC and a
+     - Rocky Linux 10.1 + Confluent completes the unattended install, verify,
+       and MPI smoke path with a dedicated headnode service NIC and a
        populated ``[network_service]`` section.
    * - Dedicated application network / OFED path
      - Not yet validated
-     - Still outside the initial EL10 baseline.
+     - Not yet validated
+     - Still outside the EL10 baseline.
    * - TUI-driven install
+     - Not yet validated
      - Not yet validated
      - EL10 work has focused on unattended answerfile installs first.
    * - ``--dump-answerfile`` round-trip
+     - Not yet validated
      - Validated
-     - Rocky Linux 10.1 + Confluent now completes a full dump-regenerate-install
+     - Rocky Linux 10.1 + Confluent completes a full dump-regenerate-install
        cycle in the EL10 libvirt/KVM lab.
 
 Current EL9 Support Matrix

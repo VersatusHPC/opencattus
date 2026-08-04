@@ -28,10 +28,9 @@ auto supportedProvisionersFor(const OS& os) -> std::vector<Cluster::Provisioner>
                 Cluster::Provisioner::xCAT,
                 Cluster::Provisioner::Confluent,
             };
-        case OS::Platform::el10:
-            return { Cluster::Provisioner::Confluent };
         case OS::Platform::el8:
         case OS::Platform::el9:
+        case OS::Platform::el10:
             return {
                 Cluster::Provisioner::xCAT,
                 Cluster::Provisioner::Confluent,
@@ -44,12 +43,22 @@ auto supportedProvisionersFor(const OS& os) -> std::vector<Cluster::Provisioner>
 auto supportedProvisionersFor(const OS& headnodeOS, const OS& computeNodeOS)
     -> std::vector<Cluster::Provisioner>
 {
-    if (headnodeOS.getPlatform() == OS::Platform::el10
-        || computeNodeOS.getPlatform() == OS::Platform::el10) {
-        return { Cluster::Provisioner::Confluent };
+    const auto headnodeSupported = supportedProvisionersFor(headnodeOS);
+    auto supported = supportedProvisionersFor(computeNodeOS);
+    std::erase_if(supported, [&](const auto provisioner) {
+        return std::ranges::find(headnodeSupported, provisioner)
+            == headnodeSupported.end();
+    });
+
+    // xCAT on Ubuntu 24.04 headnodes is only implemented for Ubuntu 24.04
+    // compute images; mirror validateProvisionerSupport() so the menu never
+    // offers a combination the model rejects.
+    if (headnodeOS.getPlatform() == OS::Platform::ubuntu2404
+        && computeNodeOS.getPlatform() != OS::Platform::ubuntu2404) {
+        std::erase(supported, Cluster::Provisioner::xCAT);
     }
 
-    return supportedProvisionersFor(computeNodeOS);
+    return supported;
 }
 
 auto toProvisionerName(Cluster::Provisioner provisioner) -> std::string
@@ -76,7 +85,7 @@ PresenterProvisioner::PresenterProvisioner(
         m_model->getHeadnode().getOS(), m_model->getComputeNodeOS());
     if (supported.size() == 1) {
         m_model->setProvisioner(supported.front());
-        m_view->message(Messages::title, Messages::confluentOnly);
+        m_view->message(Messages::title, Messages::singleProvisioner);
         return;
     }
 
@@ -97,13 +106,14 @@ PresenterProvisioner::PresenterProvisioner(
 
 } // namespace opencattus::presenter
 
-TEST_CASE("supportedProvisionersFor keeps EL10 on confluent")
+TEST_CASE("supportedProvisionersFor keeps EL10 xcat and confluent available")
 {
     const auto supported = supportedProvisionersFor(
         OS(OS::Distro::Rocky, OS::Platform::el10, 1));
 
     CHECK(supported
         == std::vector<Cluster::Provisioner> {
+            Cluster::Provisioner::xCAT,
             Cluster::Provisioner::Confluent,
         });
 }
@@ -141,6 +151,34 @@ TEST_CASE("supportedProvisionersFor checks headnode and compute node releases")
 
     CHECK(supported
         == std::vector<Cluster::Provisioner> {
+            Cluster::Provisioner::xCAT,
+            Cluster::Provisioner::Confluent,
+        });
+}
+
+TEST_CASE("supportedProvisionersFor keeps Ubuntu 24.04 headnodes with "
+          "Enterprise Linux compute images on confluent")
+{
+    const auto supported = supportedProvisionersFor(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0),
+        OS(OS::Distro::Rocky, OS::Platform::el10, 1));
+
+    CHECK(supported
+        == std::vector<Cluster::Provisioner> {
+            Cluster::Provisioner::Confluent,
+        });
+}
+
+TEST_CASE("supportedProvisionersFor keeps Ubuntu 24.04 headnode and compute "
+          "pairs on xcat and confluent")
+{
+    const auto supported = supportedProvisionersFor(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0),
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0));
+
+    CHECK(supported
+        == std::vector<Cluster::Provisioner> {
+            Cluster::Provisioner::xCAT,
             Cluster::Provisioner::Confluent,
         });
 }

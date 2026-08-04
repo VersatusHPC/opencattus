@@ -58,7 +58,9 @@ std::unique_ptr<Options> options::factory(int argc, const char** argv)
     app.add_option(
            "--beegfs-version", opt.beegfsVersion, "BeeGFS default version")
         ->default_str("latest-stable");
-    app.add_option("--xcat-version", opt.xcatVersion, "xCAT default version")
+    app.add_option("--xcat-version", opt.xcatVersion,
+           "xCAT release train (a major.minor release such as 2.18, or "
+           "latest)")
         ->default_str("latest");
     app.add_option(
            "--zabbix-version", opt.zabbixVersion, "Zabbix default version")

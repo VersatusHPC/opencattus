@@ -515,6 +515,7 @@ std::string buildNodeImageChronyCommands(
         return fmt::format(R"(
 # Install and configure chrony
 imgutil exec $scratchdir <<EOF
+set -xeu -o pipefail
 DEBIAN_FRONTEND=noninteractive apt update
 DEBIAN_FRONTEND=noninteractive apt install -y chrony
 sed -e '/^pool /d' -e '/^server .* iburst$/d' -i /etc/chrony/chrony.conf
@@ -529,6 +530,7 @@ EOF
     return fmt::format(R"(
 # Install and configure chrony
 imgutil exec $scratchdir <<EOF
+set -xeu -o pipefail
 dnf install -y chrony
 sed -e '/^server .* iburst$/d' -i /etc/chrony.conf
 echo "server {hnIp} iburst" >> /etc/chrony.conf
@@ -551,6 +553,7 @@ std::string buildNodeImageAutofsCommands(
     return fmt::format(R"(
 # Install and configure nfs and autofs
 imgutil exec $scratchdir <<EOF
+set -xeu -o pipefail
 {installCommand}
 mkdir -p /home /opt/ohpc/pub /opt/spack /opt/intel /opt/nvidia /scratch
 echo "/opt/ohpc/pub /etc/auto.ohpc" > /etc/auto.master.d/ohpc.autofs
@@ -579,6 +582,31 @@ systemctl enable autofs
 EOF
 )",
         fmt::arg("installCommand", installCommand), fmt::arg("hnIp", hnIp));
+}
+
+std::string buildNodeImageMotdCommands(const models::OS& os)
+{
+    // Only Ubuntu ships the chatty dynamic login banner (ESM/Pro adverts, the
+    // pending-updates counter and a changelogs.ubuntu.com fetch that times out
+    // on the isolated compute network). Disable it so node logins are quiet.
+    if (os.getPackageType() != models::OS::PackageType::DEB) {
+        return "";
+    }
+
+    return R"(
+# Quiet down the dynamic Ubuntu login banner on the compute nodes
+imgutil exec $scratchdir <<EOF
+set -xeu -o pipefail
+if [ -d /etc/update-motd.d ]; then
+    chmod -x /etc/update-motd.d/* 2>/dev/null || :
+fi
+:> /etc/motd || :
+if [ -f /etc/default/motd-news ]; then
+    sed -i 's/^ENABLED=1/ENABLED=0/' /etc/default/motd-news
+fi
+systemctl disable motd-news.timer 2>/dev/null || :
+EOF
+)";
 }
 
 std::string buildNodeImageSlurmDefaultsCommand(
@@ -926,14 +954,20 @@ rm -rf /var/lib/confluent/public/os/{image}-diskless || :
 # Customize the image
 #
 
+# Sync the headnode package repositories into the image before any package
+# install, so universe (autofs) and the OHPC/confluent repos resolve. Under
+# `set -e` an unresolved package would otherwise abort the whole image build.
+{nodeImageRepositorySyncCommands}
+
 {nodeImageChronyCommands}
 
 {nodeImageAutofsCommands}
 
+{nodeImageMotdCommands}
+
 # Slurm node configuration
 \install -vD -m 0400 -o munge -g munge /etc/munge/munge.key       $scratchdir/etc/munge/munge.key
 \install -vD -m 0644 -o root  -g root  /etc/slurm/slurm.conf      $scratchdir/etc/slurm/slurm.conf
-{nodeImageRepositorySyncCommands}
 imgutil exec $scratchdir <<EOF
 set -xeu -o pipefail
 {nodeImageInstallCommand}
@@ -1026,6 +1060,8 @@ rm -rf $scratchdir || :
                     .getConnection(Network::Profile::Management)
                     .getAddress()
                     .to_string())),
+        fmt::arg(
+            "nodeImageMotdCommands", buildNodeImageMotdCommands(computeNodeOS)),
         fmt::arg("nodeImageInstallCommand",
             buildNodeImageInstallCommand(computeNodeOS)),
         fmt::arg("nodeImageRepoFiles", buildNodeImageRepoFiles(computeNodeOS)),
@@ -1470,6 +1506,8 @@ TEST_CASE("buildNodeImageChronyCommands refreshes APT metadata on Ubuntu")
     CHECK(script.contains("DEBIAN_FRONTEND=noninteractive apt update\n"
                           "DEBIAN_FRONTEND=noninteractive apt install -y "
                           "chrony"));
+    CHECK(script.contains("imgutil exec $scratchdir <<EOF\nset -xeu -o "
+                          "pipefail\n"));
 }
 
 TEST_CASE("buildNodeImageAutofsCommands refreshes APT metadata on Ubuntu")
@@ -1482,6 +1520,24 @@ TEST_CASE("buildNodeImageAutofsCommands refreshes APT metadata on Ubuntu")
     CHECK(script.contains("DEBIAN_FRONTEND=noninteractive apt update && "
                           "DEBIAN_FRONTEND=noninteractive apt install -y "
                           "autofs nfs-common"));
+    CHECK(script.contains("imgutil exec $scratchdir <<EOF\nset -xeu -o "
+                          "pipefail\n"));
+}
+
+TEST_CASE("buildNodeImageMotdCommands disables the dynamic banner on Ubuntu")
+{
+    using opencattus::models::OS;
+
+    const auto ubuntu = buildNodeImageMotdCommands(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0));
+    CHECK(ubuntu.contains("chmod -x /etc/update-motd.d/*"));
+    CHECK(ubuntu.contains("motd-news"));
+    CHECK(ubuntu.contains("imgutil exec $scratchdir <<EOF\nset -xeu -o "
+                          "pipefail\n"));
+
+    CHECK(
+        buildNodeImageMotdCommands(OS(OS::Distro::Rocky, OS::Platform::el9, 7))
+            .empty());
 }
 
 TEST_CASE("buildNodeImageRepositorySyncCommands copies APT sources on Ubuntu")

@@ -66,30 +66,6 @@ auto nodeOperatingSystemSummary(const Cluster& model) -> std::string
     return fmt::format("Mixed: {}", fmt::join(summaries, ", "));
 }
 
-auto compatibilityWarning(const Cluster& model) -> std::optional<std::string>
-{
-    if (model.getProvisioner() != Cluster::Provisioner::xCAT) {
-        return std::nullopt;
-    }
-
-    const auto headnodeIsEL10
-        = model.getHeadnode().getOS().getPlatform() == OS::Platform::el10;
-    const auto computeNodeIsEL10
-        = model.getComputeNodeOS().getPlatform() == OS::Platform::el10;
-
-    if (headnodeIsEL10 && computeNodeIsEL10) {
-        return "xCAT does not support EL10 headnodes or compute images today";
-    }
-    if (headnodeIsEL10) {
-        return "xCAT does not support EL10 headnodes today";
-    }
-    if (computeNodeIsEL10) {
-        return "xCAT does not support EL10 compute images today";
-    }
-
-    return std::nullopt;
-}
-
 auto cidrSuffixFor(const Network& network) -> std::string
 {
     const auto subnetMask = network.getSubnetMask().to_string();
@@ -323,9 +299,6 @@ auto buildPreflightText(Cluster& model) -> std::string
         provisionerName(model.getProvisioner())));
     rows.emplace_back(
         fmt::format("{:<14} {}", "Nodes", nodeOperatingSystemSummary(model)));
-    if (const auto warning = compatibilityWarning(model); warning.has_value()) {
-        rows.emplace_back(fmt::format("{:<14} {}", "Warning", *warning));
-    }
     rows.emplace_back(
         fmt::format("{:<14} {}", "ISO and OS", isoSummary(model)));
     rows.emplace_back("");
