@@ -50,6 +50,14 @@ auto supportedProvisionersFor(const OS& headnodeOS, const OS& computeNodeOS)
             == headnodeSupported.end();
     });
 
+    // xCAT on Ubuntu 24.04 headnodes is only implemented for Ubuntu 24.04
+    // compute images; mirror validateProvisionerSupport() so the menu never
+    // offers a combination the model rejects.
+    if (headnodeOS.getPlatform() == OS::Platform::ubuntu2404
+        && computeNodeOS.getPlatform() != OS::Platform::ubuntu2404) {
+        std::erase(supported, Cluster::Provisioner::xCAT);
+    }
+
     return supported;
 }
 
@@ -140,6 +148,33 @@ TEST_CASE("supportedProvisionersFor checks headnode and compute node releases")
     const auto supported
         = supportedProvisionersFor(OS(OS::Distro::RHEL, OS::Platform::el10, 1),
             OS(OS::Distro::Rocky, OS::Platform::el9, 6));
+
+    CHECK(supported
+        == std::vector<Cluster::Provisioner> {
+            Cluster::Provisioner::xCAT,
+            Cluster::Provisioner::Confluent,
+        });
+}
+
+TEST_CASE("supportedProvisionersFor keeps Ubuntu 24.04 headnodes with "
+          "Enterprise Linux compute images on confluent")
+{
+    const auto supported = supportedProvisionersFor(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0),
+        OS(OS::Distro::Rocky, OS::Platform::el10, 1));
+
+    CHECK(supported
+        == std::vector<Cluster::Provisioner> {
+            Cluster::Provisioner::Confluent,
+        });
+}
+
+TEST_CASE("supportedProvisionersFor keeps Ubuntu 24.04 headnode and compute "
+          "pairs on xcat and confluent")
+{
+    const auto supported = supportedProvisionersFor(
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0),
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0));
 
     CHECK(supported
         == std::vector<Cluster::Provisioner> {
