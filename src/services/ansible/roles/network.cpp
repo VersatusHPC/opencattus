@@ -82,60 +82,40 @@ void disableNetworkManagerDNSOverride()
         == opencattus::models::OS::Distro::Ubuntu;
 }
 
-[[nodiscard]] std::string buildNetplanNetworkManagerRendererScript(
-    std::optional<std::string_view> externalInterface)
+[[nodiscard]] std::string buildNetplanNetworkManagerRendererScript()
 {
-    // The global renderer hands every undeclared NIC to NetworkManager so the
-    // internal networks can be driven through nmcli. The external interface is
-    // pinned back to networkd (its installer/cloud-init default) so switching
-    // renderers never re-runs DHCP on it: a changed lease would drop the SSH
-    // session running the installer and leave it hung on `netplan apply`.
-    std::string externalOverride;
-    if (externalInterface.has_value() && !externalInterface->empty()) {
-        externalOverride = fmt::format(R"(  ethernets:
-    {}:
-      renderer: networkd
-)",
-            externalInterface.value());
-    }
-
-    return fmt::format(R"(
+    // The global renderer hands every NIC to NetworkManager so the internal
+    // networks can be driven through nmcli. The external interface stays on
+    // NetworkManager as well: it re-requests the DHCP lease for the same MAC
+    // (keeping the address and the SSH session running the installer) and
+    // feeds the lease's DNS servers into systemd-resolved, so name
+    // resolution stays live after the takeover. Pinning the external netdef
+    // back to networkd is not an option here: NetworkManager's netplan
+    // storage backend on Ubuntu rewrites matched netdefs while the internal
+    // profiles are created, which invalidates any pin written beforehand.
+    return R"(
 if command -v netplan >/dev/null 2>&1 && test -d /etc/netplan; then
     cat > /etc/netplan/01-opencattus-networkmanager.yaml <<'EOF'
 network:
   version: 2
   renderer: NetworkManager
-{externalOverride}EOF
+EOF
     chmod 600 /etc/netplan/01-opencattus-networkmanager.yaml
     netplan generate
     netplan apply
 fi
-)",
-        fmt::arg("externalOverride", externalOverride));
+)";
 }
 
-[[nodiscard]] std::optional<std::string_view> externalInterfaceName(
-    const std::list<Connection>& connections)
-{
-    for (const auto& connection : connections) {
-        if (connection.getNetwork()->getProfile()
-            == Network::Profile::External) {
-            return connection.getInterface();
-        }
-    }
-    return std::nullopt;
-}
-
-void ensureNetplanUsesNetworkManager(const std::list<Connection>& connections)
+void ensureNetplanUsesNetworkManager()
 {
     if (!headnodeUsesUbuntu()) {
         return;
     }
 
-    LOG_INFO("Configuring netplan: NetworkManager for internal interfaces, "
-             "networkd kept for the external interface")
-    shell::cmd(buildNetplanNetworkManagerRendererScript(
-        externalInterfaceName(connections)));
+    LOG_INFO("Configuring netplan: NetworkManager renderer for all "
+             "interfaces")
+    shell::cmd(buildNetplanNetworkManagerRendererScript());
 }
 
 // WARNING: We used to do this in a DRY way, but each connection has its own
@@ -182,7 +162,7 @@ void configureServiceNetwork(const Connection& connection)
 void configureNetworks(const std::list<Connection>& connections)
 {
     osservice()->enableService("NetworkManager");
-    ensureNetplanUsesNetworkManager(connections);
+    ensureNetplanUsesNetworkManager();
     disableNetworkManagerDNSOverride();
 
     for (const auto& connection : std::as_const(connections)) {
@@ -320,31 +300,15 @@ TEST_CASE("renderStaticConnectionScript activates the generated profile")
 TEST_CASE(
     "buildNetplanNetworkManagerRendererScript sets NetworkManager renderer")
 {
-    const auto script = buildNetplanNetworkManagerRendererScript("enX0");
+    const auto script = buildNetplanNetworkManagerRendererScript();
 
     CHECK(script.contains("/etc/netplan/01-opencattus-networkmanager.yaml"));
     CHECK(script.contains("renderer: NetworkManager"));
     CHECK(script.contains("netplan generate"));
     CHECK(script.contains("netplan apply"));
-}
-
-TEST_CASE("buildNetplanNetworkManagerRendererScript pins the external "
-          "interface to networkd")
-{
-    const auto script = buildNetplanNetworkManagerRendererScript("enX0");
-
-    CHECK(script.contains("  ethernets:\n    enX0:\n      renderer: networkd"));
-}
-
-TEST_CASE("buildNetplanNetworkManagerRendererScript omits the override without "
-          "an external interface")
-{
-    const auto withoutInterface
-        = buildNetplanNetworkManagerRendererScript(std::nullopt);
-    const auto withEmptyInterface
-        = buildNetplanNetworkManagerRendererScript("");
-
-    CHECK_FALSE(withoutInterface.contains("renderer: networkd"));
-    CHECK_FALSE(withoutInterface.contains("ethernets:"));
-    CHECK_FALSE(withEmptyInterface.contains("renderer: networkd"));
+    // No per-interface renderer pin: NetworkManager keeps the external NIC
+    // (same-MAC DHCP re-lease preserves the address) and feeds its DNS into
+    // systemd-resolved.
+    CHECK_FALSE(script.contains("renderer: networkd"));
+    CHECK_FALSE(script.contains("ethernets:"));
 }
