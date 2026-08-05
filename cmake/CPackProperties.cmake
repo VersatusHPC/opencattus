@@ -1,7 +1,8 @@
-set(OPENCATTUS_PACKAGE_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
-if(PROJECT_VERSION_PATCH GREATER 0)
-    set(OPENCATTUS_PACKAGE_VERSION "${PROJECT_VERSION}")
-endif()
+# Package version must equal the full project version: release tags are
+# vX.Y.Z, the Jenkins classify stage checks the tag against PROJECT_VERSION,
+# and the promotion manifest checks the tag against the built RPM EVR.
+# Dropping the .0 patch here (as before 1.2.0) makes those checks disagree.
+set(OPENCATTUS_PACKAGE_VERSION "${PROJECT_VERSION}")
 
 set(OPENCATTUS_RPM_RELEASE "1" CACHE STRING "RPM package release")
 set(OPENCATTUS_DEB_RELEASE "1" CACHE STRING "DEB package release")
