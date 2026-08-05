@@ -1,4 +1,26 @@
+project: opencattus
 languages: [cpp]
+
+publish:
+  enabled: true
+  product: opencattus
+  channel: testing
+  promotion:
+    request_on_tag: true
+    promote_debug: true
+    run_release_smoke: true
+    enforce_tag_match: true
+  smoke:
+    enabled: true
+    packages:
+      el8:
+        - opencattus
+      el9:
+        - opencattus
+      el10:
+        - opencattus
+      ubuntu2404:
+        - opencattus
 
 preflight:
   image: quay.io/almalinuxorg/almalinux:10
@@ -9,7 +31,7 @@ container_builds:
     arch: x86_64
     script: ./ci/build.sh
     args: [el8, x86_64]
-    artifacts: "out/rpm/el8/*.rpm"
+    artifacts: "out/rpm/el8/x86_64/*.rpm"
     env:
       OPENCATTUS_EPEL_MIRROR: "http://mirror.local.versatushpc.com.br/epel"
   - name: EL9
@@ -17,7 +39,7 @@ container_builds:
     arch: x86_64
     script: ./ci/build.sh
     args: [el9, x86_64]
-    artifacts: "out/rpm/el9/*.rpm"
+    artifacts: "out/rpm/el9/x86_64/*.rpm"
     env:
       OPENCATTUS_EPEL_MIRROR: "http://mirror.local.versatushpc.com.br/epel"
   - name: EL10
@@ -25,13 +47,14 @@ container_builds:
     arch: x86_64
     script: ./ci/build.sh
     args: [el10, x86_64]
-    artifacts: "out/rpm/el10/*.rpm"
+    artifacts: "out/rpm/el10/x86_64/*.rpm"
   - name: Ubuntu 24.04
     image: docker.io/library/ubuntu:24.04
     arch: x86_64
+    format: deb
     script: ./ci/build.sh
     args: [ubuntu2404, x86_64]
-    artifacts: "out/deb/*.deb"
+    artifacts: "out/deb/ubuntu2404/amd64/*.deb"
 
 cache:
   enabled: true
