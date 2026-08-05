@@ -53,9 +53,28 @@ macro(opencattus_enable_cppcheck WARNINGS_AS_ERRORS CPPCHECK_OPTIONS)
        STREQUAL
        "")
 
-      set(CMAKE_CXX_CPPCHECK ${CMAKE_CXX_CPPCHECK} --std=c++${CMAKE_CXX_STANDARD})
+      # Older cppcheck releases (e.g. 2.4 on EL8) reject --std=c++23 as an
+      # unrecognized option. Analysing C++23 sources under an older standard
+      # yields misleading results, so disable cppcheck instead of silently
+      # downgrading the checked standard.
+      execute_process(
+        COMMAND ${CPPCHECK} --std=c++${CMAKE_CXX_STANDARD} --version
+        RESULT_VARIABLE CPPCHECK_STD_PROBE
+        OUTPUT_QUIET ERROR_QUIET)
+      if(CPPCHECK_STD_PROBE EQUAL 0)
+        set(CMAKE_CXX_CPPCHECK ${CMAKE_CXX_CPPCHECK} --std=c++${CMAKE_CXX_STANDARD})
+      else()
+        message(
+          WARNING
+            "cppcheck does not support --std=c++${CMAKE_CXX_STANDARD}; disabling cppcheck analysis. Install cppcheck 2.11 or later to re-enable it.")
+        unset(CMAKE_CXX_CPPCHECK)
+      endif()
     endif()
-    if(${WARNINGS_AS_ERRORS})
+    # Guard on CMAKE_CXX_CPPCHECK so a failed standard probe above keeps
+    # cppcheck fully disabled: list(APPEND) would otherwise recreate the
+    # variable holding only --error-exitcode=2 and CMake would try to run
+    # that flag as the analyzer.
+    if(CMAKE_CXX_CPPCHECK AND ${WARNINGS_AS_ERRORS})
       list(APPEND CMAKE_CXX_CPPCHECK --error-exitcode=2)
     endif()
   else()

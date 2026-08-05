@@ -73,8 +73,10 @@ case "${provisioner}" in
     xcat)
         export PATH="/opt/xcat/bin:/opt/xcat/sbin:${PATH}"
         if command -v apt >/dev/null 2>&1; then
+            # xCAT 2.18 defaults to the Kea DHCP backend on Ubuntu >= 22.04;
+            # the Debian packaging names the service kea-dhcp4-server.
             provisioner_services=(
-                isc-dhcp-server
+                kea-dhcp4-server
                 xcatd
             )
         elif [[ "$(. /etc/os-release && printf '%s' "${VERSION_ID%%.*}")" -ge 10 ]]; then

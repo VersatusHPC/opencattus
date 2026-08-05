@@ -143,8 +143,10 @@ Current EL10 Support Matrix
 
 xCAT support on EL10 requires xCAT 2.18 or later, the first upstream release
 with EL10 support. OpenCATTUS installs xCAT from the stable release train on
-``xcat.org`` and provisions DHCP through Kea on EL10 headnodes, following the
-xCAT 2.18 backend selection.
+``xcat.org`` and provisions DHCP through Kea on EL10 and Ubuntu headnodes,
+following the xCAT 2.18 backend selection, which picks Kea on EL10 and on
+Ubuntu 22.04 or newer. The service is ``kea-dhcp4`` on EL10 and
+``kea-dhcp4-server`` on Ubuntu.
 
 .. list-table::
    :widths: 30 18 18 34
