@@ -1,0 +1,4 @@
+# CI/CD contract changes require platform maintainer review.
+/.versatushpc/ @viniciusferrao
+/ci/ @viniciusferrao
+/Jenkinsfile @viniciusferrao
