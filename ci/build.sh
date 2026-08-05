@@ -87,6 +87,9 @@ echo "All ${assertion_line}"
 
 if [[ "${DISTRO}" == el* || "${DISTRO}" == ubi* ]]; then
     # Repo publishing (ciPublishRepo) expects out/rpm/<distro>/<arch>/*.rpm.
+    # Recreate the directory: the agent workspace persists between builds and
+    # stale packages from a previous version would be stashed and published.
+    rm -rf "out/rpm/${DISTRO}/${ARCH}"
     mkdir -p "out/rpm/${DISTRO}/${ARCH}"
     export QA_RPATHS=$((0x0002|0x0010))
     cpack -G RPM \
@@ -96,6 +99,7 @@ if [[ "${DISTRO}" == el* || "${DISTRO}" == ubi* ]]; then
 elif [[ "${DISTRO}" == ubuntu* ]]; then
     # Repo publishing expects out/deb/<distro>/<dpkg arch>/*.deb (amd64, not x86_64).
     deb_arch=$(dpkg --print-architecture)
+    rm -rf "out/deb/${DISTRO}/${deb_arch}"
     mkdir -p "out/deb/${DISTRO}/${deb_arch}"
     cpack -G DEB \
         --config "build-${DISTRO}/CPackConfig.cmake" \
