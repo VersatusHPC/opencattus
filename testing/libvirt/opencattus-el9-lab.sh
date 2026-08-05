@@ -78,10 +78,10 @@ as_root() {
 restore_workspace_ownership() {
     local target_uid=${SUDO_UID:-}
     local target_gid=${SUDO_GID:-}
+    local workspace_real
+    local repo_real
 
     [[ -n "${WORKSPACE:-}" ]] || return 0
-    [[ "${WORKSPACE}" != "/" ]] || return 0
-    [[ -d "${WORKSPACE}" ]] || return 0
     [[ $(id -u) -eq 0 ]] || return 0
 
     if [[ ! "${target_uid}" =~ ^[0-9]+$ || ! "${target_gid}" =~ ^[0-9]+$ ]]; then
@@ -93,10 +93,22 @@ restore_workspace_ownership() {
         return 0
     fi
 
-    if ! find "${WORKSPACE}" -xdev \
+    # WORKSPACE comes from the caller's environment. Only sweep it when it
+    # resolves to the repository checkout this script runs from — in the CI
+    # pipeline WORKSPACE is exactly that checkout — so the pinned sudo grant
+    # cannot be pointed at an arbitrary host tree (WORKSPACE=/etc) and turned
+    # into a recursive-chown escalation primitive.
+    workspace_real=$(cd -- "${WORKSPACE}" 2>/dev/null && pwd -P) || workspace_real=
+    repo_real=$(cd -- "${REPO_ROOT}" 2>/dev/null && pwd -P) || repo_real=
+    if [[ -z "${workspace_real}" || -z "${repo_real}" || "${workspace_real}" != "${repo_real}" ]]; then
+        log "WORKSPACE ${WORKSPACE} does not resolve to the repository checkout ${REPO_ROOT}; leaving ownership unchanged"
+        return 0
+    fi
+
+    if ! find "${workspace_real}" -xdev \
         \( ! -user "${target_uid}" -o ! -group "${target_gid}" \) \
         -exec chown -h "${target_uid}:${target_gid}" {} +; then
-        log "WARNING: could not restore ownership of every path under ${WORKSPACE}"
+        log "WARNING: could not restore ownership of every path under ${workspace_real}"
     fi
 }
 

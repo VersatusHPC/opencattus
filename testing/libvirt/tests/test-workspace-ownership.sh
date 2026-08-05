@@ -34,18 +34,26 @@ die() {
 }
 
 # Creates a sandbox with a fake workspace and PATH stubs, and exports
-# SANDBOX, STUB_BIN, WORKSPACE_DIR, and CHOWN_LOG for the current case.
+# SANDBOX, STUB_BIN, WORKSPACE_DIR, WORKSPACE_HARNESS_DIR, and CHOWN_LOG
+# for the current case. The harness scripts are copied inside the fake
+# workspace to mirror the CI layout, where WORKSPACE is the repository
+# checkout the running script lives in — the ownership sweep only runs
+# in that layout.
 make_sandbox() {
-    SANDBOX=$(mktemp -d)
+    # pwd -P so path assertions match the physical paths the trap sweeps
+    # (macOS mktemp hands out /var/... symlinked to /private/var/...).
+    SANDBOX=$(cd -- "$(mktemp -d)" && pwd -P)
     SANDBOXES+=("${SANDBOX}")
 
     STUB_BIN="${SANDBOX}/stub-bin"
     WORKSPACE_DIR="${SANDBOX}/workspace"
+    WORKSPACE_HARNESS_DIR="${WORKSPACE_DIR}/testing/libvirt"
     CHOWN_LOG="${SANDBOX}/chown.log"
 
-    mkdir -p "${STUB_BIN}" "${WORKSPACE_DIR}/nested"
+    mkdir -p "${STUB_BIN}" "${WORKSPACE_DIR}/nested" "${WORKSPACE_HARNESS_DIR}"
     : >"${WORKSPACE_DIR}/build-artifact"
     : >"${WORKSPACE_DIR}/nested/lab-log"
+    cp "${HARNESS_DIR}"/opencattus-*-lab.sh "${WORKSPACE_HARNESS_DIR}/"
 
     cat >"${STUB_BIN}/id" <<'EOF'
 #!/usr/bin/env bash
@@ -137,7 +145,7 @@ test_success_restores_ownership_in_every_variant() {
         make_sandbox
 
         rc=0
-        run_lab "${HARNESS_DIR}/${variant}" 0 "${WORKSPACE_DIR}" \
+        run_lab "${WORKSPACE_HARNESS_DIR}/${variant}" 0 "${WORKSPACE_DIR}" \
             "${TARGET_UID}" "${TARGET_GID}" -h >/dev/null 2>&1 || rc=$?
         [[ "${rc}" -eq 0 ]] || die "${variant}: -h should exit 0, got ${rc}"
 
@@ -150,7 +158,7 @@ test_failure_still_restores_ownership_and_keeps_exit_code() {
     local rc=0
 
     make_sandbox
-    run_lab "${HARNESS_DIR}/opencattus-el9-lab.sh" 0 "${WORKSPACE_DIR}" \
+    run_lab "${WORKSPACE_HARNESS_DIR}/opencattus-el9-lab.sh" 0 "${WORKSPACE_DIR}" \
         "${TARGET_UID}" "${TARGET_GID}" -c "${SANDBOX}/missing.env" run \
         >/dev/null 2>&1 || rc=$?
 
@@ -177,7 +185,7 @@ EOF
     # kill would signal the subshell and never reach the harness traps.
     build_lab_env_args 0 "${WORKSPACE_DIR}" "${TARGET_UID}" "${TARGET_GID}"
     (
-        exec env -i "${ENV_ARGS[@]}" "${HARNESS_DIR}/opencattus-el9-lab.sh" \
+        exec env -i "${ENV_ARGS[@]}" "${WORKSPACE_HARNESS_DIR}/opencattus-el9-lab.sh" \
             -c "${SANDBOX}/hang.env" run
     ) >/dev/null 2>&1 &
     pid=$!
@@ -198,7 +206,7 @@ EOF
 
 test_skipped_without_workspace() {
     make_sandbox
-    run_lab "${HARNESS_DIR}/opencattus-el9-lab.sh" 0 "" \
+    run_lab "${WORKSPACE_HARNESS_DIR}/opencattus-el9-lab.sh" 0 "" \
         "${TARGET_UID}" "${TARGET_GID}" -h >/dev/null 2>&1 \
         || die "no-workspace path: -h should exit 0"
 
@@ -208,7 +216,7 @@ test_skipped_without_workspace() {
 
 test_skipped_when_not_root() {
     make_sandbox
-    run_lab "${HARNESS_DIR}/opencattus-el9-lab.sh" 1000 "${WORKSPACE_DIR}" \
+    run_lab "${WORKSPACE_HARNESS_DIR}/opencattus-el9-lab.sh" 1000 "${WORKSPACE_DIR}" \
         "${TARGET_UID}" "${TARGET_GID}" -h >/dev/null 2>&1 \
         || die "non-root path: -h should exit 0"
 
@@ -216,12 +224,42 @@ test_skipped_when_not_root() {
     log "ok: trap stays inert when the harness does not run as root"
 }
 
+test_skipped_when_workspace_is_not_the_checkout() {
+    local stderr_log
+
+    # WORKSPACE points at a directory that is not the checkout the running
+    # harness lives in — the sweep must refuse, or the pinned sudo grant
+    # becomes a recursive-chown escalation primitive (WORKSPACE=/etc).
+    make_sandbox
+    stderr_log="${SANDBOX}/stderr.log"
+    run_lab "${HARNESS_DIR}/opencattus-el9-lab.sh" 0 "${WORKSPACE_DIR}" \
+        "${TARGET_UID}" "${TARGET_GID}" -h >/dev/null 2>"${stderr_log}" \
+        || die "foreign-workspace path: -h should exit 0"
+
+    assert_no_chown "foreign-workspace path"
+    grep -q 'does not resolve to the repository checkout' "${stderr_log}" \
+        || die "foreign-workspace path: expected a mismatch warning"
+    log "ok: trap refuses a WORKSPACE outside the running checkout"
+}
+
+test_skipped_when_workspace_is_a_parent_of_the_checkout() {
+    # A parent directory of the checkout must also be refused; only the
+    # checkout root itself may be swept.
+    make_sandbox
+    run_lab "${WORKSPACE_HARNESS_DIR}/opencattus-el9-lab.sh" 0 "${SANDBOX}" \
+        "${TARGET_UID}" "${TARGET_GID}" -h >/dev/null 2>&1 \
+        || die "parent-workspace path: -h should exit 0"
+
+    assert_no_chown "parent-workspace path"
+    log "ok: trap refuses a WORKSPACE above the running checkout"
+}
+
 test_skipped_without_sudo_ids() {
     local stderr_log
 
     make_sandbox
     stderr_log="${SANDBOX}/stderr.log"
-    run_lab "${HARNESS_DIR}/opencattus-el9-lab.sh" 0 "${WORKSPACE_DIR}" \
+    run_lab "${WORKSPACE_HARNESS_DIR}/opencattus-el9-lab.sh" 0 "${WORKSPACE_DIR}" \
         "" "" -h >/dev/null 2>"${stderr_log}" \
         || die "no-sudo path: -h should exit 0"
 
@@ -236,6 +274,8 @@ test_failure_still_restores_ownership_and_keeps_exit_code
 test_sigterm_restores_ownership
 test_skipped_without_workspace
 test_skipped_when_not_root
+test_skipped_when_workspace_is_not_the_checkout
+test_skipped_when_workspace_is_a_parent_of_the_checkout
 test_skipped_without_sudo_ids
 
 log "All workspace-ownership tests passed"
