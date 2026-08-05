@@ -86,16 +86,19 @@ fi
 echo "All ${assertion_line}"
 
 if [[ "${DISTRO}" == el* || "${DISTRO}" == ubi* ]]; then
-    mkdir -p "out/rpm/${DISTRO}"
+    # Repo publishing (ciPublishRepo) expects out/rpm/<distro>/<arch>/*.rpm.
+    mkdir -p "out/rpm/${DISTRO}/${ARCH}"
     export QA_RPATHS=$((0x0002|0x0010))
     cpack -G RPM \
         --config "build-${DISTRO}/CPackConfig.cmake" \
-        -B "out/rpm/${DISTRO}"
-    ls -l "out/rpm/${DISTRO}"/opencattus*.rpm
+        -B "out/rpm/${DISTRO}/${ARCH}"
+    ls -l "out/rpm/${DISTRO}/${ARCH}"/opencattus*.rpm
 elif [[ "${DISTRO}" == ubuntu* ]]; then
-    mkdir -p out/deb
+    # Repo publishing expects out/deb/<distro>/<dpkg arch>/*.deb (amd64, not x86_64).
+    deb_arch=$(dpkg --print-architecture)
+    mkdir -p "out/deb/${DISTRO}/${deb_arch}"
     cpack -G DEB \
         --config "build-${DISTRO}/CPackConfig.cmake" \
-        -B out/deb
-    ls -l out/deb/opencattus*.deb
+        -B "out/deb/${DISTRO}/${deb_arch}"
+    ls -l "out/deb/${DISTRO}/${deb_arch}"/opencattus*.deb
 fi
