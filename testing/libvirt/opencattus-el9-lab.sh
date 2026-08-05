@@ -67,6 +67,56 @@ as_root() {
     fi
 }
 
+# CI tag builds run this harness as real root (sudo) with the Jenkins
+# checkout as ${WORKSPACE}. Root-owned files left under the workspace
+# cannot be deleted by the agent user and break the next checkout, and
+# the rootless reclaim guard in the shared pipeline library cannot map
+# real-root ownership back. Hand every such path back to the invoking
+# sudo user before exiting, on success, failure, and fatal signals
+# alike. The distro wrappers exec this script, so the trap covers every
+# opencattus-*-lab.sh variant.
+restore_workspace_ownership() {
+    local target_uid=${SUDO_UID:-}
+    local target_gid=${SUDO_GID:-}
+    local workspace_real
+    local repo_real
+
+    [[ -n "${WORKSPACE:-}" ]] || return 0
+    [[ $(id -u) -eq 0 ]] || return 0
+
+    if [[ ! "${target_uid}" =~ ^[0-9]+$ || ! "${target_gid}" =~ ^[0-9]+$ ]]; then
+        log "WORKSPACE is set but SUDO_UID/SUDO_GID are unavailable; leaving ownership under ${WORKSPACE} unchanged"
+        return 0
+    fi
+
+    if [[ "${target_uid}" -eq 0 ]]; then
+        return 0
+    fi
+
+    # WORKSPACE comes from the caller's environment. Only sweep it when it
+    # resolves to the repository checkout this script runs from — in the CI
+    # pipeline WORKSPACE is exactly that checkout — so the pinned sudo grant
+    # cannot be pointed at an arbitrary host tree (WORKSPACE=/etc) and turned
+    # into a recursive-chown escalation primitive.
+    workspace_real=$(cd -- "${WORKSPACE}" 2>/dev/null && pwd -P) || workspace_real=
+    repo_real=$(cd -- "${REPO_ROOT}" 2>/dev/null && pwd -P) || repo_real=
+    if [[ -z "${workspace_real}" || -z "${repo_real}" || "${workspace_real}" != "${repo_real}" ]]; then
+        log "WORKSPACE ${WORKSPACE} does not resolve to the repository checkout ${REPO_ROOT}; leaving ownership unchanged"
+        return 0
+    fi
+
+    if ! find "${workspace_real}" -xdev \
+        \( ! -user "${target_uid}" -o ! -group "${target_gid}" \) \
+        -exec chown -h "${target_uid}:${target_gid}" {} +; then
+        log "WARNING: could not restore ownership of every path under ${workspace_real}"
+    fi
+}
+
+trap restore_workspace_ownership EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 short_token() {
     local sanitized
     sanitized=$(printf '%s' "$1" | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]')

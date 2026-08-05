@@ -21,6 +21,10 @@ if [ -x ./ci/check-format.sh ]; then
     ./ci/check-format.sh
 fi
 
+if [ -x ./testing/libvirt/tests/test-workspace-ownership.sh ]; then
+    ./testing/libvirt/tests/test-workspace-ownership.sh
+fi
+
 cmake -S . -B build-preflight -G Ninja -DBUILD_TESTING=ON
 cmake --build build-preflight --target opencattus OpenCATTUS-tests -j"$(nproc)"
 

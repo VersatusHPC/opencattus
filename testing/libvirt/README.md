@@ -406,6 +406,16 @@ For the EL9 libvirt workflow, set these repository variables to paths that exist
 
 Run the workflow from the Actions tab when you want a full unattended cluster gate. The workflow uses the checked-out source tree as `OPENCATTUS_SOURCE_DIR`, creates an isolated lab named from the GitHub run id, prints the tail of the collected logs on failure, and destroys the lab afterwards by default. Set the `keep_lab` workflow input to keep the failed or successful lab around for manual inspection.
 
+## CI workspace ownership
+
+Jenkins tag builds run the harness as real root through a pinned sudoers grant, with the repository checkout as `WORKSPACE`. Files created under the workspace during such a run would stay owned by root, and the agent user cannot delete them during the next checkout; the shared pipeline library's rootless reclaim guard cannot map real-root files back either.
+
+`opencattus-el9-lab.sh` therefore installs an exit trap that re-owns every path under `WORKSPACE` to `SUDO_UID:SUDO_GID` before exiting. The trap fires on success, failure, and `SIGHUP`/`SIGINT`/`SIGTERM` (Jenkins timeouts send `SIGTERM`; a `SIGKILL` cannot be intercepted). It stays inert unless all of these hold: `WORKSPACE` resolves to exactly the repository checkout the running script lives in (which is what Jenkins sets it to), the harness runs as root, and `SUDO_UID`/`SUDO_GID` identify a non-root invoking user — so unprivileged GitHub Actions runs and manual root sessions without sudo are unaffected, and the sweep cannot be pointed at an unrelated host directory. The re-own uses `chown -h`, so symlinks under the workspace never change the ownership of their targets.
+
+The distro wrappers (`opencattus-el8-lab.sh`, `opencattus-el10-lab.sh`, `opencattus-ubuntu24-lab.sh`) `exec` the shared implementation, so the same cleanup covers every variant.
+
+Stub-based tests for this behavior live in `tests/test-workspace-ownership.sh` (run by `ci/preflight.sh`): they stub `id` and `chown` on `PATH` to simulate the root/sudo environment and assert the trap's chown targets, skip conditions, and exit codes without touching real ownership.
+
 ## Useful commands
 
 ```bash
