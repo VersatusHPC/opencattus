@@ -354,6 +354,7 @@ load_defaults() {
     COMPUTE_STATEFUL_DISK_GB=${COMPUTE_STATEFUL_DISK_GB:-100}
 
     OVMF_CODE_PATH=${OVMF_CODE_PATH:-/usr/share/edk2/ovmf/OVMF_CODE.fd}
+    OVMF_VARS_PATH=${OVMF_VARS_PATH:-/usr/share/edk2/ovmf/OVMF_VARS.fd}
 
     CLUSTER_NAME=${CLUSTER_NAME:-opencattus}
     COMPANY_NAME=${COMPANY_NAME:-opencattus-enterprises}
@@ -1309,9 +1310,16 @@ write_compute_domain_xml() {
     prov_type=$(node_provision_type "${index}")
 
     if [[ "${boot_mode}" == "uefi" ]]; then
+        # An explicit pflash loader without <nvram> makes libvirt consult only
+        # the qemu.conf nvram map, which is empty on stock EL10 lab hosts, and
+        # the domain fails to start with "unable to find any master var store".
+        # Passing the VARS template keeps the harness independent of host-side
+        # libvirt configuration; the per-domain store lives in IMAGE_DIR so
+        # destroy_lab removes it with the disks.
         os_block="  <os>
     <type arch='x86_64'>hvm</type>
     <loader readonly='yes' type='pflash'>${OVMF_CODE_PATH}</loader>
+    <nvram template='${OVMF_VARS_PATH}'>${IMAGE_DIR}/${domain}_VARS.fd</nvram>
     <boot dev='network'/>
   </os>"
     else
