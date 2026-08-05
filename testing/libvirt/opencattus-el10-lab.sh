@@ -18,4 +18,6 @@ export PROVISIONER
 export MPI_SMOKE_NODES
 export MPI_SMOKE_TASKS
 
+# The shared implementation installs the ${WORKSPACE} ownership-restore
+# exit trap; exec keeps that trap in charge of this variant's cleanup.
 exec "${SCRIPT_DIR}/opencattus-el9-lab.sh" "$@"
