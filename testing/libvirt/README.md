@@ -406,6 +406,22 @@ For the EL9 libvirt workflow, set these repository variables to paths that exist
 
 Run the workflow from the Actions tab when you want a full unattended cluster gate. The workflow uses the checked-out source tree as `OPENCATTUS_SOURCE_DIR`, creates an isolated lab named from the GitHub run id, prints the tail of the collected logs on failure, and destroys the lab afterwards by default. Set the `keep_lab` workflow input to keep the failed or successful lab around for manual inspection.
 
+## CI lab host assets
+
+The Jenkins integration-lab lanes (`ci/lab/*.env`) depend on host-side assets
+that CI does not manage. Before cutting a release tag, verify on every x86
+lab runner (rome02, rome03 — note `/var/lib/libvirt/images` is shared NFS
+storage, so one copy serves both):
+
+- Every `BASE_IMAGE` and `CLUSTER_ISO` path named in `ci/lab/*.env` exists.
+- "latest" media match the pinned `DISTRO_VERSION`: `copycds` derives xCAT
+  osimage names from the ISO's `.discinfo`, and a moved
+  `AlmaLinux-9-latest` ISO (9.7 → 9.8) breaks the lanes with an osimage
+  name mismatch even though the install media itself works.
+- The libvirt modular daemon sockets are active (`virsh net-list` succeeds)
+  and `edk2-ovmf` is current; UEFI compute nodes need the OVMF VARS template
+  named by `OVMF_VARS_PATH`.
+
 ## CI workspace ownership
 
 Jenkins tag builds run the harness as real root through a pinned sudoers grant, with the repository checkout as `WORKSPACE`. Files created under the workspace during such a run would stay owned by root, and the agent user cannot delete them during the next checkout; the shared pipeline library's rootless reclaim guard cannot map real-root files back either.
