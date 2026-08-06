@@ -115,6 +115,16 @@ Review the dry-run plan, present it to the user, and only rerun without
 the default approval boundary — approvers: ferrao, daniel, dieguez
 @versatushpc.com.br.
 
+Use the script's `--manifest-from-job` flow, NOT the tag build's
+auto-submitted request, for the actual promotion: DEB promotion is
+digest-bound (`--expect-sha256`), DEB builds are not bit-reproducible, and
+the tag build's manifest carries its own rebuilt DEB's sha — which can never
+match the master-published content in testing. The master build's manifest
+is the one whose digests equal the testing-channel content (v1.2.0: the
+tag-submitted promote build failed exactly this way; `--manifest-from-job
+opencattus` passed and promoted). The tag-submitted request still serves as
+the audit record that the tagged tree passed full validation.
+
 ### 8. Verify and report
 
 - Release channel repos updated (`versatushpc-rpm-<distro>-release`).
