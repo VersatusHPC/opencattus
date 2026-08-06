@@ -60,8 +60,14 @@ set(CPACK_RPM_SPEC_MORE_DEFINE
 
 set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
 set(CPACK_DEBIAN_PACKAGE_NAME "${CPACK_PACKAGE_NAME}")
-set(CPACK_DEBIAN_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION}")
-set(CPACK_DEBIAN_PACKAGE_RELEASE "${OPENCATTUS_DEB_RELEASE}")
+# DEB versions follow the platform family-archive convention
+# <version>+<suite><release> (for example 1.2.0+noble1): suites share one
+# pool, so per-suite builds must carry distinct versions, and the release
+# manifest strips the +<suite><release> stamp when matching the vX.Y.Z tag.
+# The release number is folded into the stamp; CPACK_DEBIAN_PACKAGE_RELEASE
+# must stay unset or CPack appends another -<release> after the stamp.
+set(OPENCATTUS_DEB_SUITE "noble" CACHE STRING "Ubuntu suite stamp for DEB versions")
+set(CPACK_DEBIAN_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION}+${OPENCATTUS_DEB_SUITE}${OPENCATTUS_DEB_RELEASE}")
 set(CPACK_DEBIAN_PACKAGE_SECTION "admin")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${CPACK_PACKAGE_CONTACT}")
