@@ -6,7 +6,6 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
-#include <cstdlib>
 #include <deque>
 #include <filesystem>
 #include <fmt/core.h>
@@ -38,6 +37,7 @@
 #include <opencattus/presenter/PresenterTime.h>
 #include <opencattus/services/options.h>
 #include <opencattus/services/runner.h>
+#include <opencattus/services/timezone.h>
 #include <opencattus/view/view.h>
 
 namespace {
@@ -505,34 +505,25 @@ auto hasUsableInfinibandInterface() -> bool
     return !usableInfinibandInterfaces().empty();
 }
 
-constexpr std::string_view zone1970TabCommand
-    = R"(bash -c "test -r /usr/share/zoneinfo/zone1970.tab && cat /usr/share/zoneinfo/zone1970.tab || true")";
-constexpr std::string_view zone1970TabEnv = "OPENCATTUS_ZONE1970_TAB";
+// Synthetic zone1970.tab lines are injected in-process through
+// Timezone::ScopedTestZone1970Tab instead of a shared temp file so tests
+// never observe the host's tzdata (or another run's stale fixture). The
+// Outputs entry under this key carries the injected lines.
+constexpr std::string_view zone1970TabKey = "zone1970.tab";
 constexpr std::string_view localeMetadataCommand = "locale -av";
 constexpr std::string_view advancedLocaleChoice = "Advanced / legacy locales";
 
-void configureZone1970Fixture(const ScriptedRunner::Outputs& outputs)
-{
-    const auto path = std::filesystem::temp_directory_path()
-        / "opencattus-test-zone1970.tab";
-
-    std::ofstream file(path, std::ios::trunc);
-    const auto output = outputs.find(std::string(zone1970TabCommand));
-    if (output != outputs.end()) {
-        for (const auto& line : output->second) {
-            file << line << '\n';
-        }
-    }
-    file.close();
-
-    setenv(zone1970TabEnv.data(), path.c_str(), 1);
-}
-
-void initializePresenterTestEnvironment(
+[[nodiscard]] Timezone::ScopedTestZone1970Tab
+initializePresenterTestEnvironment(
     ScriptedRunner::Outputs outputs = ScriptedRunner::Outputs { },
     bool dryRun = false)
 {
-    configureZone1970Fixture(outputs);
+    std::vector<std::string> zone1970Lines;
+    if (const auto entry = outputs.find(std::string(zone1970TabKey));
+        entry != outputs.end()) {
+        zone1970Lines = std::move(entry->second);
+        outputs.erase(entry);
+    }
 
     opencattus::Singleton<const Options>::init(
         std::make_unique<const Options>(Options {
@@ -542,12 +533,14 @@ void initializePresenterTestEnvironment(
     std::unique_ptr<IRunner> runner
         = std::make_unique<ScriptedRunner>(std::move(outputs));
     opencattus::Singleton<IRunner>::init(std::move(runner));
+
+    return Timezone::ScopedTestZone1970Tab(std::move(zone1970Lines));
 }
 
 auto defaultRunnerOutputs() -> ScriptedRunner::Outputs
 {
     return {
-        { std::string(zone1970TabCommand),
+        { std::string(zone1970TabKey),
             {
                 "# country\tcoordinates\tTZ\tcomments",
                 "BR\t-2332-04637\tAmerica/Sao_Paulo\tBrazil southeast",
@@ -697,7 +690,8 @@ TEST_SUITE("opencattus::presenter::tui")
 {
     TEST_CASE("mail questionnaire stores postfix SASL settings on the model")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         auto model = std::make_unique<Cluster>();
         seedClusterMetadata(*model);
@@ -739,7 +733,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("mail questionnaire keeps TLS certificate overrides optional")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         auto model = std::make_unique<Cluster>();
         seedClusterMetadata(*model);
@@ -766,8 +761,8 @@ TEST_SUITE("opencattus::presenter::tui")
     TEST_CASE(
         "time questionnaire fails cleanly when no timezones are available")
     {
-        initializePresenterTestEnvironment({
-            { std::string(zone1970TabCommand), { } },
+        const auto zone1970Fixture = initializePresenterTestEnvironment({
+            { std::string(zone1970TabKey), { } },
             { "timedatectl list-timezones --no-pager", { } },
             { "locale -a", { "en_US.utf8" } },
         });
@@ -784,8 +779,8 @@ TEST_SUITE("opencattus::presenter::tui")
     TEST_CASE(
         "locale questionnaire fails cleanly when no locales are available")
     {
-        initializePresenterTestEnvironment({
-            { std::string(zone1970TabCommand),
+        const auto zone1970Fixture = initializePresenterTestEnvironment({
+            { std::string(zone1970TabKey),
                 { "BR\t-2332-04637\tAmerica/Sao_Paulo\tBrazil southeast",
                     "FR\t+4852+00220\tEurope/Paris" } },
             { "timedatectl list-timezones --no-pager",
@@ -804,8 +799,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("time questionnaire prefers canonical zone1970 timezones")
     {
-        initializePresenterTestEnvironment({
-            { std::string(zone1970TabCommand),
+        const auto zone1970Fixture = initializePresenterTestEnvironment({
+            { std::string(zone1970TabKey),
                 {
                     "# country\tcoordinates\tTZ\tcomments",
                     "BR\t-2332-04637\tAmerica/Sao_Paulo\tBrazil southeast",
@@ -837,8 +832,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("time questionnaire falls back to timedatectl timezones")
     {
-        initializePresenterTestEnvironment({
-            { std::string(zone1970TabCommand), { } },
+        const auto zone1970Fixture = initializePresenterTestEnvironment({
+            { std::string(zone1970TabKey), { } },
             { "timedatectl list-timezones --no-pager",
                 { "UTC", "America/Sao_Paulo" } },
             { "locale -a", { "en_US.utf8" } },
@@ -860,8 +855,8 @@ TEST_SUITE("opencattus::presenter::tui")
     TEST_CASE(
         "time questionnaire drills into nested timezone paths alphabetically")
     {
-        initializePresenterTestEnvironment({
-            { std::string(zone1970TabCommand),
+        const auto zone1970Fixture = initializePresenterTestEnvironment({
+            { std::string(zone1970TabKey),
                 {
                     "AR\t-3124-06411\tAmerica/Argentina/Cordoba",
                     "BR\t-1259-03831\tAmerica/Bahia",
@@ -896,8 +891,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("locale questionnaire groups UTF-8 locales by language")
     {
-        initializePresenterTestEnvironment({
-            { std::string(zone1970TabCommand),
+        const auto zone1970Fixture = initializePresenterTestEnvironment({
+            { std::string(zone1970TabKey),
                 { "BR\t-2332-04637\tAmerica/Sao_Paulo\tBrazil southeast" } },
             { "timedatectl list-timezones --no-pager",
                 { "America/Sao_Paulo" } },
@@ -940,8 +935,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("locale questionnaire asks region when a language has choices")
     {
-        initializePresenterTestEnvironment({
-            { std::string(zone1970TabCommand),
+        const auto zone1970Fixture = initializePresenterTestEnvironment({
+            { std::string(zone1970TabKey),
                 { "BR\t-2332-04637\tAmerica/Sao_Paulo\tBrazil southeast" } },
             { "timedatectl list-timezones --no-pager",
                 { "America/Sao_Paulo" } },
@@ -981,8 +976,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("locale questionnaire keeps legacy locales behind advanced")
     {
-        initializePresenterTestEnvironment({
-            { std::string(zone1970TabCommand),
+        const auto zone1970Fixture = initializePresenterTestEnvironment({
+            { std::string(zone1970TabKey),
                 { "BR\t-2332-04637\tAmerica/Sao_Paulo\tBrazil southeast" } },
             { "timedatectl list-timezones --no-pager",
                 { "America/Sao_Paulo" } },
@@ -1016,8 +1011,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("locale questionnaire uses language metadata for unknown codes")
     {
-        initializePresenterTestEnvironment({
-            { std::string(zone1970TabCommand),
+        const auto zone1970Fixture = initializePresenterTestEnvironment({
+            { std::string(zone1970TabKey),
                 { "BR\t-2332-04637\tAmerica/Sao_Paulo\tBrazil southeast" } },
             { "timedatectl list-timezones --no-pager",
                 { "America/Sao_Paulo" } },
@@ -1049,7 +1044,8 @@ TEST_SUITE("opencattus::presenter::tui")
     TEST_CASE("dry-run ISO download skips the progress UI and keeps the "
               "planned image path")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
 
         auto model = std::make_unique<Cluster>();
         model->getHeadnode().setOS(
@@ -1080,7 +1076,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("ISO download choice is scheduled until preflight confirms")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         auto model = std::make_unique<Cluster>();
         auto state = std::make_shared<ScriptedViewState>();
@@ -1104,7 +1101,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("RHEL download choice retries instead of aborting the TUI")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
 
         auto model = std::make_unique<Cluster>();
         auto state = std::make_shared<ScriptedViewState>();
@@ -1132,7 +1130,8 @@ TEST_SUITE("opencattus::presenter::tui")
     TEST_CASE("existing ISO path retries when the path is not a readable "
               "directory")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
 
         const auto invalidPath = tempPath("opencattus-tui-iso-file", "txt");
         std::ofstream(invalidPath).close();
@@ -1168,7 +1167,8 @@ TEST_SUITE("opencattus::presenter::tui")
     TEST_CASE(
         "existing ISO path explains unmatched distro and retries directory")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
 
         const auto emptyDir
             = createEmptyIsoDirectory("opencattus-tui-empty-iso-retry");
@@ -1208,7 +1208,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("existing ISO path can switch to downloading after no match")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
 
         const auto emptyDir
             = createEmptyIsoDirectory("opencattus-tui-empty-iso-download");
@@ -1238,7 +1239,8 @@ TEST_SUITE("opencattus::presenter::tui")
     TEST_CASE("PBS queue questionnaire dumps PBS settings without SLURM "
               "placeholders")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
 
         const auto outputPath
             = tempPath("opencattus-tui-pbs-answerfile", "ini");
@@ -1288,7 +1290,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("compute questionnaire presenters populate the cluster model")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         auto model = std::make_unique<Cluster>();
         model->getHeadnode().setOS(
@@ -1400,7 +1403,8 @@ TEST_SUITE("opencattus::presenter::tui")
     TEST_CASE(
         "repository questionnaire stores selected repositories on the model")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         auto model = std::make_unique<Cluster>();
         const auto os
@@ -1427,7 +1431,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("repository questionnaire expands BeeGFS monitoring dependencies")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         auto model = std::make_unique<Cluster>();
         const auto os
@@ -1449,7 +1454,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("repository questionnaire stop aborts the questionnaire")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         auto model = std::make_unique<Cluster>();
         const auto os
@@ -1469,7 +1475,8 @@ TEST_SUITE("opencattus::presenter::tui")
     TEST_CASE("network questionnaires hide already consumed interfaces while "
               "keeping service and management sharing available")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         const auto interfaces = usableHostInterfaces();
         if (interfaces.size() < 2) {
@@ -1519,7 +1526,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("service network questionnaire accepts an empty gateway")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         const auto interfaces = usableHostInterfaces();
         if (interfaces.size() < 2) {
@@ -1568,7 +1576,8 @@ TEST_SUITE("opencattus::presenter::tui")
     TEST_CASE("network questionnaire rejects a gateway outside the selected "
               "subnet")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         const auto interfaces = usableHostInterfaces();
         if (interfaces.size() < 2) {
@@ -1620,7 +1629,8 @@ TEST_SUITE("opencattus::presenter::tui")
         "service network sharing management interface must use a separate "
         "subnet")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         const auto interfaces = usableHostInterfaces();
         if (interfaces.empty()) {
@@ -1676,7 +1686,8 @@ TEST_SUITE("opencattus::presenter::tui")
     TEST_CASE("management and service network questionnaires reuse known "
               "defaults")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         const auto interfaces = usableHostInterfaces();
         if (interfaces.size() < 2) {
@@ -1718,7 +1729,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("infiniband questionnaire persists an explicit OFED version")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         const auto interfaces = usableInfinibandInterfaces();
         if (interfaces.empty()) {
@@ -1751,7 +1763,8 @@ TEST_SUITE("opencattus::presenter::tui")
     TEST_CASE("compute node entry retries instead of throwing on invalid node "
               "definitions")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         auto model = std::make_unique<Cluster>();
         addHeadnodeNetwork(*model, Network::Profile::Management, "eno2",
@@ -1782,7 +1795,8 @@ TEST_SUITE("opencattus::presenter::tui")
     TEST_CASE("compute node questionnaire leaves BMC pattern blank without a "
               "service network")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         auto model = std::make_unique<Cluster>();
         addHeadnodeNetwork(*model, Network::Profile::Management, "eno2",
@@ -1814,7 +1828,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("compute node questionnaire accepts nodes without BMC addresses")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         auto model = std::make_unique<Cluster>();
         addHeadnodeNetwork(*model, Network::Profile::Management, "eno2",
@@ -1842,7 +1857,8 @@ TEST_SUITE("opencattus::presenter::tui")
         "compute node questionnaire rejects BMC addresses matching compute "
         "node addresses")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         auto model = std::make_unique<Cluster>();
         addHeadnodeNetwork(*model, Network::Profile::Management, "eno2",
@@ -1885,7 +1901,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("compute node questionnaire suggests node and BMC IP patterns")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         auto model = std::make_unique<Cluster>();
         addHeadnodeNetwork(*model, Network::Profile::Management, "eno2",
@@ -1938,7 +1955,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("presenter install can drive the questionnaire end to end")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         const auto interfaces = usableHostInterfaces();
         if (interfaces.size() < 2) {
@@ -2180,7 +2198,8 @@ TEST_SUITE("opencattus::presenter::tui")
 
     TEST_CASE("presenter install propagates aborts from network prompts")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         // Inject two synthetic interfaces so PresenterNetwork does not bail
         // out via fatalMessage("Not enough interfaces!") on single-NIC hosts
@@ -2234,7 +2253,8 @@ TEST_SUITE("opencattus::presenter::tui")
     TEST_CASE("presenter install can drive the questionnaire end to end on "
               "dry-run")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs(), true);
 
         const auto interfaces = usableHostInterfaces();
         if (interfaces.size() < 2) {
@@ -2318,7 +2338,8 @@ TEST_SUITE("opencattus::presenter::tui")
     TEST_CASE("presenter install rewinds to the previous step when Back is "
               "requested")
     {
-        initializePresenterTestEnvironment(defaultRunnerOutputs());
+        const auto zone1970Fixture
+            = initializePresenterTestEnvironment(defaultRunnerOutputs());
 
         const auto interfaces = usableHostInterfaces();
         if (interfaces.size() < 2) {

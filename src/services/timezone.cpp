@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <cstdlib>
 #include <filesystem>
 #include <fmt/format.h>
 #include <fstream>
@@ -20,7 +19,6 @@
 using namespace opencattus;
 
 namespace {
-constexpr std::string_view zone1970TabEnv = "OPENCATTUS_ZONE1970_TAB";
 constexpr std::string_view zone1970TabPath = "/usr/share/zoneinfo/zone1970.tab";
 constexpr std::string_view timedatectlTimezoneCommand
     = "timedatectl list-timezones --no-pager";
@@ -68,19 +66,15 @@ void insertTimezone(
     timezones.insert({ tz.substr(0, slash), tz.substr(slash + 1) });
 }
 
-std::filesystem::path systemZone1970TabPath()
-{
-    if (const auto* overridePath = std::getenv(zone1970TabEnv.data());
-        overridePath != nullptr && std::string_view(overridePath).size() > 0) {
-        return overridePath;
-    }
-
-    return zone1970TabPath;
-}
-
 std::vector<std::string> readZone1970Tab()
 {
-    const auto path = systemZone1970TabPath();
+#ifdef BUILD_TESTING
+    if (Timezone::s_testZone1970Override.has_value()) {
+        return parseZone1970Tab(*Timezone::s_testZone1970Override);
+    }
+#endif
+
+    const std::filesystem::path path { zone1970TabPath };
     std::ifstream file(path);
     if (!file.is_open()) {
         LOG_DEBUG(
@@ -102,6 +96,10 @@ std::vector<std::string> readZone1970Tab()
     return parseZone1970Tab(lines);
 }
 }
+
+#ifdef BUILD_TESTING
+std::optional<std::vector<std::string>> Timezone::s_testZone1970Override;
+#endif
 
 Timezone::Timezone()
     : m_availableTimezones { fetchAvailableTimezones() }

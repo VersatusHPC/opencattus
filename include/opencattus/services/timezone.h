@@ -8,7 +8,9 @@
 
 #include <list>
 #include <map>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 /**
@@ -69,6 +71,37 @@ public:
      * @return A multimap of available timezones.
      */
     std::multimap<std::string, std::string> fetchAvailableTimezones();
+
+#ifdef BUILD_TESTING
+    // Test-only seam: when set, fetchAvailableTimezones() parses the override
+    // lines as the zone1970.tab contents instead of reading the host's
+    // /usr/share/zoneinfo/zone1970.tab. An empty override still exercises the
+    // timedatectl fallback through the runner singleton. Bare CI hosts carry
+    // real tzdata state that would otherwise leak into tests expecting
+    // synthetic timezones. Use Timezone::ScopedTestZone1970Tab for RAII
+    // teardown rather than poking this directly.
+    static std::optional<std::vector<std::string>> s_testZone1970Override;
+
+    class ScopedTestZone1970Tab {
+    public:
+        explicit ScopedTestZone1970Tab(std::vector<std::string> lines)
+            : m_previous(std::move(s_testZone1970Override))
+        {
+            s_testZone1970Override = std::move(lines);
+        }
+        ScopedTestZone1970Tab(const ScopedTestZone1970Tab&) = delete;
+        ScopedTestZone1970Tab& operator=(const ScopedTestZone1970Tab&) = delete;
+        ScopedTestZone1970Tab(ScopedTestZone1970Tab&&) = delete;
+        ScopedTestZone1970Tab& operator=(ScopedTestZone1970Tab&&) = delete;
+        ~ScopedTestZone1970Tab()
+        {
+            s_testZone1970Override = std::move(m_previous);
+        }
+
+    private:
+        std::optional<std::vector<std::string>> m_previous;
+    };
+#endif
 
     void setTimezoneArea(std::string_view);
     std::string_view getTimezoneArea() const;
