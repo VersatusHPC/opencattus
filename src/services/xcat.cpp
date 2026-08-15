@@ -1988,6 +1988,11 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
         = shouldReuseExistingImage(imageExists_, opts->shouldSkip("copycds"));
     const auto runner = opencattus::utils::singleton::runner();
     if (!reuseExistingImage) {
+        // Drop the previous marker up front: if this rebuild fails midway,
+        // a surviving same-queue marker would let the next run reuse the
+        // partial root image. It is restamped only after genimage succeeds.
+        opencattus::functions::removeFile(
+            imageQueueMarkerFile(m_stateless.osimage));
         if (opts->shouldSkip("copycds")) {
             // Remove rootfs and cleanup otherpkgs and postinstall scripts
             runner->executeCommand(
