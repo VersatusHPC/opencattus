@@ -1615,6 +1615,61 @@ void XCAT::configureSLURM()
         "\n");
 }
 
+namespace {
+    // Queue marker for cached stateless images: reusing an image built for a
+    // different workload manager would boot nodes without the selected
+    // scheduler's daemon (Codex review on issue #63). A missing marker (images
+    // from before this existed) counts as a mismatch and forces one rebuild.
+    std::string_view queueMarkerToken(
+        const std::optional<models::QueueSystem::Kind>& queue)
+    {
+        if (!queue.has_value()) {
+            return "none";
+        }
+
+        switch (queue.value()) {
+            case models::QueueSystem::Kind::SLURM:
+                return "slurm";
+            case models::QueueSystem::Kind::PBS:
+                return "pbs";
+            case models::QueueSystem::Kind::None:
+                return "none";
+        }
+        std::unreachable();
+    }
+
+    std::optional<models::QueueSystem::Kind> selectedQueueKind()
+    {
+        if (!cluster()->getQueueSystem().has_value()) {
+            return std::nullopt;
+        }
+
+        return cluster()->getQueueSystem().value()->getKind();
+    }
+
+    constexpr std::string_view imageQueueMarkerFile
+        = CHROOT "/install/custom/netboot/compute.queue";
+
+    bool imageMatchesSelectedQueue()
+    {
+        std::ifstream file { std::string(imageQueueMarkerFile) };
+        if (!file.is_open()) {
+            return false;
+        }
+
+        std::string marker;
+        std::getline(file, marker);
+        return marker == queueMarkerToken(selectedQueueKind());
+    }
+
+    void writeImageQueueMarker()
+    {
+        opencattus::functions::removeFile(imageQueueMarkerFile);
+        opencattus::functions::addStringToFile(imageQueueMarkerFile,
+            fmt::format("{}\n", queueMarkerToken(selectedQueueKind())));
+    }
+}
+
 void XCAT::configurePBS()
 {
     m_stateless.otherpkgs.emplace_back("openpbs-execution-ohpc");
@@ -1903,7 +1958,13 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
     generateOSImagePath(imageType, nodeType);
 
     const auto opts = opencattus::utils::singleton::options();
-    const auto imageExists_ = imageExists(m_stateless.osimage);
+    auto imageExists_ = imageExists(m_stateless.osimage);
+    if (imageExists_ && !imageMatchesSelectedQueue()) {
+        LOG_INFO("Rebuilding xCAT image {}: it was built for a different "
+                 "queue system",
+            m_stateless.osimage)
+        imageExists_ = false;
+    }
     const auto reuseExistingImage
         = shouldReuseExistingImage(imageExists_, opts->shouldSkip("copycds"));
     const auto runner = opencattus::utils::singleton::runner();
@@ -1954,6 +2015,7 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
         generateOtherPkgListFile();
         generatePostinstallFile();
         generateSynclistsFile();
+        writeImageQueueMarker();
 
         configureOSImageDefinition();
 
@@ -2295,6 +2357,19 @@ TEST_CASE("ubuntu2404OpenHpcOtherpkgdirEntry uses VersatusHPC OpenHPC")
         == "[trusted=yes] "
            "https://repos.versatushpc.com.br/openhpc/versatushpc-4/"
            "Ubuntu_24.04/ ./");
+}
+
+TEST_CASE("queueMarkerToken names every queue selection")
+{
+    using opencattus::models::QueueSystem;
+
+    CHECK(opencattus::services::queueMarkerToken(QueueSystem::Kind::SLURM)
+        == "slurm");
+    CHECK(opencattus::services::queueMarkerToken(QueueSystem::Kind::PBS)
+        == "pbs");
+    CHECK(opencattus::services::queueMarkerToken(QueueSystem::Kind::None)
+        == "none");
+    CHECK(opencattus::services::queueMarkerToken(std::nullopt) == "none");
 }
 
 TEST_CASE("ubuntu2404OpenHpcPackages stays queue-neutral")
