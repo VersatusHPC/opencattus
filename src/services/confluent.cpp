@@ -707,6 +707,12 @@ PBS_HOME=/var/spool/pbs
 PBS_CORE_LIMIT=4096
 PBS_SCP=/usr/bin/scp
 END
+test -x /opt/pbs/libexec/pbs_habitat && /opt/pbs/libexec/pbs_habitat || :
+mkdir -p /var/spool/pbs/mom_priv
+cat > /var/spool/pbs/mom_priv/config <<'END'
+\$clienthost {headnodeHostname}
+\$usecp *:/home /home
+END
 systemctl enable pbs
 EOF)",
                 fmt::arg("installCommand", installCommand),
@@ -1663,6 +1669,8 @@ TEST_CASE("buildNodeImageQueueSystemCommands keeps munge exclusive to SLURM")
     CHECK(pbsBlock.contains("PBS_SERVER=headnode"));
     CHECK(pbsBlock.contains("PBS_START_MOM=1"));
     CHECK(pbsBlock.contains("PBS_START_SERVER=0"));
+    CHECK(pbsBlock.contains("pbs_habitat"));
+    CHECK(pbsBlock.contains("\\$clienthost headnode"));
     CHECK(pbsBlock.contains("systemctl enable pbs"));
 
     const auto baseBlock = buildNodeImageQueueSystemCommands(

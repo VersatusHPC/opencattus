@@ -1647,12 +1647,17 @@ namespace {
         return cluster()->getQueueSystem().value()->getKind();
     }
 
-    constexpr std::string_view imageQueueMarkerFile
-        = CHROOT "/install/custom/netboot/compute.queue";
-
-    bool imageMatchesSelectedQueue()
+    // One marker per osimage: several images can stay cached side by side,
+    // and a shared marker would describe only the most recently built one.
+    std::string imageQueueMarkerFile(std::string_view osimage)
     {
-        std::ifstream file { std::string(imageQueueMarkerFile) };
+        return fmt::format(
+            CHROOT "/install/custom/netboot/compute.queue.{}", osimage);
+    }
+
+    bool imageMatchesSelectedQueue(std::string_view osimage)
+    {
+        std::ifstream file { imageQueueMarkerFile(osimage) };
         if (!file.is_open()) {
             return false;
         }
@@ -1662,10 +1667,11 @@ namespace {
         return marker == queueMarkerToken(selectedQueueKind());
     }
 
-    void writeImageQueueMarker()
+    void writeImageQueueMarker(std::string_view osimage)
     {
-        opencattus::functions::removeFile(imageQueueMarkerFile);
-        opencattus::functions::addStringToFile(imageQueueMarkerFile,
+        const auto filename = imageQueueMarkerFile(osimage);
+        opencattus::functions::removeFile(filename);
+        opencattus::functions::addStringToFile(filename,
             fmt::format("{}\n", queueMarkerToken(selectedQueueKind())));
     }
 }
@@ -1679,7 +1685,7 @@ void XCAT::configurePBS()
     // start runs pbs_habitat to create PBS_HOME.
     m_stateless.postinstall.emplace_back(
         fmt::format("cat > $IMG_ROOTIMGDIR/etc/pbs.conf <<'END'\n"
-                    "PBS_SERVER={}\n"
+                    "PBS_SERVER={hostname}\n"
                     "PBS_START_SERVER=0\n"
                     "PBS_START_SCHED=0\n"
                     "PBS_START_COMM=0\n"
@@ -1689,9 +1695,22 @@ void XCAT::configurePBS()
                     "PBS_CORE_LIMIT=4096\n"
                     "PBS_SCP=/usr/bin/scp\n"
                     "END\n"
+                    // The RPM %post already ran pbs_habitat against the
+                    // package placeholder; rerun it with the real pbs.conf
+                    // and rewrite the MOM config so the node trusts the
+                    // actual head node.
+                    "chroot $IMG_ROOTIMGDIR bash -c 'test -x "
+                    "/opt/pbs/libexec/pbs_habitat && "
+                    "/opt/pbs/libexec/pbs_habitat || :'\n"
+                    "mkdir -p $IMG_ROOTIMGDIR/var/spool/pbs/mom_priv\n"
+                    "cat > $IMG_ROOTIMGDIR/var/spool/pbs/mom_priv/config "
+                    "<<'END'\n"
+                    "$clienthost {hostname}\n"
+                    "$usecp *:/home /home\n"
+                    "END\n"
                     "chroot $IMG_ROOTIMGDIR systemctl enable pbs\n"
                     "\n",
-            cluster()->getHeadnode().getHostname()));
+            fmt::arg("hostname", cluster()->getHeadnode().getHostname())));
 }
 
 void XCAT::generateOtherPkgListFile() const
@@ -1959,7 +1978,7 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
 
     const auto opts = opencattus::utils::singleton::options();
     auto imageExists_ = imageExists(m_stateless.osimage);
-    if (imageExists_ && !imageMatchesSelectedQueue()) {
+    if (imageExists_ && !imageMatchesSelectedQueue(m_stateless.osimage)) {
         LOG_INFO("Rebuilding xCAT image {}: it was built for a different "
                  "queue system",
             m_stateless.osimage)
@@ -2015,12 +2034,15 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
         generateOtherPkgListFile();
         generatePostinstallFile();
         generateSynclistsFile();
-        writeImageQueueMarker();
 
         configureOSImageDefinition();
 
         customizeImage(customizations);
         genimage();
+        // Only stamp the queue marker once genimage succeeded: a marker
+        // written earlier would let a failed build pass the reuse check on
+        // the next run and boot a stale or partial root image.
+        writeImageQueueMarker(m_stateless.osimage);
     } else {
         LOG_INFO("Reusing xCAT image {}, skipping genimage and repacking the "
                  "existing root image",
