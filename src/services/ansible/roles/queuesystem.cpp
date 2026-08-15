@@ -38,6 +38,13 @@ void configureQueueSystem()
                     queue.value().get());
 
                 osservice()->install("openpbs-server-ohpc");
+                // The OHPC package ships a pbs.conf with a placeholder
+                // server name; normalize it to this head node before the
+                // service starts.
+                ::runner()->executeCommand(
+                    fmt::format("sed -i \"s/^PBS_SERVER=.*/PBS_SERVER={}/\" "
+                                "/etc/pbs.conf",
+                        cluster()->getHeadnode().getHostname()));
                 osservice()->enableService("pbs");
                 // OHPC installs OpenPBS under /opt/pbs; its profile.d PATH
                 // entry only applies to login shells, and the runner execs
@@ -53,6 +60,13 @@ void configureQueueSystem()
                             pbs->getExecutionPlace())));
                 ::runner()->executeCommand("/opt/pbs/bin/qmgr -c \"set "
                                            "server job_history_enable=True\"");
+                // PBS only schedules on nodes registered with the server;
+                // nothing else creates them (issue #63 follow-through).
+                for (const auto& node : cluster()->getNodes()) {
+                    ::runner()->executeCommand(
+                        fmt::format("/opt/pbs/bin/qmgr -c \"create node {}\"",
+                            node.getHostname()));
+                }
                 break;
             }
         }
