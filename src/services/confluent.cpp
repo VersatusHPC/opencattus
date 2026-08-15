@@ -3,6 +3,7 @@
 #include <opencattus/models/cpu.h>
 #include <opencattus/models/node.h>
 #include <opencattus/models/os.h>
+#include <opencattus/models/queuesystem.h>
 #include <opencattus/ofed.h>
 #include <opencattus/services/confluent.h>
 #include <opencattus/services/runner.h>
@@ -433,43 +434,76 @@ std::string buildNodeImageRepoFiles(const models::OS& os)
     }
 }
 
-std::string buildNodeImagePackages(const models::OS& os)
+// The OHPC client package that matches the selected workload manager. An
+// empty result means no queue-system package belongs in the image.
+std::string_view queueSystemNodePackage(models::QueueSystem::Kind queue)
 {
+    switch (queue) {
+        case models::QueueSystem::Kind::SLURM:
+            return "ohpc-slurm-client";
+        case models::QueueSystem::Kind::PBS:
+            return "openpbs-execution-ohpc";
+        case models::QueueSystem::Kind::None:
+            return "";
+    }
+    std::unreachable();
+}
+
+std::string joinPackages(std::initializer_list<std::string_view> packages)
+{
+    std::string joined;
+    for (const auto& package : packages) {
+        if (package.empty()) {
+            continue;
+        }
+        if (!joined.empty()) {
+            joined += ' ';
+        }
+        joined += package;
+    }
+
+    return joined;
+}
+
+std::string buildNodeImagePackages(
+    const models::OS& os, models::QueueSystem::Kind queue)
+{
+    const auto queuePackage = queueSystemNodePackage(queue);
     switch (os.getPlatform()) {
         case models::OS::Platform::el8:
-            return "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs "
-                   "lua-filesystem lua-posix";
+            return joinPackages({ "ohpc-base-compute", queuePackage,
+                "lmod-ohpc", "hwloc-libs", "lua-filesystem", "lua-posix" });
         case models::OS::Platform::el9:
-            return "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs";
         case models::OS::Platform::el10:
-            return "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs";
+            return joinPackages({ "ohpc-base-compute", queuePackage,
+                "lmod-ohpc", "hwloc-libs" });
         case models::OS::Platform::ubuntu2404:
-            return "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-ohpc";
+            return joinPackages({ "ohpc-base-compute", queuePackage,
+                "lmod-ohpc", "hwloc-ohpc" });
         default:
             std::unreachable();
     }
 }
 
-std::string buildNodeImageInstallCommand(const models::OS& os)
+std::string buildNodeImageInstallCommand(
+    const models::OS& os, models::QueueSystem::Kind queue)
 {
+    const auto packages = buildNodeImagePackages(os, queue);
     switch (os.getPlatform()) {
         case models::OS::Platform::el8:
-            return "dnf install -y --nogpg --enablerepo=powertools "
-                   "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs "
-                   "lua-filesystem lua-posix";
+            return fmt::format(
+                "dnf install -y --nogpg --enablerepo=powertools {}", packages);
         case models::OS::Platform::el9:
-            return "dnf install -y --nogpg "
-                   "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs";
         case models::OS::Platform::el10:
-            return "dnf install -y --nogpg "
-                   "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs";
+            return fmt::format("dnf install -y --nogpg {}", packages);
         case models::OS::Platform::ubuntu2404:
-            return "DEBIAN_FRONTEND=noninteractive apt update && "
-                   "DEBIAN_FRONTEND=noninteractive apt install -y "
-                   "ca-certificates && "
-                   "DEBIAN_FRONTEND=noninteractive apt update && "
-                   "DEBIAN_FRONTEND=noninteractive apt install -y "
-                   "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-ohpc";
+            return fmt::format(
+                "DEBIAN_FRONTEND=noninteractive apt update && "
+                "DEBIAN_FRONTEND=noninteractive apt install -y "
+                "ca-certificates && "
+                "DEBIAN_FRONTEND=noninteractive apt update && "
+                "DEBIAN_FRONTEND=noninteractive apt install -y {}",
+                packages);
         default:
             std::unreachable();
     }
@@ -621,6 +655,59 @@ std::string buildNodeImageSlurmDefaultsCommand(
     return fmt::format("echo SLURMD_OPTIONS=\\\"--conf-server {hnIp}\\\" > "
                        "/etc/sysconfig/slurmd",
         fmt::arg("hnIp", hnIp));
+}
+
+// Compute-image block for the selected workload manager. Only SLURM needs
+// munge and its key; PBS nodes get the OHPC execution package and a
+// pbs.conf pointing at the head node, and clusters without a queue system
+// still install the base OHPC tooling. Issue #63: an unconditional SLURM
+// block used to break PBS installs because the munge user never exists
+// there.
+std::string buildNodeImageQueueSystemCommands(const models::OS& os,
+    models::QueueSystem::Kind queue, std::string_view headnodeHostname,
+    std::string_view hnIp)
+{
+    const auto installCommand = buildNodeImageInstallCommand(os, queue);
+    switch (queue) {
+        case models::QueueSystem::Kind::SLURM:
+            return fmt::format(
+                R"(# Slurm node configuration
+\install -vD -m 0400 -o munge -g munge /etc/munge/munge.key       $scratchdir/etc/munge/munge.key
+\install -vD -m 0644 -o root  -g root  /etc/slurm/slurm.conf      $scratchdir/etc/slurm/slurm.conf
+imgutil exec $scratchdir <<EOF
+set -xeu -o pipefail
+{installCommand}
+sed -e '/^account required pam_slurm.so/d' -i /etc/pam.d/sshd
+echo 'account required pam_slurm.so' >> /etc/pam.d/sshd
+{slurmDefaultsCommand}
+chown munge: /etc/munge/munge.key
+systemctl enable munge
+systemctl enable slurmd
+EOF)",
+                fmt::arg("installCommand", installCommand),
+                fmt::arg("slurmDefaultsCommand",
+                    buildNodeImageSlurmDefaultsCommand(os, hnIp)));
+        case models::QueueSystem::Kind::PBS:
+            return fmt::format(
+                R"(# PBS node configuration
+imgutil exec $scratchdir <<EOF
+set -xeu -o pipefail
+{installCommand}
+sed -i "s/^PBS_SERVER=.*/PBS_SERVER={headnodeHostname}/" /etc/pbs.conf
+systemctl enable pbs
+EOF)",
+                fmt::arg("installCommand", installCommand),
+                fmt::arg("headnodeHostname", headnodeHostname));
+        case models::QueueSystem::Kind::None:
+            return fmt::format(
+                R"(# No queue system selected; install the base OHPC tooling
+imgutil exec $scratchdir <<EOF
+set -xeu -o pipefail
+{installCommand}
+EOF)",
+                fmt::arg("installCommand", installCommand));
+    }
+    std::unreachable();
 }
 
 std::optional<std::string> selectConfluentImageKernelVersion(
@@ -965,19 +1052,7 @@ rm -rf /var/lib/confluent/public/os/{image}-diskless || :
 
 {nodeImageMotdCommands}
 
-# Slurm node configuration
-\install -vD -m 0400 -o munge -g munge /etc/munge/munge.key       $scratchdir/etc/munge/munge.key
-\install -vD -m 0644 -o root  -g root  /etc/slurm/slurm.conf      $scratchdir/etc/slurm/slurm.conf
-imgutil exec $scratchdir <<EOF
-set -xeu -o pipefail
-{nodeImageInstallCommand}
-sed -e '/^account required pam_slurm.so/d' -i /etc/pam.d/sshd
-echo 'account required pam_slurm.so' >> /etc/pam.d/sshd
-{nodeImageSlurmDefaultsCommand}
-chown munge: /etc/munge/munge.key
-systemctl enable munge
-systemctl enable slurmd
-EOF
+{nodeImageQueueSystemCommands}
 
 {nodeImageOFEDCommands}
 
@@ -1062,14 +1137,16 @@ rm -rf $scratchdir || :
                     .to_string())),
         fmt::arg(
             "nodeImageMotdCommands", buildNodeImageMotdCommands(computeNodeOS)),
-        fmt::arg("nodeImageInstallCommand",
-            buildNodeImageInstallCommand(computeNodeOS)),
         fmt::arg("nodeImageRepoFiles", buildNodeImageRepoFiles(computeNodeOS)),
         fmt::arg("nodeImageRepositorySyncCommands",
             buildNodeImageRepositorySyncCommands(
                 computeNodeOS, buildNodeImageRepoFiles(computeNodeOS))),
-        fmt::arg("nodeImageSlurmDefaultsCommand",
-            buildNodeImageSlurmDefaultsCommand(computeNodeOS,
+        fmt::arg("nodeImageQueueSystemCommands",
+            buildNodeImageQueueSystemCommands(computeNodeOS,
+                cluster()->getQueueSystem().has_value()
+                    ? cluster()->getQueueSystem().value()->getKind()
+                    : models::QueueSystem::Kind::None,
+                cluster()->getHeadnode().getHostname(),
                 cluster()
                     ->getHeadnode()
                     .getConnection(Network::Profile::Management)
@@ -1444,56 +1521,110 @@ TEST_CASE("buildNodeImageRepoFiles keeps distro repo filenames explicit")
 TEST_CASE("buildNodeImagePackages keeps EL8 and newer node images explicit")
 {
     using opencattus::models::OS;
+    using opencattus::models::QueueSystem;
 
-    const auto el8Packages
-        = buildNodeImagePackages(OS(OS::Distro::Rocky, OS::Platform::el8, 10));
+    const auto el8Packages = buildNodeImagePackages(
+        OS(OS::Distro::Rocky, OS::Platform::el8, 10), QueueSystem::Kind::SLURM);
     CHECK(el8Packages
         == "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs "
            "lua-filesystem lua-posix");
 
-    const auto el9Packages
-        = buildNodeImagePackages(OS(OS::Distro::Rocky, OS::Platform::el9, 7));
+    const auto el9Packages = buildNodeImagePackages(
+        OS(OS::Distro::Rocky, OS::Platform::el9, 7), QueueSystem::Kind::SLURM);
     CHECK(el9Packages
         == "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs");
 
-    const auto el10Packages
-        = buildNodeImagePackages(OS(OS::Distro::Rocky, OS::Platform::el10, 1));
+    const auto el10Packages = buildNodeImagePackages(
+        OS(OS::Distro::Rocky, OS::Platform::el10, 1), QueueSystem::Kind::SLURM);
     CHECK(el10Packages
         == "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs");
 
     const auto ubuntuPackages = buildNodeImagePackages(
-        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0));
+        OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0),
+        QueueSystem::Kind::SLURM);
     CHECK(ubuntuPackages
         == "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-ohpc");
+}
+
+TEST_CASE("buildNodeImagePackages follows the selected queue system")
+{
+    using opencattus::models::OS;
+    using opencattus::models::QueueSystem;
+
+    const auto pbsPackages = buildNodeImagePackages(
+        OS(OS::Distro::Rocky, OS::Platform::el10, 1), QueueSystem::Kind::PBS);
+    CHECK(pbsPackages
+        == "ohpc-base-compute openpbs-execution-ohpc lmod-ohpc hwloc-libs");
+
+    const auto basePackages = buildNodeImagePackages(
+        OS(OS::Distro::Rocky, OS::Platform::el10, 1), QueueSystem::Kind::None);
+    CHECK(basePackages == "ohpc-base-compute lmod-ohpc hwloc-libs");
 }
 
 TEST_CASE("buildNodeImageInstallCommand keeps EL8, EL9, and EL10 explicit")
 {
     using opencattus::models::OS;
+    using opencattus::models::QueueSystem;
 
     CHECK(buildNodeImageInstallCommand(
-              OS(OS::Distro::Rocky, OS::Platform::el8, 10))
+              OS(OS::Distro::Rocky, OS::Platform::el8, 10),
+              QueueSystem::Kind::SLURM)
         == "dnf install -y --nogpg --enablerepo=powertools "
            "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs "
            "lua-filesystem lua-posix");
 
     CHECK(buildNodeImageInstallCommand(
-              OS(OS::Distro::Rocky, OS::Platform::el9, 7))
+              OS(OS::Distro::Rocky, OS::Platform::el9, 7),
+              QueueSystem::Kind::SLURM)
         == "dnf install -y --nogpg "
            "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs");
 
     CHECK(buildNodeImageInstallCommand(
-              OS(OS::Distro::Rocky, OS::Platform::el10, 1))
+              OS(OS::Distro::Rocky, OS::Platform::el10, 1),
+              QueueSystem::Kind::SLURM)
         == "dnf install -y --nogpg "
            "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-libs");
 
     CHECK(buildNodeImageInstallCommand(
-              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0))
+              OS(OS::Distro::Ubuntu, OS::Platform::ubuntu2404, 0),
+              QueueSystem::Kind::SLURM)
         == "DEBIAN_FRONTEND=noninteractive apt update && "
            "DEBIAN_FRONTEND=noninteractive apt install -y "
            "ca-certificates && DEBIAN_FRONTEND=noninteractive apt update "
            "&& DEBIAN_FRONTEND=noninteractive apt install -y "
            "ohpc-base-compute ohpc-slurm-client lmod-ohpc hwloc-ohpc");
+}
+
+TEST_CASE("buildNodeImageQueueSystemCommands keeps munge exclusive to SLURM")
+{
+    using opencattus::models::OS;
+    using opencattus::models::QueueSystem;
+
+    const OS el10(OS::Distro::Rocky, OS::Platform::el10, 1);
+
+    const auto slurmBlock = buildNodeImageQueueSystemCommands(
+        el10, QueueSystem::Kind::SLURM, "headnode", "172.16.0.1");
+    CHECK(slurmBlock.contains("-o munge -g munge /etc/munge/munge.key"));
+    CHECK(slurmBlock.contains("/etc/slurm/slurm.conf"));
+    CHECK(slurmBlock.contains("--conf-server 172.16.0.1"));
+    CHECK(slurmBlock.contains("systemctl enable munge"));
+    CHECK(slurmBlock.contains("systemctl enable slurmd"));
+
+    const auto pbsBlock = buildNodeImageQueueSystemCommands(
+        el10, QueueSystem::Kind::PBS, "headnode", "172.16.0.1");
+    CHECK_FALSE(pbsBlock.contains("munge"));
+    CHECK_FALSE(pbsBlock.contains("slurm"));
+    CHECK(pbsBlock.contains("openpbs-execution-ohpc"));
+    CHECK(pbsBlock.contains(
+        "sed -i \"s/^PBS_SERVER=.*/PBS_SERVER=headnode/\" /etc/pbs.conf"));
+    CHECK(pbsBlock.contains("systemctl enable pbs"));
+
+    const auto baseBlock = buildNodeImageQueueSystemCommands(
+        el10, QueueSystem::Kind::None, "headnode", "172.16.0.1");
+    CHECK_FALSE(baseBlock.contains("munge"));
+    CHECK_FALSE(baseBlock.contains("slurm"));
+    CHECK_FALSE(baseBlock.contains("pbs"));
+    CHECK(baseBlock.contains("ohpc-base-compute"));
 }
 
 TEST_CASE("buildNodeImageChronyCommands refreshes APT metadata on Ubuntu")

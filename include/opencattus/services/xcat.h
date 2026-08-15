@@ -166,6 +166,16 @@ private:
     void configureSLURM();
 
     /**
+     * @brief Configures PBS settings on the compute image.
+     *
+     * Installs the OHPC OpenPBS execution package and points the node's
+     * pbs.conf at the head node.
+     *
+     * Mutates m_stateless
+     */
+    void configurePBS();
+
+    /**
      * @brief Generates the file listing other packages.
      *
      * This function creates a file that lists additional packages to install.
@@ -186,7 +196,7 @@ private:
      *
      * This function creates the synchronization list file.
      */
-    static void generateSynclistsFile();
+    void generateSynclistsFile() const;
 
     /**
      * @brief Configures the OS image definition.

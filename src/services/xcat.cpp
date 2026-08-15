@@ -1613,6 +1613,20 @@ void XCAT::configureSLURM()
         "\n");
 }
 
+void XCAT::configurePBS()
+{
+    m_stateless.otherpkgs.emplace_back("openpbs-execution-ohpc");
+
+    // Point the node's PBS at the head node; the execution package's
+    // default pbs.conf already starts only the MOM daemon.
+    m_stateless.postinstall.emplace_back(
+        fmt::format("sed -i \"s/^PBS_SERVER=.*/PBS_SERVER={}/\" "
+                    "$IMG_ROOTIMGDIR/etc/pbs.conf\n"
+                    "chroot $IMG_ROOTIMGDIR systemctl enable pbs\n"
+                    "\n",
+            cluster()->getHeadnode().getHostname()));
+}
+
 void XCAT::generateOtherPkgListFile() const
 {
     std::string_view filename
@@ -1675,17 +1689,15 @@ void XCAT::generatePostinstallFile()
         std::filesystem::perm_options::add);
 }
 
-void XCAT::generateSynclistsFile()
+void XCAT::generateSynclistsFile() const
 {
     std::string_view filename
         = CHROOT "/install/custom/netboot/compute.synclists";
 
     functions::removeFile(filename);
-    functions::addStringToFile(filename,
-        "/etc/passwd -> /etc/passwd\n"
-        "/etc/group -> /etc/group\n"
-        "/etc/slurm/slurm.conf -> /etc/slurm/slurm.conf\n"
-        "/etc/munge/munge.key -> /etc/munge/munge.key\n");
+    for (const auto& entries : std::as_const(m_stateless.synclists)) {
+        functions::addStringToFile(filename, entries);
+    }
 }
 
 void XCAT::configureOSImageDefinition() const
@@ -1740,8 +1752,9 @@ void XCAT::customizeImage(
     auto runner = opencattus::utils::singleton::runner();
     // @TODO: Extract the munge fixes to its own customization script
     // Permission fixes for munge
-    if (cluster()->getQueueSystem().value()->getKind()
-        == models::QueueSystem::Kind::SLURM) {
+    if (cluster()->getQueueSystem().has_value()
+        && cluster()->getQueueSystem().value()->getKind()
+            == models::QueueSystem::Kind::SLURM) {
         opencattus::functions::createDirectory(m_stateless.chroot / "etc");
         runner->executeCommand(
             fmt::format("cp -f /etc/passwd /etc/group /etc/shadow {}/etc",
@@ -1910,7 +1923,21 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
         configureTimeService();
         configureRemoteAccess();
         configureInfiniband();
-        configureSLURM();
+        // Issue #63: only stage the workload manager the operator selected;
+        // the SLURM bits (munge key, slurm.conf) break PBS installs where
+        // the munge user never exists.
+        if (const auto& queue = cluster()->getQueueSystem()) {
+            switch (queue.value()->getKind()) {
+                case models::QueueSystem::Kind::SLURM:
+                    configureSLURM();
+                    break;
+                case models::QueueSystem::Kind::PBS:
+                    configurePBS();
+                    break;
+                case models::QueueSystem::Kind::None:
+                    break;
+            }
+        }
 
         generateOtherPkgListFile();
         generatePostinstallFile();
