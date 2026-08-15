@@ -961,10 +961,31 @@ void addNode(const models::Node& node, std::string_view image)
     services::runner::shell::cmd(buildNodeDefinitionScript(node, image));
 }
 
+// PBS resolves the node name when it is created, so registration must run
+// after confluent2hosts has published the compute host records. The
+// list-or-create composite keeps reinstalls idempotent while still failing
+// loudly on real qmgr errors.
+std::string buildPbsNodeRegistrationCommand(std::string_view hostname)
+{
+    return fmt::format(
+        "/opt/pbs/bin/qmgr -c 'list node {hostname}' >/dev/null 2>&1 || "
+        "/opt/pbs/bin/qmgr -c 'create node {hostname}'",
+        fmt::arg("hostname", hostname));
+}
+
 void addNodes(std::string_view image)
 {
     for (const auto& node : singleton::cluster()->getNodes()) {
         addNode(node, image);
+    }
+
+    if (const auto& queue = singleton::cluster()->getQueueSystem();
+        queue.has_value()
+        && queue.value()->getKind() == models::QueueSystem::Kind::PBS) {
+        for (const auto& node : singleton::cluster()->getNodes()) {
+            services::runner::shell::cmd(
+                buildPbsNodeRegistrationCommand(node.getHostname()));
+        }
     }
 }
 }
@@ -1625,6 +1646,14 @@ TEST_CASE("buildNodeImageQueueSystemCommands keeps munge exclusive to SLURM")
     CHECK_FALSE(baseBlock.contains("slurm"));
     CHECK_FALSE(baseBlock.contains("pbs"));
     CHECK(baseBlock.contains("ohpc-base-compute"));
+}
+
+TEST_CASE("buildPbsNodeRegistrationCommand only creates missing nodes")
+{
+    const auto command = buildPbsNodeRegistrationCommand("n01");
+    CHECK(command
+        == "/opt/pbs/bin/qmgr -c 'list node n01' >/dev/null 2>&1 || "
+           "/opt/pbs/bin/qmgr -c 'create node n01'");
 }
 
 TEST_CASE("buildNodeImageChronyCommands refreshes APT metadata on Ubuntu")

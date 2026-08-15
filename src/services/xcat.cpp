@@ -112,9 +112,11 @@ std::vector<std::string_view> ubuntu2404OpenHpcPackages(
     constexpr auto bundleParallelLibraries = std::string_view("parallel-libs");
     constexpr auto bundleIntelOneAPI = std::string_view("intel-oneapi");
 
+    // Queue-neutral base set: the scheduler client package is added by
+    // configureSLURM()/configurePBS() according to the selected queue
+    // system, so PBS and no-queue images do not ship SLURM.
     auto packages = std::set<std::string_view> {
         "ohpc-base-compute",
-        "ohpc-slurm-client",
         "gnu15-compilers-ohpc",
         "openmpi5-gnu15-ohpc",
         "mpich-ucx-gnu15-ohpc",
@@ -2009,6 +2011,21 @@ void XCAT::addNodes() const
             runner->executeCommand(command);
         }
     }
+
+    // PBS resolves node names at creation time, so registration has to wait
+    // until makehosts has published the compute host records above. The
+    // list-or-create composite keeps reinstalls idempotent while still
+    // failing loudly on real qmgr errors.
+    if (cluster()->getQueueSystem().has_value()
+        && cluster()->getQueueSystem().value()->getKind()
+            == models::QueueSystem::Kind::PBS) {
+        for (const auto& node : cluster()->getNodes()) {
+            opencattus::services::runner::shell::cmd(fmt::format(
+                "/opt/pbs/bin/qmgr -c 'list node {hostname}' >/dev/null "
+                "2>&1 || /opt/pbs/bin/qmgr -c 'create node {hostname}'",
+                fmt::arg("hostname", node.getHostname())));
+        }
+    }
     setNodesImage();
 }
 
@@ -2268,6 +2285,15 @@ TEST_CASE("ubuntu2404OpenHpcOtherpkgdirEntry uses VersatusHPC OpenHPC")
         == "[trusted=yes] "
            "https://repos.versatushpc.com.br/openhpc/versatushpc-4/"
            "Ubuntu_24.04/ ./");
+}
+
+TEST_CASE("ubuntu2404OpenHpcPackages stays queue-neutral")
+{
+    const auto packages = ubuntu2404OpenHpcPackages(std::nullopt);
+    CHECK(std::ranges::find(packages, "ohpc-base-compute") != packages.end());
+    CHECK(std::ranges::find(packages, "ohpc-slurm-client") == packages.end());
+    CHECK(std::ranges::find(packages, "openpbs-execution-ohpc")
+        == packages.end());
 }
 
 TEST_CASE("buildUbuntu24OSImageDefinitionCommand defines the xCAT image")

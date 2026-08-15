@@ -60,13 +60,10 @@ void configureQueueSystem()
                             pbs->getExecutionPlace())));
                 ::runner()->executeCommand("/opt/pbs/bin/qmgr -c \"set "
                                            "server job_history_enable=True\"");
-                // PBS only schedules on nodes registered with the server;
-                // nothing else creates them (issue #63 follow-through).
-                for (const auto& node : cluster()->getNodes()) {
-                    ::runner()->executeCommand(
-                        fmt::format("/opt/pbs/bin/qmgr -c \"create node {}\"",
-                            node.getHostname()));
-                }
+                // Compute nodes are registered with the PBS server by the
+                // provisioner role: qmgr resolves node names at creation
+                // time, and host records only exist after makehosts /
+                // confluent2hosts have run.
                 break;
             }
         }
