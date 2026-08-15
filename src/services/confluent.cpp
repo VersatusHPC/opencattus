@@ -978,14 +978,22 @@ void addNodes(std::string_view image)
     for (const auto& node : singleton::cluster()->getNodes()) {
         addNode(node, image);
     }
+}
 
+// Must run after the last confluent2hosts call AND after the head-node
+// hosts repair: qmgr resolves both the compute names it registers and the
+// PBS_SERVER short name that confluent2hosts just dropped from /etc/hosts.
+void registerPbsNodes()
+{
     if (const auto& queue = singleton::cluster()->getQueueSystem();
-        queue.has_value()
-        && queue.value()->getKind() == models::QueueSystem::Kind::PBS) {
-        for (const auto& node : singleton::cluster()->getNodes()) {
-            services::runner::shell::cmd(
-                buildPbsNodeRegistrationCommand(node.getHostname()));
-        }
+        !queue.has_value()
+        || queue.value()->getKind() != models::QueueSystem::Kind::PBS) {
+        return;
+    }
+
+    for (const auto& node : singleton::cluster()->getNodes()) {
+        services::runner::shell::cmd(
+            buildPbsNodeRegistrationCommand(node.getHostname()));
     }
 }
 }
@@ -1209,6 +1217,8 @@ rm -rf $scratchdir || :
                 .to_string(),
             cluster()->getHeadnode().getFQDN(),
             cluster()->getHeadnode().getHostname()));
+
+    registerPbsNodes();
 
     runner::shell::cmd("osdeploy initialize -l");
 }
