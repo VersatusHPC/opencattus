@@ -1441,11 +1441,6 @@ void XCAT::configureOpenHPC()
     for (const auto& package : std::as_const(packages)) {
         m_stateless.otherpkgs.emplace_back(package);
     }
-
-    // We always sync local Unix files to keep services consistent, even with
-    // external directory services
-    m_stateless.synclists.emplace_back("/etc/passwd -> /etc/passwd\n"
-                                       "/etc/group -> /etc/group\n");
 }
 
 void XCAT::configureTimeService()
@@ -1607,11 +1602,6 @@ void XCAT::configureSLURM()
         "$IMG_ROOTIMGDIR/var/log/slurm/slurmd.log\n"
         "chroot $IMG_ROOTIMGDIR systemctl enable munge\n"
         "chroot $IMG_ROOTIMGDIR systemctl enable slurmd\n"
-        "\n");
-
-    m_stateless.synclists.emplace_back(
-        "/etc/slurm/slurm.conf -> /etc/slurm/slurm.conf\n"
-        "/etc/munge/munge.key -> /etc/munge/munge.key\n"
         "\n");
 }
 
@@ -1775,14 +1765,26 @@ void XCAT::generatePostinstallFile()
         std::filesystem::perm_options::add);
 }
 
+// The synclist is derived from the queue selection alone and regenerated on
+// every run, including image reuse: the path is shared between cached
+// osimages, and packimage() rereads it, so a list left behind by an image
+// built for another queue would leak that queue's files into the repack.
 void XCAT::generateSynclistsFile() const
 {
     std::string_view filename
         = CHROOT "/install/custom/netboot/compute.synclists";
 
     functions::removeFile(filename);
-    for (const auto& entries : std::as_const(m_stateless.synclists)) {
-        functions::addStringToFile(filename, entries);
+    // We always sync local Unix files to keep services consistent, even
+    // with external directory services
+    functions::addStringToFile(filename,
+        "/etc/passwd -> /etc/passwd\n"
+        "/etc/group -> /etc/group\n");
+
+    if (selectedQueueKind() == models::QueueSystem::Kind::SLURM) {
+        functions::addStringToFile(filename,
+            "/etc/slurm/slurm.conf -> /etc/slurm/slurm.conf\n"
+            "/etc/munge/munge.key -> /etc/munge/munge.key\n");
     }
 }
 
@@ -2038,7 +2040,6 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
 
         generateOtherPkgListFile();
         generatePostinstallFile();
-        generateSynclistsFile();
 
         configureOSImageDefinition();
 
@@ -2053,6 +2054,11 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
                  "existing root image",
             m_stateless.osimage);
     }
+
+    // Regenerated on every run (reuse included): packimage() rereads the
+    // shared synclist, which may have been left behind by an image built
+    // for a different queue system.
+    generateSynclistsFile();
 
     finalizeStatelessRootImage();
     packimage();

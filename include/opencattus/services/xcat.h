@@ -38,7 +38,6 @@ public:
         std::string osimage;
         std::filesystem::path chroot;
         std::vector<std::string> postinstall = { "#!/bin/sh\n\n" };
-        std::vector<std::string> synclists;
     };
 
     // TODO: CFL Extract this to its own namespace and add a enum for the
