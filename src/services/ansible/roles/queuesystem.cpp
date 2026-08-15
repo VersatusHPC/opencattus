@@ -39,15 +39,20 @@ void configureQueueSystem()
 
                 osservice()->install("openpbs-server-ohpc");
                 osservice()->enableService("pbs");
+                // OHPC installs OpenPBS under /opt/pbs; its profile.d PATH
+                // entry only applies to login shells, and the runner execs
+                // directly, so qmgr must be called by absolute path.
+                ::runner()->executeCommand("/opt/pbs/bin/qmgr -c \"set "
+                                           "server default_qsub_arguments= "
+                                           "-V\"");
                 ::runner()->executeCommand(
-                    "qmgr -c \"set server default_qsub_arguments= -V\"");
-                ::runner()->executeCommand(fmt::format(
-                    "qmgr -c \"set server resources_default.place={}\"",
-                    opencattus::utils::enums::toString<
-                        opencattus::models::PBS::ExecutionPlace>(
-                        pbs->getExecutionPlace())));
-                ::runner()->executeCommand(
-                    "qmgr -c \"set server job_history_enable=True\"");
+                    fmt::format("/opt/pbs/bin/qmgr -c \"set server "
+                                "resources_default.place={}\"",
+                        opencattus::utils::enums::toString<
+                            opencattus::models::PBS::ExecutionPlace>(
+                            pbs->getExecutionPlace())));
+                ::runner()->executeCommand("/opt/pbs/bin/qmgr -c \"set "
+                                           "server job_history_enable=True\"");
                 break;
             }
         }
