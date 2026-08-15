@@ -1619,11 +1619,21 @@ void XCAT::configurePBS()
 {
     m_stateless.otherpkgs.emplace_back("openpbs-execution-ohpc");
 
-    // Point the node's PBS at the head node; the execution package's
-    // default pbs.conf already starts only the MOM daemon.
+    // pbs.conf is written outright instead of edited: the OHPC Debian
+    // execution package ships no default pbs.conf, and the service's first
+    // start runs pbs_habitat to create PBS_HOME.
     m_stateless.postinstall.emplace_back(
-        fmt::format("sed -i \"s/^PBS_SERVER=.*/PBS_SERVER={}/\" "
-                    "$IMG_ROOTIMGDIR/etc/pbs.conf\n"
+        fmt::format("cat > $IMG_ROOTIMGDIR/etc/pbs.conf <<'END'\n"
+                    "PBS_SERVER={}\n"
+                    "PBS_START_SERVER=0\n"
+                    "PBS_START_SCHED=0\n"
+                    "PBS_START_COMM=0\n"
+                    "PBS_START_MOM=1\n"
+                    "PBS_EXEC=/opt/pbs\n"
+                    "PBS_HOME=/var/spool/pbs\n"
+                    "PBS_CORE_LIMIT=4096\n"
+                    "PBS_SCP=/usr/bin/scp\n"
+                    "END\n"
                     "chroot $IMG_ROOTIMGDIR systemctl enable pbs\n"
                     "\n",
             cluster()->getHeadnode().getHostname()));

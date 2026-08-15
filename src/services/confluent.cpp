@@ -688,12 +688,25 @@ EOF)",
                 fmt::arg("slurmDefaultsCommand",
                     buildNodeImageSlurmDefaultsCommand(os, hnIp)));
         case models::QueueSystem::Kind::PBS:
+            // pbs.conf is written outright instead of edited: the OHPC
+            // Debian execution package ships no default pbs.conf, and the
+            // service's first start runs pbs_habitat to create PBS_HOME.
             return fmt::format(
                 R"(# PBS node configuration
 imgutil exec $scratchdir <<EOF
 set -xeu -o pipefail
 {installCommand}
-sed -i "s/^PBS_SERVER=.*/PBS_SERVER={headnodeHostname}/" /etc/pbs.conf
+cat > /etc/pbs.conf <<'END'
+PBS_SERVER={headnodeHostname}
+PBS_START_SERVER=0
+PBS_START_SCHED=0
+PBS_START_COMM=0
+PBS_START_MOM=1
+PBS_EXEC=/opt/pbs
+PBS_HOME=/var/spool/pbs
+PBS_CORE_LIMIT=4096
+PBS_SCP=/usr/bin/scp
+END
 systemctl enable pbs
 EOF)",
                 fmt::arg("installCommand", installCommand),
@@ -1646,8 +1659,10 @@ TEST_CASE("buildNodeImageQueueSystemCommands keeps munge exclusive to SLURM")
     CHECK_FALSE(pbsBlock.contains("munge"));
     CHECK_FALSE(pbsBlock.contains("slurm"));
     CHECK(pbsBlock.contains("openpbs-execution-ohpc"));
-    CHECK(pbsBlock.contains(
-        "sed -i \"s/^PBS_SERVER=.*/PBS_SERVER=headnode/\" /etc/pbs.conf"));
+    CHECK(pbsBlock.contains("cat > /etc/pbs.conf"));
+    CHECK(pbsBlock.contains("PBS_SERVER=headnode"));
+    CHECK(pbsBlock.contains("PBS_START_MOM=1"));
+    CHECK(pbsBlock.contains("PBS_START_SERVER=0"));
     CHECK(pbsBlock.contains("systemctl enable pbs"));
 
     const auto baseBlock = buildNodeImageQueueSystemCommands(
