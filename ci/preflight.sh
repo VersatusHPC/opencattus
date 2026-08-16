@@ -36,32 +36,14 @@ export DBUS_SESSION_BUS_ADDRESS
 ip link add eth0 type dummy 2>/dev/null && ip addr add 10.99.0.1/24 dev eth0 && ip link set eth0 up || true
 ip link add eth1 type dummy 2>/dev/null && ip addr add 10.99.1.1/24 dev eth1 && ip link set eth1 up || true
 
-# Run all ctest targets. No test exclusions — the assertion-count
-# approach below handles tests that throw environment exceptions
+# Run all ctest targets for console diagnostics. No test exclusions — the
+# structured gate below handles tests that throw environment exceptions
 # (e.g. presenter_tui needing real NICs, cli_dump_answerfile needing
-# multiple interfaces) without needing per-test skip lists.
-#
-# ctest exit code is non-zero when test cases throw exceptions even
-# when all doctest assertions pass, so we parse the summary instead.
+# multiple interfaces) without needing per-test skip lists, so the ctest
+# exit code is informational only.
 ctest --test-dir build-preflight --output-on-failure 2>&1 | tee /tmp/ctest-output.txt || true
 
-# Extract the assertion failure count from doctest output.
-# Format: "[doctest] assertions: 1202 | 1202 passed | 0 failed |"
-assertion_line=$(grep -F "assertions:" /tmp/ctest-output.txt | tail -1)
-if [ -z "${assertion_line}" ]; then
-    echo "No doctest assertion summary found in ctest output."
-    exit 1
-fi
-
-failed_assertions=$(echo "${assertion_line}" | sed -n 's/.*| *\([0-9]*\) failed.*/\1/p')
-if [ -z "${failed_assertions}" ]; then
-    echo "Could not parse assertion failure count from: ${assertion_line}"
-    exit 1
-fi
-
-if [ "${failed_assertions}" -ne 0 ]; then
-    echo "doctest reported ${failed_assertions} assertion failure(s)."
-    exit 1
-fi
-
-echo "All ${assertion_line}"
+# Gate on doctest's machine-readable JUnit report instead of scraping the
+# console summary (issue #60).
+./ci/check-doctest-junit.sh \
+    build-preflight/test/OpenCATTUS-tests /tmp/doctest-preflight-junit.xml
