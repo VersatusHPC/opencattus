@@ -112,9 +112,11 @@ std::vector<std::string_view> ubuntu2404OpenHpcPackages(
     constexpr auto bundleParallelLibraries = std::string_view("parallel-libs");
     constexpr auto bundleIntelOneAPI = std::string_view("intel-oneapi");
 
+    // Queue-neutral base set: the scheduler client package is added by
+    // configureSLURM()/configurePBS() according to the selected queue
+    // system, so PBS and no-queue images do not ship SLURM.
     auto packages = std::set<std::string_view> {
         "ohpc-base-compute",
-        "ohpc-slurm-client",
         "gnu15-compilers-ohpc",
         "openmpi5-gnu15-ohpc",
         "mpich-ucx-gnu15-ohpc",
@@ -1439,11 +1441,6 @@ void XCAT::configureOpenHPC()
     for (const auto& package : std::as_const(packages)) {
         m_stateless.otherpkgs.emplace_back(package);
     }
-
-    // We always sync local Unix files to keep services consistent, even with
-    // external directory services
-    m_stateless.synclists.emplace_back("/etc/passwd -> /etc/passwd\n"
-                                       "/etc/group -> /etc/group\n");
 }
 
 void XCAT::configureTimeService()
@@ -1606,11 +1603,118 @@ void XCAT::configureSLURM()
         "chroot $IMG_ROOTIMGDIR systemctl enable munge\n"
         "chroot $IMG_ROOTIMGDIR systemctl enable slurmd\n"
         "\n");
+}
 
-    m_stateless.synclists.emplace_back(
-        "/etc/slurm/slurm.conf -> /etc/slurm/slurm.conf\n"
-        "/etc/munge/munge.key -> /etc/munge/munge.key\n"
-        "\n");
+namespace {
+    // Queue marker for cached stateless images: reusing an image built for a
+    // different workload manager would boot nodes without the selected
+    // scheduler's daemon (Codex review on issue #63). A missing marker (images
+    // from before this existed) counts as a mismatch and forces one rebuild.
+    std::string_view queueMarkerToken(
+        const std::optional<models::QueueSystem::Kind>& queue)
+    {
+        if (!queue.has_value()) {
+            return "none";
+        }
+
+        switch (queue.value()) {
+            case models::QueueSystem::Kind::SLURM:
+                return "slurm";
+            case models::QueueSystem::Kind::PBS:
+                return "pbs";
+            case models::QueueSystem::Kind::None:
+                return "none";
+        }
+        std::unreachable();
+    }
+
+    std::optional<models::QueueSystem::Kind> selectedQueueKind()
+    {
+        if (!cluster()->getQueueSystem().has_value()) {
+            return std::nullopt;
+        }
+
+        return cluster()->getQueueSystem().value()->getKind();
+    }
+
+    // One marker per osimage: several images can stay cached side by side,
+    // and a shared marker would describe only the most recently built one.
+    std::string imageQueueMarkerFile(std::string_view osimage)
+    {
+        return fmt::format(
+            CHROOT "/install/custom/netboot/compute.queue.{}", osimage);
+    }
+
+    // PBS images bake the server name into pbs.conf and mom_priv/config,
+    // so a renamed head node must invalidate the cached image; SLURM gets
+    // its slurm.conf re-synced on every repack and needs no fingerprint.
+    std::string queueMarkerValue()
+    {
+        const auto kind = selectedQueueKind();
+        if (kind == models::QueueSystem::Kind::PBS) {
+            return fmt::format("{} {}", queueMarkerToken(kind),
+                cluster()->getHeadnode().getHostname());
+        }
+
+        return std::string(queueMarkerToken(kind));
+    }
+
+    bool imageMatchesSelectedQueue(std::string_view osimage)
+    {
+        std::ifstream file { imageQueueMarkerFile(osimage) };
+        if (!file.is_open()) {
+            return false;
+        }
+
+        std::string marker;
+        std::getline(file, marker);
+        return marker == queueMarkerValue();
+    }
+
+    void writeImageQueueMarker(std::string_view osimage)
+    {
+        const auto filename = imageQueueMarkerFile(osimage);
+        opencattus::functions::removeFile(filename);
+        opencattus::functions::addStringToFile(
+            filename, fmt::format("{}\n", queueMarkerValue()));
+    }
+}
+
+void XCAT::configurePBS()
+{
+    m_stateless.otherpkgs.emplace_back("openpbs-execution-ohpc");
+
+    // pbs.conf is written outright instead of edited: the OHPC Debian
+    // execution package ships no default pbs.conf, and the service's first
+    // start runs pbs_habitat to create PBS_HOME.
+    m_stateless.postinstall.emplace_back(
+        fmt::format("cat > $IMG_ROOTIMGDIR/etc/pbs.conf <<'END'\n"
+                    "PBS_SERVER={hostname}\n"
+                    "PBS_START_SERVER=0\n"
+                    "PBS_START_SCHED=0\n"
+                    "PBS_START_COMM=0\n"
+                    "PBS_START_MOM=1\n"
+                    "PBS_EXEC=/opt/pbs\n"
+                    "PBS_HOME=/var/spool/pbs\n"
+                    "PBS_CORE_LIMIT=4096\n"
+                    "PBS_SCP=/usr/bin/scp\n"
+                    "END\n"
+                    // The RPM %post already ran pbs_habitat against the
+                    // package placeholder; rerun it with the real pbs.conf
+                    // and rewrite the MOM config so the node trusts the
+                    // actual head node.
+                    "chroot $IMG_ROOTIMGDIR bash -c 'test -x "
+                    "/opt/pbs/libexec/pbs_habitat && "
+                    "/opt/pbs/libexec/pbs_habitat || :'\n"
+                    "mkdir -p $IMG_ROOTIMGDIR/var/spool/pbs/mom_priv\n"
+                    "cat > $IMG_ROOTIMGDIR/var/spool/pbs/mom_priv/config "
+                    "<<'END'\n"
+                    "$clienthost {hostname}\n"
+                    "$usecp *:/home /home\n"
+                    "END\n"
+                    "chroot $IMG_ROOTIMGDIR systemctl enable pbs\n"
+                    "\n",
+            fmt::arg("hostname", cluster()->getHeadnode().getHostname())));
 }
 
 void XCAT::generateOtherPkgListFile() const
@@ -1675,17 +1779,27 @@ void XCAT::generatePostinstallFile()
         std::filesystem::perm_options::add);
 }
 
-void XCAT::generateSynclistsFile()
+// The synclist is derived from the queue selection alone and regenerated on
+// every run, including image reuse: the path is shared between cached
+// osimages, and packimage() rereads it, so a list left behind by an image
+// built for another queue would leak that queue's files into the repack.
+void XCAT::generateSynclistsFile() const
 {
     std::string_view filename
         = CHROOT "/install/custom/netboot/compute.synclists";
 
     functions::removeFile(filename);
+    // We always sync local Unix files to keep services consistent, even
+    // with external directory services
     functions::addStringToFile(filename,
         "/etc/passwd -> /etc/passwd\n"
-        "/etc/group -> /etc/group\n"
-        "/etc/slurm/slurm.conf -> /etc/slurm/slurm.conf\n"
-        "/etc/munge/munge.key -> /etc/munge/munge.key\n");
+        "/etc/group -> /etc/group\n");
+
+    if (selectedQueueKind() == models::QueueSystem::Kind::SLURM) {
+        functions::addStringToFile(filename,
+            "/etc/slurm/slurm.conf -> /etc/slurm/slurm.conf\n"
+            "/etc/munge/munge.key -> /etc/munge/munge.key\n");
+    }
 }
 
 void XCAT::configureOSImageDefinition() const
@@ -1740,8 +1854,9 @@ void XCAT::customizeImage(
     auto runner = opencattus::utils::singleton::runner();
     // @TODO: Extract the munge fixes to its own customization script
     // Permission fixes for munge
-    if (cluster()->getQueueSystem().value()->getKind()
-        == models::QueueSystem::Kind::SLURM) {
+    if (cluster()->getQueueSystem().has_value()
+        && cluster()->getQueueSystem().value()->getKind()
+            == models::QueueSystem::Kind::SLURM) {
         opencattus::functions::createDirectory(m_stateless.chroot / "etc");
         runner->executeCommand(
             fmt::format("cp -f /etc/passwd /etc/group /etc/shadow {}/etc",
@@ -1878,11 +1993,22 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
     generateOSImagePath(imageType, nodeType);
 
     const auto opts = opencattus::utils::singleton::options();
-    const auto imageExists_ = imageExists(m_stateless.osimage);
+    auto imageExists_ = imageExists(m_stateless.osimage);
+    if (imageExists_ && !imageMatchesSelectedQueue(m_stateless.osimage)) {
+        LOG_INFO("Rebuilding xCAT image {}: it was built for a different "
+                 "queue system",
+            m_stateless.osimage)
+        imageExists_ = false;
+    }
     const auto reuseExistingImage
         = shouldReuseExistingImage(imageExists_, opts->shouldSkip("copycds"));
     const auto runner = opencattus::utils::singleton::runner();
     if (!reuseExistingImage) {
+        // Drop the previous marker up front: if this rebuild fails midway,
+        // a surviving same-queue marker would let the next run reuse the
+        // partial root image. It is restamped only after genimage succeeds.
+        opencattus::functions::removeFile(
+            imageQueueMarkerFile(m_stateless.osimage));
         if (opts->shouldSkip("copycds")) {
             // Remove rootfs and cleanup otherpkgs and postinstall scripts
             runner->executeCommand(
@@ -1910,21 +2036,43 @@ void XCAT::createImage(ImageType imageType, NodeType nodeType,
         configureTimeService();
         configureRemoteAccess();
         configureInfiniband();
-        configureSLURM();
+        // Issue #63: only stage the workload manager the operator selected;
+        // the SLURM bits (munge key, slurm.conf) break PBS installs where
+        // the munge user never exists.
+        if (const auto& queue = cluster()->getQueueSystem()) {
+            switch (queue.value()->getKind()) {
+                case models::QueueSystem::Kind::SLURM:
+                    configureSLURM();
+                    break;
+                case models::QueueSystem::Kind::PBS:
+                    configurePBS();
+                    break;
+                case models::QueueSystem::Kind::None:
+                    break;
+            }
+        }
 
         generateOtherPkgListFile();
         generatePostinstallFile();
-        generateSynclistsFile();
 
         configureOSImageDefinition();
 
         customizeImage(customizations);
         genimage();
+        // Only stamp the queue marker once genimage succeeded: a marker
+        // written earlier would let a failed build pass the reuse check on
+        // the next run and boot a stale or partial root image.
+        writeImageQueueMarker(m_stateless.osimage);
     } else {
         LOG_INFO("Reusing xCAT image {}, skipping genimage and repacking the "
                  "existing root image",
             m_stateless.osimage);
     }
+
+    // Regenerated on every run (reuse included): packimage() rereads the
+    // shared synclist, which may have been left behind by an image built
+    // for a different queue system.
+    generateSynclistsFile();
 
     finalizeStatelessRootImage();
     packimage();
@@ -1981,6 +2129,23 @@ void XCAT::addNodes() const
         } else {
             runner->executeCommand(command);
         }
+    }
+
+    // PBS resolves node names at creation time, so registration has to wait
+    // until makehosts has published the compute host records above.
+    // Existing nodes are left untouched (deleting would discard
+    // administrator-set attributes and fail on busy nodes); the server
+    // restart afterwards re-resolves cached MOM addresses.
+    if (cluster()->getQueueSystem().has_value()
+        && cluster()->getQueueSystem().value()->getKind()
+            == models::QueueSystem::Kind::PBS) {
+        for (const auto& node : cluster()->getNodes()) {
+            opencattus::services::runner::shell::cmd(fmt::format(
+                "/opt/pbs/bin/qmgr -c 'list node {hostname}' >/dev/null "
+                "2>&1 || /opt/pbs/bin/qmgr -c 'create node {hostname}'",
+                fmt::arg("hostname", node.getHostname())));
+        }
+        opencattus::services::runner::shell::cmd("systemctl restart pbs");
     }
     setNodesImage();
 }
@@ -2241,6 +2406,28 @@ TEST_CASE("ubuntu2404OpenHpcOtherpkgdirEntry uses VersatusHPC OpenHPC")
         == "[trusted=yes] "
            "https://repos.versatushpc.com.br/openhpc/versatushpc-4/"
            "Ubuntu_24.04/ ./");
+}
+
+TEST_CASE("queueMarkerToken names every queue selection")
+{
+    using opencattus::models::QueueSystem;
+
+    CHECK(opencattus::services::queueMarkerToken(QueueSystem::Kind::SLURM)
+        == "slurm");
+    CHECK(opencattus::services::queueMarkerToken(QueueSystem::Kind::PBS)
+        == "pbs");
+    CHECK(opencattus::services::queueMarkerToken(QueueSystem::Kind::None)
+        == "none");
+    CHECK(opencattus::services::queueMarkerToken(std::nullopt) == "none");
+}
+
+TEST_CASE("ubuntu2404OpenHpcPackages stays queue-neutral")
+{
+    const auto packages = ubuntu2404OpenHpcPackages(std::nullopt);
+    CHECK(std::ranges::find(packages, "ohpc-base-compute") != packages.end());
+    CHECK(std::ranges::find(packages, "ohpc-slurm-client") == packages.end());
+    CHECK(std::ranges::find(packages, "openpbs-execution-ohpc")
+        == packages.end());
 }
 
 TEST_CASE("buildUbuntu24OSImageDefinitionCommand defines the xCAT image")

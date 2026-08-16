@@ -4,6 +4,7 @@
 #include <opencattus/services/ansible/roles.h>
 #include <opencattus/services/ansible/roles/queuesystem.h>
 #include <opencattus/services/log.h>
+#include <opencattus/services/runner.h>
 
 #ifdef BUILD_TESTING
 #include <doctest/doctest.h>
@@ -38,6 +39,23 @@ void configureQueueSystem()
                     queue.value().get());
 
                 osservice()->install("openpbs-server-ohpc");
+                // pbs.conf is written outright: the RPM package ships one
+                // with a placeholder server name, the OHPC Debian package
+                // ships none at all. The service's first start runs
+                // pbs_habitat to create PBS_HOME.
+                opencattus::services::runner::shell::cmd(
+                    fmt::format("cat > /etc/pbs.conf <<'END'\n"
+                                "PBS_SERVER={}\n"
+                                "PBS_START_SERVER=1\n"
+                                "PBS_START_SCHED=1\n"
+                                "PBS_START_COMM=1\n"
+                                "PBS_START_MOM=0\n"
+                                "PBS_EXEC=/opt/pbs\n"
+                                "PBS_HOME=/var/spool/pbs\n"
+                                "PBS_CORE_LIMIT=4096\n"
+                                "PBS_SCP=/usr/bin/scp\n"
+                                "END",
+                        cluster()->getHeadnode().getHostname()));
                 osservice()->enableService("pbs");
                 // OHPC installs OpenPBS under /opt/pbs; its profile.d PATH
                 // entry only applies to login shells, and the runner execs
@@ -53,6 +71,10 @@ void configureQueueSystem()
                             pbs->getExecutionPlace())));
                 ::runner()->executeCommand("/opt/pbs/bin/qmgr -c \"set "
                                            "server job_history_enable=True\"");
+                // Compute nodes are registered with the PBS server by the
+                // provisioner role: qmgr resolves node names at creation
+                // time, and host records only exist after makehosts /
+                // confluent2hosts have run.
                 break;
             }
         }
