@@ -2118,18 +2118,20 @@ void XCAT::addNodes() const
     }
 
     // PBS resolves node names at creation time, so registration has to wait
-    // until makehosts has published the compute host records above. Nodes
-    // are recreated on every provisioning run because OpenPBS caches the
-    // MOM address at creation time; only the final create may fail the run.
+    // until makehosts has published the compute host records above.
+    // Existing nodes are left untouched (deleting would discard
+    // administrator-set attributes and fail on busy nodes); the server
+    // restart afterwards re-resolves cached MOM addresses.
     if (cluster()->getQueueSystem().has_value()
         && cluster()->getQueueSystem().value()->getKind()
             == models::QueueSystem::Kind::PBS) {
         for (const auto& node : cluster()->getNodes()) {
             opencattus::services::runner::shell::cmd(fmt::format(
-                "/opt/pbs/bin/qmgr -c 'delete node {hostname}' >/dev/null "
-                "2>&1 || : && /opt/pbs/bin/qmgr -c 'create node {hostname}'",
+                "/opt/pbs/bin/qmgr -c 'list node {hostname}' >/dev/null "
+                "2>&1 || /opt/pbs/bin/qmgr -c 'create node {hostname}'",
                 fmt::arg("hostname", node.getHostname())));
         }
+        opencattus::services::runner::shell::cmd("systemctl restart pbs");
     }
     setNodesImage();
 }

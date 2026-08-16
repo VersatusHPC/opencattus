@@ -981,16 +981,15 @@ void addNode(const models::Node& node, std::string_view image)
 }
 
 // PBS resolves the node name when it is created, so registration must run
-// after confluent2hosts has published the compute host records. The node is
-// recreated on every provisioning run: OpenPBS caches the MOM address at
-// creation time, so keeping an existing entry would strand a node whose
-// management IP changed across reinstalls. Only the final create may fail
-// the run.
+// after confluent2hosts has published the compute host records. Existing
+// nodes are left untouched: deleting them would discard administrator-set
+// attributes and fail outright on busy nodes. The server restart that
+// follows registration re-resolves cached MOM addresses instead.
 std::string buildPbsNodeRegistrationCommand(std::string_view hostname)
 {
     return fmt::format(
-        "/opt/pbs/bin/qmgr -c 'delete node {hostname}' >/dev/null 2>&1 || "
-        ": && /opt/pbs/bin/qmgr -c 'create node {hostname}'",
+        "/opt/pbs/bin/qmgr -c 'list node {hostname}' >/dev/null 2>&1 || "
+        "/opt/pbs/bin/qmgr -c 'create node {hostname}'",
         fmt::arg("hostname", hostname));
 }
 
@@ -1016,6 +1015,11 @@ void registerPbsNodes()
         services::runner::shell::cmd(
             buildPbsNodeRegistrationCommand(node.getHostname()));
     }
+
+    // OpenPBS resolves and caches MOM addresses when nodes are created; a
+    // restart re-resolves them against the freshly published host records
+    // without discarding any node definitions.
+    services::runner::shell::cmd("systemctl restart pbs");
 }
 }
 
@@ -1683,12 +1687,12 @@ TEST_CASE("buildNodeImageQueueSystemCommands keeps munge exclusive to SLURM")
     CHECK(baseBlock.contains("ohpc-base-compute"));
 }
 
-TEST_CASE("buildPbsNodeRegistrationCommand recreates nodes on every run")
+TEST_CASE("buildPbsNodeRegistrationCommand only creates missing nodes")
 {
     const auto command = buildPbsNodeRegistrationCommand("n01");
     CHECK(command
-        == "/opt/pbs/bin/qmgr -c 'delete node n01' >/dev/null 2>&1 || "
-           ": && /opt/pbs/bin/qmgr -c 'create node n01'");
+        == "/opt/pbs/bin/qmgr -c 'list node n01' >/dev/null 2>&1 || "
+           "/opt/pbs/bin/qmgr -c 'create node n01'");
 }
 
 TEST_CASE("buildNodeImageChronyCommands refreshes APT metadata on Ubuntu")
