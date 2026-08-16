@@ -61,29 +61,15 @@ cmake -S . -B "build-${DISTRO}" -G Ninja \
 
 cmake --build "build-${DISTRO}" -j"$(nproc)"
 
-# ctest exit code is non-zero when test cases throw exceptions (e.g.
-# missing D-Bus in containers) even if all doctest assertions pass.
-# We parse the doctest assertion summary instead of trusting the exit code.
+# ctest runs everything for console diagnostics; its exit code is
+# informational only because test cases aborted by environment exceptions
+# (e.g. missing D-Bus in containers) are tolerated.
 ctest --test-dir "build-${DISTRO}" --output-on-failure 2>&1 | tee "/tmp/ctest-${DISTRO}.txt" || true
 
-assertion_line=$(grep -F "assertions:" "/tmp/ctest-${DISTRO}.txt" | tail -1)
-if [ -z "${assertion_line}" ]; then
-    echo "No doctest assertion summary found in ctest output for ${DISTRO}."
-    exit 1
-fi
-
-failed_assertions=$(echo "${assertion_line}" | sed -n 's/.*| *\([0-9]*\) failed.*/\1/p')
-if [ -z "${failed_assertions}" ]; then
-    echo "Could not parse assertion failure count from: ${assertion_line}"
-    exit 1
-fi
-
-if [ "${failed_assertions}" -ne 0 ]; then
-    echo "Tests failed on ${DISTRO}: ${failed_assertions} assertion failure(s)."
-    exit 1
-fi
-
-echo "All ${assertion_line}"
+# Gate on doctest's machine-readable JUnit report instead of scraping the
+# console summary (issue #60).
+./ci/check-doctest-junit.sh \
+    "build-${DISTRO}/test/OpenCATTUS-tests" "/tmp/doctest-${DISTRO}-junit.xml"
 
 if [[ "${DISTRO}" == el* || "${DISTRO}" == ubi* ]]; then
     # Repo publishing (ciPublishRepo) expects out/rpm/<distro>/<arch>/*.rpm.

@@ -13,7 +13,10 @@ class MyProjectConan(ConanFile):
         self.requires("boost/[>=1.83.0 <1.84.0]")
         self.requires("magic_enum/[>=0.9.0 <0.10.0]")
         self.requires("gsl-lite/[>=0.41.0 <0.42.0]")
-        self.requires("doctest/[>=2.4.0 <2.5.0]")
+        # Floor 2.4.11: older JUnit reporters omit FAIL() from <failure>
+        # counts (doctest/doctest#755), which would false-green the CI gate
+        # in ci/check-doctest-junit.sh.
+        self.requires("doctest/[>=2.4.11 <2.5.0]")
         self.requires("sdbus-cpp/[>=2.0.0 <2.1.0]")
 
         # We're using host's glibmm
