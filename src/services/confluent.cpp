@@ -981,14 +981,16 @@ void addNode(const models::Node& node, std::string_view image)
 }
 
 // PBS resolves the node name when it is created, so registration must run
-// after confluent2hosts has published the compute host records. The
-// list-or-create composite keeps reinstalls idempotent while still failing
-// loudly on real qmgr errors.
+// after confluent2hosts has published the compute host records. The node is
+// recreated on every provisioning run: OpenPBS caches the MOM address at
+// creation time, so keeping an existing entry would strand a node whose
+// management IP changed across reinstalls. Only the final create may fail
+// the run.
 std::string buildPbsNodeRegistrationCommand(std::string_view hostname)
 {
     return fmt::format(
-        "/opt/pbs/bin/qmgr -c 'list node {hostname}' >/dev/null 2>&1 || "
-        "/opt/pbs/bin/qmgr -c 'create node {hostname}'",
+        "/opt/pbs/bin/qmgr -c 'delete node {hostname}' >/dev/null 2>&1 || "
+        ": && /opt/pbs/bin/qmgr -c 'create node {hostname}'",
         fmt::arg("hostname", hostname));
 }
 
@@ -1681,12 +1683,12 @@ TEST_CASE("buildNodeImageQueueSystemCommands keeps munge exclusive to SLURM")
     CHECK(baseBlock.contains("ohpc-base-compute"));
 }
 
-TEST_CASE("buildPbsNodeRegistrationCommand only creates missing nodes")
+TEST_CASE("buildPbsNodeRegistrationCommand recreates nodes on every run")
 {
     const auto command = buildPbsNodeRegistrationCommand("n01");
     CHECK(command
-        == "/opt/pbs/bin/qmgr -c 'list node n01' >/dev/null 2>&1 || "
-           "/opt/pbs/bin/qmgr -c 'create node n01'");
+        == "/opt/pbs/bin/qmgr -c 'delete node n01' >/dev/null 2>&1 || "
+           ": && /opt/pbs/bin/qmgr -c 'create node n01'");
 }
 
 TEST_CASE("buildNodeImageChronyCommands refreshes APT metadata on Ubuntu")
