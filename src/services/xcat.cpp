@@ -1645,6 +1645,20 @@ namespace {
             CHROOT "/install/custom/netboot/compute.queue.{}", osimage);
     }
 
+    // PBS images bake the server name into pbs.conf and mom_priv/config,
+    // so a renamed head node must invalidate the cached image; SLURM gets
+    // its slurm.conf re-synced on every repack and needs no fingerprint.
+    std::string queueMarkerValue()
+    {
+        const auto kind = selectedQueueKind();
+        if (kind == models::QueueSystem::Kind::PBS) {
+            return fmt::format("{} {}", queueMarkerToken(kind),
+                cluster()->getHeadnode().getHostname());
+        }
+
+        return std::string(queueMarkerToken(kind));
+    }
+
     bool imageMatchesSelectedQueue(std::string_view osimage)
     {
         std::ifstream file { imageQueueMarkerFile(osimage) };
@@ -1654,15 +1668,15 @@ namespace {
 
         std::string marker;
         std::getline(file, marker);
-        return marker == queueMarkerToken(selectedQueueKind());
+        return marker == queueMarkerValue();
     }
 
     void writeImageQueueMarker(std::string_view osimage)
     {
         const auto filename = imageQueueMarkerFile(osimage);
         opencattus::functions::removeFile(filename);
-        opencattus::functions::addStringToFile(filename,
-            fmt::format("{}\n", queueMarkerToken(selectedQueueKind())));
+        opencattus::functions::addStringToFile(
+            filename, fmt::format("{}\n", queueMarkerValue()));
     }
 }
 
